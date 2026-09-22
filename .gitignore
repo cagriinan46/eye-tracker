@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+.venv/
+venv/
+
+# Tool caches
+.pytest_cache/
+.ruff_cache/
+
+# macOS
+.DS_Store
+
+# Editors and temporary files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~

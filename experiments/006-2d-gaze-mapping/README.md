@@ -13,7 +13,7 @@ The capture script imports Experiment 004's `measure_features` and `blink_scores
 - Horizontal: arithmetic mean of the left/right `(iris_x - eye_contour_min_x) / (eye_contour_max_x - eye_contour_min_x)` values (`binocular_horizontal_control`). This is the same normalized horizontal formulation tested in Experiment 003.
 - Vertical: arithmetic mean of each iris center's projection on the eye-corner line's oriented perpendicular, divided by eye-corner distance (`binocular_vertical_local_axis`). The eye normal points toward the lower lid. See [Experiment 004's verified landmark definitions](../004-vertical-gaze/README.md#verified-landmarks-and-feature-formulas).
 
-These are **experimental feature values**, not screen coordinates. Left/right values, eyelid opening, blink scores, and a coarse head-center-y proxy are retained in the local numerical CSV for failure-mode inspection. No head-pose compensation is performed. MediaPipe and OpenCV remain experiment-only candidates, not accepted production choices.
+These are **experimental feature values**, not screen coordinates. The local numerical CSV retains left/right feature values, `eyeBlinkLeft`, `eyeBlinkRight`, their mean `binocular_blink` when both are available, binocular eye opening, and a coarse head-center-y proxy for failure-mode inspection. Rows also identify the phase, target, trial, camera resolution, and target-window dimensions. The declared CSV header includes these derived fields; unavailable optional measurements are blank. No head-pose compensation is performed. MediaPipe and OpenCV remain experiment-only candidates, not accepted production choices.
 
 ## Target layouts
 

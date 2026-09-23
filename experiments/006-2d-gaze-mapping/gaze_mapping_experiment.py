@@ -53,6 +53,7 @@ CSV_FIELDS = (
     "right_vertical_local_axis",
     "eyeBlinkLeft",
     "eyeBlinkRight",
+    "binocular_blink",
     "binocular_eye_opening",
     "head_center_y",
     "camera_width",

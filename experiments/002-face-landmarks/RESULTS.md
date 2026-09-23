@@ -1,79 +1,66 @@
 # Experiment 002 — Results
 
-A no-preview quantitative camera run was completed in the coding-agent environment. The controlled neutral/blink/wink/head-movement sequence remains pending, so this is not a final validation of signal usefulness or tracking reliability.
+Real hardware validation was completed on the development Mac. The controlled face-present run below is the primary result; earlier exploratory runs are noted separately.
 
 ## Environment
 
-- Development Mac: Apple M3; `system_profiler` listed a built-in FaceTime HD camera and a paired iPhone camera. Camera index `1` was identified as the built-in camera in Experiment 001.
-- macOS: 26.2 (build 25C56).
-- Python: 3.12.13.
-- Installed direct packages: `mediapipe==0.10.35`, `opencv-python==5.0.0.93`.
-- Transitive OpenCV package: `opencv-contrib-python==5.0.0.93`.
+- Development Mac: macOS ARM64 with built-in FaceTime HD camera at index `1`, as identified in Experiment 001. An earlier local environment check identified an Apple M3 running macOS 26.2 (build 25C56); the exact OS/device details were not separately reconfirmed for this run.
+- Python: 3.12 for the completed run. An earlier local environment check reported 3.12.13; the patch version was not separately reconfirmed for this run.
+- MediaPipe: `0.10.35`, which initialized successfully and was used for the completed run. The experiment requirements pin `opencv-python==5.0.0.93`; that package version was verified in the earlier local environment but not separately reported for this run.
+- Transitive OpenCV package in the earlier local environment: `opencv-contrib-python==5.0.0.93`.
 - Model: official Google Face Landmarker float16 bundle, downloaded from `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task`; SHA-256 `64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff`.
 
 ## Configuration
 
 - Camera index: `1`.
-- Requested duration: `15` seconds.
-- Preview: off.
+- Elapsed duration: `34.458` seconds. Requested duration and preview setting were not provided with the completed-run measurements.
 - Running mode: MediaPipe Face Landmarker `VIDEO`, one face, blendshape output enabled.
 
 ## Measurements
 
 | Measurement | Result |
 | --- | --- |
-| Elapsed duration | 15.345 s |
+| Camera index | 1 |
+| Elapsed duration | 34.458 s |
 | Input resolution | 1920 x 1080 |
-| Successful camera reads | 445 |
+| Successful camera reads | 864 |
 | Failed camera reads | 0 |
-| Frames submitted / processed | 445 / 445 |
-| Frames with detected face | 177 |
-| Frames without detected face | 268 |
-| Face-detection success percentage | 39.78% |
-| Effective processing FPS | 29.00 |
-| Average processing/inference time | 7.829 ms |
-| Median processing/inference time | 7.599 ms |
-| p95 processing/inference time | 9.789 ms |
-| Observed face landmark count | 478 when detected |
-| Blendshape output available | Yes, on 177 detected-face frames |
-| `eyeBlinkLeft` observed range | 0.055 to 0.354 |
-| `eyeBlinkRight` observed range | 0.084 to 0.620 |
-| Tracking-loss events | 63 face-present to no-face transitions |
-| Longest no-face streak | 39 processed frames |
+| Frames submitted / processed | 864 / 864 |
+| Frames with detected face | 864 |
+| Frames without detected face | 0 |
+| Face-detection success percentage | 100.00% |
+| Effective processing FPS | 25.07 |
+| Average processing/inference time | 6.773 ms |
+| Median processing/inference time | 6.450 ms |
+| p95 processing/inference time | 6.737 ms |
+| Observed face landmark count | 478 |
+| Frames with blendshape output | 864 |
+| `eyeBlinkLeft` observed range | 0.002 to 0.727 |
+| `eyeBlinkRight` observed range | 0.002 to 0.694 |
+| Tracking-loss events | 0 |
+| Longest no-face streak | 0 processed frames |
 
 ## Signal Observations
 
-- Neutral face: controlled observation pending.
-- Natural blinking: controlled observation pending.
-- Comfortable left-eye closing/wink: controlled observation pending.
-- Comfortable right-eye closing/wink: controlled observation pending.
-- Small normal head movements: controlled observation pending.
+Both blink-related blendshape outputs were present for all 864 detected-face frames. Their observed ranges were `eyeBlinkLeft` 0.002–0.727 and `eyeBlinkRight` 0.002–0.694. These aggregate ranges show variation but were not supplied with phase-by-phase labels for neutral face, natural blinking, left/right eye closing, or head movement. They therefore do not establish reliable classification of any intentional gesture.
 
-The observed aggregate blink-score ranges show that the two named outputs were present and varied during the run. No actions were deliberately labeled or visually inspected, so these ranges do **not** establish a response to any particular blink or wink.
+No blink/wink command thresholds were defined.
 
 ## Tracking Observations
 
-The 15-second run recorded 63 face-present to no-face transitions and a longest no-face streak of 39 processed frames. There was no controlled record of when a face was continuously in view, so these counts cannot distinguish model instability from changes in scene or subject position. Visual tracking inspection remains pending.
+The controlled face-present run detected a face in all 864 processed frames: 100.00% face-detection success, zero face-present to no-face transitions, and zero no-face streak. This supports stable face-landmark and blendshape output over this tested 34.458-second interval.
 
-A separate `--duration 2 --preview` smoke run exited successfully after 2.569 s, processing 10 frames with 10 detected faces and no failed camera reads. Its 3.89 effective FPS includes preview/startup overhead over a very short interval and is not comparable with the 15-second no-preview run. The preview was not visually assessed by a human during this smoke run.
+An earlier, uncontrolled 15.345-second no-preview run processed 445 frames, with 177 face-present results and 63 face-present to no-face transitions. Face presence and position were not controlled or labeled, so those counts cannot be interpreted as model failure and are not directly comparable with the controlled run. A separate 2.569-second preview smoke run processed 10 frames with 10 detected faces; its short-duration FPS is likewise not comparable with the primary run.
 
 ## Limitations
 
-- The controlled manual sequence and preview inspection were not performed; qualitative blink/wink response and landmark stability remain unknown.
-- The 39.78% face-presence rate is not ground-truth detection accuracy because the presence and position of a face were not controlled or labeled throughout the run.
+- The supplied blink scores are aggregate ranges without step-specific observations; they cannot establish blink/wink classification or a command threshold.
+- Face presence in a controlled run is not a ground-truth accuracy study, and this experiment does not test gaze estimation.
 - Timing measures only completed `detect_for_video()` calls; effective FPS also includes camera capture and loop overhead but excludes model initialization.
-- A single short run will not generalize to all people, cameras, lighting, or positions.
-- MediaPipe 1.0.1 aborted during model startup on this Mac, including with an explicit CPU delegate. The tested 0.10.35 package loaded and ran the same official model; this version pin is experimental, not a permanent selection.
+- A single 34.458-second run does not establish performance across all hardware, users, lighting, positioning, or longer sessions.
+- MediaPipe 1.0.1 produced a native SIGABRT during Face Landmarker model initialization on the tested macOS ARM64 / Python 3.12 environment, including with an explicit CPU delegate. MediaPipe 0.10.35 initialized successfully and was used for the completed experiment. This compatibility finding does not permanently select a MediaPipe version or framework.
 - MediaPipe and OpenCV remain experiment-only candidates.
 
 ## Conclusion
 
-Final conclusion pending the controlled signal-observation sequence. This run demonstrates that the tested MediaPipe package and model can process a live camera feed and return face landmarks and blendshapes, but it does not establish stable face tracking or useful blink/wink discrimination.
-
-For the remaining manual observations, run from the repository root after the README setup:
-
-```bash
-.venv/bin/python experiments/002-face-landmarks/face_landmark_baseline.py --camera-index 1 --duration 30 --preview
-```
-
-Record the manual sequence observations above before drawing a bounded final conclusion. Do not treat blendshape values as command thresholds.
+On the tested development Mac, MediaPipe 0.10.35 provided sufficiently stable face-landmark and blendshape output during the controlled face-present run to proceed to the next Phase 0 eye/gaze-feature experiment. All 864 processed frames contained a detected face, with 478 landmarks and blendshape output, and no tracking-loss events occurred. This does not establish reliable intentional-gesture classification or working gaze estimation, does not set final-product performance requirements, and does not permanently select MediaPipe for production.

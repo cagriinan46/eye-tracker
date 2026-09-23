@@ -46,7 +46,7 @@ The model is the [official float16 Face Landmarker bundle](https://developers.go
 
 ## Primary run and optional observation
 
-From the repository root:
+Three human `stable`-condition runs have now been completed; their measurements and bounded interpretation are in [RESULTS.md](RESULTS.md). Run 2 intentionally used slightly wider eye opening and is diagnostic; Run 3 is the normal-eye-opening repeat with glasses. No raw images or video were stored. The commands below describe the protocol for reproducibility, **not** a request for another validation run. From the repository root:
 
 ```bash
 .venv/bin/python experiments/004-vertical-gaze/vertical_gaze_experiment.py --camera-index 1 --condition stable --output .venv/vertical-gaze-stable.csv
@@ -64,14 +64,16 @@ After interpreting the stable-head run, an **optional, separate** small-natural-
 
 In that optional run, allow only small comfortable natural head movement; do not deliberately exaggerate it. The condition is a label for comparison, not software head-motion correction. Do not combine the two runs when assessing the primary result. The second run is not required to complete interpretation of the first.
 
+When repeating either command in the future, choose a new `--output` path: the script refuses to overwrite an existing numerical CSV.
+
 ## Measurements and interpretation
 
 The console reports elapsed time, resolution, trial order, sampling/usable counts, camera/detection/geometry failures, and missing blink output. For every left/right/binocular vertical candidate it reports UP/CENTER/DOWN count, mean, standard deviation, raw range, each trial's mean, signed pairwise mean differences, and raw-range overlap. It also reports blink scores, eye opening, the vertical head-position proxy, and the horizontal reference by label. Within-label correlations between candidate values and their matching blink/eye-opening signals or the head proxy are descriptive checks for association, **not** causal evidence or statistical significance.
 
-An optional CSV records only derived numeric features plus target/trial/condition labels, face-detection and geometry-validity flags, and timestamps. Rows with missing faces or invalid geometry retain blank feature fields for failure accounting. `--output` never overwrites an existing file; omit it to avoid writing data. Compare each candidate with the Experiment #14 `vertical_bbox` baseline. A candidate is promising only if measured ordering, trial repeatability, and UP/CENTER/DOWN overlap meaningfully improve; no numerical pass threshold is invented. If none improves, record that negative result.
+An optional CSV records only derived numeric features plus target/trial/condition labels, face-detection and geometry-validity flags, and timestamps. Rows with missing faces or invalid geometry retain blank feature fields for failure accounting. `--output` never overwrites an existing file; omit it to avoid writing data. Compare each candidate with the Experiment #14 `vertical_bbox` baseline using ordering, trial repeatability, and UP/CENTER/DOWN overlap together; no numerical pass threshold is invented. A leading candidate for further study is not necessarily a validated per-frame gaze estimator. If none improves, record that negative result.
 
 ## Privacy and limitations
 
 Frames, facial images, and video are never saved or uploaded. Processing is local; model download is a separate setup step. Derived numerical CSV data can still be sensitive and should remain local unless deliberately reviewed for sharing. The visible points are directional prompts, not calibrated screen coordinates.
 
-Eye closure, glasses, lighting, screen/window placement, head translation or rotation, posture, distance, and individual anatomy may affect all features. The vertical head-position proxy cannot distinguish pitch from translation, and correlation does not identify a cause. This short, single-user feature study cannot establish general gaze accuracy, a production algorithm, command thresholds, or final product robustness. Leave the conclusion in [RESULTS.md](RESULTS.md) pending until the human run is measured.
+Eye closure, glasses, lighting, screen/window placement, head translation or rotation, posture, distance, and individual anatomy may affect all features. The vertical head-position proxy cannot distinguish pitch from translation, and correlation does not identify a cause. This single-user exploratory study claims no statistical significance and cannot establish general gaze accuracy, a production algorithm, command thresholds, or final product robustness. Run conditions differed in more than glasses alone, including camera/face geometry, so no benefit from glasses can be inferred. The three-run conclusion is in [RESULTS.md](RESULTS.md); full 2D screen calibration remains unvalidated.

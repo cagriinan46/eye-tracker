@@ -36,11 +36,5 @@ jobs:
       - name: Run Ruff format checks
         run: ruff format --check .
 
-      - name: Run tests when present
-        shell: bash
-        run: |
-          if find tests -type f \( -name 'test_*.py' -o -name '*_test.py' \) -print -quit 2>/dev/null | grep -q .; then
-            pytest
-          else
-            echo "No tests found yet; skipping pytest."
-          fi
+      - name: Run production tests
+        run: pytest

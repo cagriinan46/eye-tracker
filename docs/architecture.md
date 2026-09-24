@@ -292,7 +292,7 @@ type_text(text)
 Possible repository structure:
 
 ```text
-platform/
+platform_adapters/
 ├── base.py
 ├── macos.py
 └── windows.py
@@ -450,7 +450,7 @@ The application layer should orchestrate modules rather than contain computer-vi
 The architecture-level target structure is:
 
 ```text
-src/
+src/eye_tracker/
 ├── vision/
 │   ├── camera.py
 │   ├── face_tracker.py
@@ -472,7 +472,7 @@ src/
 ├── actions/
 │   └── controller.py
 │
-├── platform/
+├── platform_adapters/
 │   ├── base.py
 │   ├── macos.py
 │   └── windows.py

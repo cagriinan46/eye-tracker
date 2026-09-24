@@ -13,7 +13,7 @@ clipped, so extrapolation error stays visible instead of being hidden at the edg
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from math import isfinite
-from statistics import linear_regression
+from statistics import linear_regression, median
 from typing import Protocol
 
 # Lower bound carried over from Experiment 006's fit; it is not a chosen
@@ -40,6 +40,37 @@ class CalibrationSample:
             raise ValueError("calibration sample values must be finite")
         if not (0 <= self.target_x <= 1 and 0 <= self.target_y <= 1):
             raise ValueError("calibration targets must lie within the normalized [0, 1] area")
+
+
+def aggregate_calibration_observations(
+    observations: Iterable[Sequence[float]], target_x: float, target_y: float
+) -> CalibrationSample:
+    """Reduce repeated ``(horizontal, vertical)`` observations at one target to one sample.
+
+    Each axis is summarized by its own median, as in Experiment 006's per-target
+    summaries, so the result is independent of input order and need not equal any
+    single observed pair. No quality gate, smoothing, or minimum observation count
+    is applied; Experiment 006's five-frame rule was experimental protocol.
+
+    Raises ``ValueError`` when there are no observations, an observation is not a
+    ``(horizontal, vertical)`` pair of finite numbers, or the target is invalid.
+    """
+    pairs = tuple(observations)
+    if not pairs:
+        raise ValueError("at least one feature observation is required")
+    for pair in pairs:
+        if not (
+            isinstance(pair, Sequence) and not isinstance(pair, (str, bytes)) and len(pair) == 2
+        ):
+            raise ValueError("feature observations must be (horizontal, vertical) pairs")
+        if not all(_is_finite_number(value) for value in pair):
+            raise ValueError("feature observations must be finite numbers")
+    return CalibrationSample(
+        horizontal_feature=median(pair[0] for pair in pairs),
+        vertical_feature=median(pair[1] for pair in pairs),
+        target_x=target_x,
+        target_y=target_y,
+    )
 
 
 class GazeMapping(Protocol):
@@ -119,3 +150,7 @@ def _fit_axis(
     if not (isfinite(slope) and isfinite(intercept)):
         raise ValueError(f"{feature_name} mapping is numerically degenerate")
     return slope, intercept
+
+
+def _is_finite_number(value: object) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and isfinite(value)

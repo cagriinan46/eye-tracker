@@ -14,3 +14,8 @@ line-ending = "auto"
 testpaths = ["tests"]
 python_files = ["test_*.py", "*_test.py"]
 pythonpath = ["src"]
+
+# Initial Phase 1 Vision adapters only; this does not decide packaging.
+# MediaPipe depends on the contrib OpenCV wheel, which shares cv2 with opencv-python.
+[dependency-groups]
+vision = ["mediapipe==0.10.35", "opencv-contrib-python==5.0.0.93"]

@@ -20,6 +20,18 @@ def harness():
     return importlib.import_module("validation.real_calibration")
 
 
+def test_harness_import_resolves_to_repository_file() -> None:
+    root = Path(__file__).resolve().parents[2]
+    package_spec = importlib.util.find_spec("validation")
+    try:
+        module_spec = importlib.util.find_spec("validation.real_calibration")
+    except ModuleNotFoundError:
+        module_spec = None
+
+    assert module_spec is not None, f"validation={package_spec!r}; sys.path={sys.path!r}"
+    assert Path(module_spec.origin).resolve() == root / "validation" / "real_calibration.py"
+
+
 def test_experiment_006_targets_are_distinct_and_validation_repeats_are_shuffled() -> None:
     module = harness()
     order = module.build_presentations(seed=42)

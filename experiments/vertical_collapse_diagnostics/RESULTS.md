@@ -34,15 +34,11 @@ Both raw and aggregated row medians ordered **top < center < bottom** in each se
 
 Predictions are deliberately unclipped; values outside `[0, 1]` expose error. Calibration-fit and held-out targets differ, so their MAEs must not be read as a controlled comparison of target difficulty. Both sessions retain held-out vertical *ordering*, unlike the earlier Fatih run reported on PR #43, but B has a pronounced negative held-out bias.
 
-## Fatih Session A
+## Cross-user validation
 
-Pending independent run. No measurements are claimed.
+Deferred outside Issue #44. No new Fatih diagnostic run or cross-user comparison is claimed. The earlier Fatih near-flat y predictions reported on PR #43 remain unexplained by these Çağrı-only measurements.
 
-## Fatih Session B
-
-Pending separate run after leaving/resetting/reseating. No measurements are claimed.
-
-## Within-session and cross-session comparison
+## Within-session and between-session comparison
 
 The calibration-row aggregated vertical medians shifted from A to B by +0.002737 (top), +0.004103 (center), and +0.002554 (bottom). This is a measured **between-session offset** despite the same target layout. The two fitted y slopes are close (43.3410 and 43.8275), and each session was freshly calibrated.
 
@@ -52,8 +48,10 @@ Horizontal control remained directionally useful in both sessions. Calibration-r
 
 The descriptive within-calibration-target correlation of vertical feature with binocular lid opening was -0.076 (A) and +0.101 (B); with the coarse face-center-y proxy it was -0.594 (A) and -0.434 (B). Session B's median lid opening at center-y targets was 0.3564 during calibration versus 0.3388 during held-out validation, while the face-center-y proxy was 0.5114 versus 0.5178. These are associations, **not causal explanations**; the proxy cannot isolate head pitch from translation. Blink blendshape scores were unavailable without changing the production observation contract.
 
-Fatih's A/B datasets remain pending. Do not pool participants or claim statistical significance from these exploratory runs.
+Do not pool participants or claim statistical significance from these exploratory runs. Cross-user validation is explicitly deferred.
 
 ## Conclusion
 
-**Interim Çağrı-only assessment:** The vertical feature clearly separated calibration rows and preserved held-out ordering in both sessions, so these runs do **not** show feature-level collapse. Per-target median aggregation retained the raw row order, and both fitted mappings represented calibration targets; the evidence does not isolate a downstream fitter failure. There is a between-session feature offset, but fresh calibration did not prevent Session B's large held-out negative bias. Its calibration-to-held-out vertical feature shift is quantitatively consistent with much of that bias. This suggests phase-dependent feature drift or a changed measurement condition **within** Session B; its cause remains unresolved. It does not explain Fatih's earlier near-flat y predictions. No corrective algorithm, threshold, or production behavior is selected. A cross-user conclusion waits for Fatih's separate A/B runs.
+**Final Çağrı-only assessment:** The vertical feature did **not** collapse in either session. Top/center/bottom medians remained correctly ordered before and after aggregation, and held-out y ordering was 21/21 in both sessions. The fitted vertical slopes were similar (43.34 and 43.83). Thus the current evidence does not support the linear fitter as the primary failure in these runs.
+
+Session B's center-target vertical feature shifted by approximately **-0.00464** from calibration to held-out use. With its fitted slope of about **43.83**, this corresponds to roughly **-0.203 normalized y**, close to the observed **-0.2107 signed y bias**. Calibration-to-use vertical feature drift is therefore the strongest current hypothesis for Çağrı's instability. The measurements do **not** identify the root cause of that drift: target geometry, time, eyelid behavior, head/camera geometry, and other conditions were not independently controlled or isolated. This conclusion does **not** explain Fatih's previous near-flat vertical predictions. Cross-user validation is deferred. No corrective algorithm, threshold, or production behavior is selected.

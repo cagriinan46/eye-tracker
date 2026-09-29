@@ -6,7 +6,7 @@ This is a Phase 1 **diagnostic experiment**, not a production change. Real calib
 
 Use the same [merged validation protocol](../../validation/README.md): nine calibration targets on the 0.20/0.50/0.80 grid, eight distinct interstitial validation targets shown twice (16 held-out trials), seed 42 by default, 0.8 s settling and 1.2 s sampling per presentation, and at least five usable observations per presentation. The existing production Vision feature extraction, per-target median aggregation, independent-linear session fitter, and gaze estimator are called; none is reimplemented. The familiar target window is validation-only tooling. Camera index is explicit at runtime.
 
-Each participant should complete Session A in a normal, comfortable posture. Before Session B, leave/reset/reseat and fit a **new** calibration in another normal posture. Keep the camera reasonably centered, head approximately stable, natural eye opening/blinking, normal glasses usage, and no intentional winks. Do not deliberately change eye opening, tilt, camera angle, or posture to obtain a desired result. The four desired datasets are Çağrı A/B and Fatih A/B, kept separate. Press `q` or Esc to cancel; an incomplete run saves no dataset.
+Each participant should complete Session A in a normal, comfortable posture. Before Session B, leave/reset/reseat and fit a **new** calibration in another normal posture. Keep the camera reasonably centered, head approximately stable, natural eye opening/blinking, normal glasses usage, and no intentional winks. Do not deliberately change eye opening, tilt, camera angle, or posture to obtain a desired result. Issue #44's approved final interpretation uses Çağrı A/B only; cross-user validation with Fatih is deferred. Press `q` or Esc to cancel; an incomplete run saves no dataset.
 
 From the repository root, use the existing Python 3.12 `.venv`, production Vision dependencies, and local Face Landmarker model:
 
@@ -30,4 +30,4 @@ Analysis reports each calibration row's raw and aggregated medians, range, IQR a
 
 There is no invented collapse threshold or statistical-significance claim. The result can support a finding that information is lost before calibration, after calibration, drifts across sessions, correlates with a measured diagnostic, or remains inconclusive. Do not introduce bias correction, smoothing, filtering, new models, or production thresholds based on this experiment alone. Unlike Experiment 006, the current production path has no validated experimental blink gate; that protocol difference remains in these runs.
 
-See [RESULTS.md](RESULTS.md) for measured outcomes, once the independent human sessions are completed and reviewed.
+See [RESULTS.md](RESULTS.md) for the completed Çağrı-only conclusion and its cross-user limitation.

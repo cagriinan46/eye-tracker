@@ -6,8 +6,13 @@ from math import isclose, isfinite
 from pathlib import Path
 from statistics import median
 
-from experiments.eye_opening_controlled_study.protocol import CONDITIONS, TARGETS, schedule
-from experiments.vertical_feature_covariates.analysis import spearman
+from experiments.eye_opening_controlled_study.protocol import (
+    CONDITIONS,
+    CUE_SECONDS,
+    PROTOCOL_VERSION,
+    TARGETS,
+    schedule,
+)
 from eye_tracker.gaze.estimator import UnavailableReason
 from validation.real_calibration import percentile
 
@@ -44,6 +49,12 @@ def _median_or_none(values: list[float]) -> float | None:
 
 def aggregate(report: dict) -> list[dict]:
     """Take independent field medians from all usable rows in each presentation."""
+    if (
+        report.get("protocol_version") != PROTOCOL_VERSION
+        or report.get("cue_seconds") != CUE_SECONDS
+        or report.get("ready_screen_used") is not True
+    ):
+        raise ValueError("protocol-invalid or older capture: corrected cue/target flow is required")
     plan = schedule()
     rows = report.get("rows")
     saved = report.get("presentations")
@@ -210,18 +221,6 @@ def _median_field(records: list[dict], field: str) -> float | None:
     return _median_or_none([r[field] for r in records if r[field] is not None])
 
 
-def _opening_vertical_spearman(pairs: list[dict]) -> float | None:
-    complete = [
-        pair
-        for pair in pairs
-        if pair["delta_binocular_eye_opening"] is not None and pair["delta_vertical"] is not None
-    ]
-    return spearman(
-        [pair["delta_binocular_eye_opening"] for pair in complete],
-        [pair["delta_vertical"] for pair in complete],
-    )
-
-
 def summarize(presentations: list[dict], pairs: list[dict]) -> dict:
     """Summarize measured manipulation, directional replication, and confounds."""
     result = []
@@ -302,7 +301,7 @@ def summarize(presentations: list[dict], pairs: list[dict]) -> dict:
             "vertical_zero": sum(p["delta_vertical"] == 0 for p in with_opening_increase),
         }
         ordered_blocks = []
-        for block in sorted({presentation["block"] for presentation in row}):
+        for block in range(1, 4):
             by_label = {p["condition"]: p for p in row if p["block"] == block}
             values = [
                 by_label[label]["binocular_eye_opening"] for label in ("narrow", "natural", "wide")
@@ -368,7 +367,7 @@ def analyze(report: dict) -> dict:
     presentations = aggregate(report)
     slope = _number(report["mapping_coefficients"]["y_slope"], "y slope")
     pairs = compare_conditions(presentations, slope)
-    result = {
+    return {
         "participant": report["participant"],
         "session": report["session"],
         "capture": {
@@ -385,33 +384,6 @@ def analyze(report: dict) -> dict:
         "presentations": presentations,
         "condition_pairs": pairs,
         "summary": summarize(presentations, pairs),
-        "measured_opening_vertical_spearman": _opening_vertical_spearman(pairs),
-    }
-    if report["session"] == "live-3":
-        result["notification_sensitivity"] = notification_sensitivity(presentations, pairs)
-    return result
-
-
-def notification_sensitivity(presentations: list[dict], pairs: list[dict]) -> dict:
-    """Secondary analysis excluding exactly live-3's first diagnostic target trio."""
-    affected = [
-        p for p in presentations if p["phase"] == "diagnostic" and p["order"] in (10, 11, 12)
-    ]
-    if (
-        len(affected) != 3
-        or {(p["target_id"], p["block"]) for p in affected} != {("upper", 1)}
-        or {p["condition"] for p in affected} != set(CONDITIONS)
-    ):
-        raise ValueError("first diagnostic trio does not match reported notification boundary")
-    retained_presentations = [p for p in presentations if p not in affected]
-    retained_pairs = [p for p in pairs if not (p["block"] == 1 and p["target_id"] == "upper")]
-    return {
-        "excluded_orders": [p["order"] for p in affected],
-        "excluded_target": "upper",
-        "excluded_block": 1,
-        "summary": summarize(retained_presentations, retained_pairs),
-        "measured_opening_vertical_spearman": _opening_vertical_spearman(retained_pairs),
-        "condition_pairs": retained_pairs,
     }
 
 

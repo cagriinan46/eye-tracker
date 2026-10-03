@@ -15,6 +15,47 @@ INSTRUCTIONS = {
     "narrow": "GENTLY NARROW",
     "wide": "COMFORTABLY WIDE",
 }
+CUE_SECONDS = 1.5
+PROTOCOL_VERSION = 2
+
+
+@dataclass(frozen=True, slots=True)
+class ScreenContent:
+    target: Target | None
+    lines: tuple[str, ...]
+
+
+def screen_content(presentation: "StudyPresentation | None", phase: str) -> ScreenContent:
+    """Keep every condition cue separate from target fixation and sampling."""
+    if phase == "ready":
+        return ScreenContent(
+            None,
+            (
+                "READY - press SPACE to begin",
+                "First nine dots: look naturally for calibration.",
+                "Read each later cue; set your eyes BEFORE the dot appears.",
+                "Hold that state while looking only at the dot.",
+                "Blink naturally; avoid strain and intentional head movement.",
+                "q / Esc: cancel",
+            ),
+        )
+    if presentation is None:
+        raise ValueError("a presentation is required after the ready screen")
+    if phase == "cue" and presentation.phase == "diagnostic":
+        return ScreenContent(None, (INSTRUCTIONS[presentation.condition],))
+    if phase in ("settling", "sampling"):
+        return ScreenContent(presentation.target, ())
+    raise ValueError("unexpected presentation/display phase")
+
+
+def ready_key_action(key: int) -> str | None:
+    """Interpret the ready screen key without starting on an unrelated press."""
+    normalized = key & 0xFF
+    if normalized == 32:
+        return "start"
+    if normalized in (ord("q"), 27):
+        return "abort"
+    return None
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,6 +68,17 @@ class StudyPresentation:
 
     def capture_presentation(self) -> Presentation:
         return Presentation(self.phase, self.target, self.block)
+
+    def identity(self) -> dict:
+        """Persist the intended condition even while target screens contain no text."""
+        return {
+            "phase": self.phase,
+            "target_id": self.target.name,
+            "target_x": self.target.x,
+            "target_y": self.target.y,
+            "condition": self.condition,
+            "block": self.block,
+        }
 
 
 def schedule() -> tuple[StudyPresentation, ...]:

@@ -4,10 +4,19 @@ import argparse
 import json
 import sys
 import time
+from collections.abc import Callable
 from pathlib import Path
 from statistics import median
 
-from experiments.eye_opening_controlled_study.protocol import INSTRUCTIONS, schedule
+from experiments.eye_opening_controlled_study.protocol import (
+    CUE_SECONDS,
+    PROTOCOL_VERSION,
+    ScreenContent,
+    StudyPresentation,
+    ready_key_action,
+    schedule,
+    screen_content,
+)
 from experiments.vertical_collapse_diagnostics.capture import measure_once
 from eye_tracker.vision.camera import OpenCVCameraSource
 from eye_tracker.vision.face_tracker import MediaPipeFaceLandmarkExtractor
@@ -18,7 +27,6 @@ from validation.real_calibration import (
     SETTLE_SECONDS,
     RecordingExtractor,
     RecordingSource,
-    _draw_target,
     collect_presentation,
     fit_session_calibration,
 )
@@ -46,6 +54,64 @@ def invalid_path(output: Path) -> Path:
     return output.with_name(f"{output.stem}.invalid.json")
 
 
+def draw_screen(cv2, np, content: ScreenContent, width: int, height: int):
+    """Draw either a centered text cue or a bare target dot, never both."""
+    canvas = np.full((height, width, 3), 24, dtype=np.uint8)
+    if content.target is not None:
+        point = (round(content.target.x * width), round(content.target.y * height))
+        cv2.circle(canvas, point, 24, (255, 255, 255), 3)
+        cv2.circle(canvas, point, 7, (0, 190, 255), -1)
+    else:
+        line_height = 48
+        first_baseline = height // 2 - (len(content.lines) - 1) * line_height // 2
+        for index, line in enumerate(content.lines):
+            scale = 1.0 if len(content.lines) == 1 else 0.7
+            text_width = cv2.getTextSize(line, cv2.FONT_HERSHEY_SIMPLEX, scale, 2)[0][0]
+            cv2.putText(
+                canvas,
+                line,
+                (max(0, (width - text_width) // 2), first_baseline + index * line_height),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                scale,
+                (225, 225, 225),
+                2,
+            )
+    return canvas
+
+
+def wait_for_ready(cv2, np, window: str, width: int, height: int) -> None:
+    """Start collection only after the participant sees the full-screen window."""
+    canvas = draw_screen(cv2, np, screen_content(None, "ready"), width, height)
+    while True:
+        cv2.imshow(window, canvas)
+        action = ready_key_action(cv2.waitKey(30))
+        if action == "start":
+            return
+        if action == "abort":
+            raise InterruptedError("run cancelled at ready screen")
+
+
+def show_cue(cv2, np, window: str, item, width: int, height: int) -> None:
+    """Present the condition before the target; capture no frames during this phase."""
+    canvas = draw_screen(cv2, np, screen_content(item, "cue"), width, height)
+    began = time.monotonic()
+    while time.monotonic() - began < CUE_SECONDS:
+        cv2.imshow(window, canvas)
+        if cv2.waitKey(1) & 0xFF in (ord("q"), 27):
+            raise InterruptedError("run cancelled during condition cue")
+
+
+def collect_study_presentation(
+    item: StudyPresentation,
+    cue: Callable[[StudyPresentation], None],
+    collect: Callable,
+):
+    """Finish the diagnostic cue before any target settling or measurement."""
+    if item.phase == "diagnostic":
+        cue(item)
+    return collect(item.capture_presentation())
+
+
 def collect_session(args: argparse.Namespace) -> dict:
     """Reuse production geometry and the established capture timing/calibration."""
     import cv2
@@ -60,7 +126,6 @@ def collect_session(args: argparse.Namespace) -> dict:
     presentations: list[dict] = []
     calibration_observations = []
     mapping = None
-    started = time.monotonic()
     try:
         with MediaPipeFaceLandmarkExtractor(args.model) as detector:
             recorded_extractor = RecordingExtractor(detector)
@@ -73,44 +138,17 @@ def collect_session(args: argparse.Namespace) -> dict:
             _, _, width, height = cv2.getWindowImageRect(window)
             if width <= 0 or height <= 0:
                 raise RuntimeError("Could not determine target-window image area")
+            wait_for_ready(cv2, np, window, width, height)
+            started = time.monotonic()
             for item in plan:
                 sampling_now = False
-                presentation = item.capture_presentation()
                 first_row = len(rows)
 
                 def show(current, sampling: bool, remaining: float) -> bool:
                     nonlocal sampling_now
                     sampling_now = sampling
-                    canvas = _draw_target(
-                        cv2, np, current, item.order, len(plan), sampling, remaining, width, height
-                    )
-                    cv2.putText(
-                        canvas,
-                        INSTRUCTIONS[item.condition],
-                        (30, 145),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        1.0,
-                        (0, 220, 255),
-                        2,
-                    )
-                    cv2.putText(
-                        canvas,
-                        "Keep looking at dot; change only eye opening comfortably.",
-                        (30, 185),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.57,
-                        (225, 225, 225),
-                        2,
-                    )
-                    cv2.putText(
-                        canvas,
-                        "No strain or intentional head movement; natural blinking OK.",
-                        (30, 220),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.57,
-                        (225, 225, 225),
-                        2,
-                    )
+                    phase = "sampling" if sampling else "settling"
+                    canvas = draw_screen(cv2, np, screen_content(item, phase), width, height)
                     cv2.imshow(window, canvas)
                     return cv2.waitKey(1) & 0xFF in (ord("q"), 27)
 
@@ -121,12 +159,7 @@ def collect_session(args: argparse.Namespace) -> dict:
                             {
                                 "participant": args.participant,
                                 "session": args.session,
-                                "phase": item.phase,
-                                "target_id": item.target.name,
-                                "target_x": item.target.x,
-                                "target_y": item.target.y,
-                                "condition": item.condition,
-                                "block": item.block,
+                                **item.identity(),
                                 "presentation_order": item.order,
                                 "sample_sequence": len(rows) + 1,
                                 "monotonic_seconds": time.monotonic() - started,
@@ -135,7 +168,11 @@ def collect_session(args: argparse.Namespace) -> dict:
                         )
                     return result
 
-                collected, counts = collect_presentation(presentation, measure, show)
+                collected, counts = collect_study_presentation(
+                    item,
+                    lambda current: show_cue(cv2, np, window, current, width, height),
+                    lambda current: collect_presentation(current, measure, show),
+                )
                 recorded = rows[first_row:]
                 usable = [row for row in recorded if row["status"] == "usable"]
                 if len(usable) != len(collected):
@@ -143,12 +180,7 @@ def collect_session(args: argparse.Namespace) -> dict:
                 presentations.append(
                     {
                         "order": item.order,
-                        "phase": item.phase,
-                        "target_id": item.target.name,
-                        "target_x": item.target.x,
-                        "target_y": item.target.y,
-                        "condition": item.condition,
-                        "block": item.block,
+                        **item.identity(),
                         "usable_count": len(usable),
                         "unavailable_count": len(recorded) - len(usable),
                         "sampling_attempts": counts["sampling_attempts"],
@@ -169,6 +201,9 @@ def collect_session(args: argparse.Namespace) -> dict:
             return {
                 "participant": args.participant,
                 "session": args.session,
+                "protocol_version": PROTOCOL_VERSION,
+                "cue_seconds": CUE_SECONDS,
+                "ready_screen_used": True,
                 "camera_index": args.camera_index,
                 "camera_resolution": recorded_source.resolution,
                 "window_image_area": [width, height],

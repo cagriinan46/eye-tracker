@@ -3,7 +3,6 @@
 from copy import deepcopy
 from types import SimpleNamespace
 
-import numpy as np
 import pytest
 
 from experiments.coarse_gaze_targeting_validation.protocol import schedule as v1_schedule
@@ -91,6 +90,14 @@ def test_screen_phases_contain_only_the_relevant_marker():
 
 
 def test_rendering_shows_cue_then_target_and_cursor_without_text():
+    class ArrayStub:
+        uint8 = "uint8"
+
+        @staticmethod
+        def full(shape, fill_value, *, dtype):
+            assert (shape, fill_value, dtype) == ((1000, 1000, 3), 24, "uint8")
+            return object()
+
     class CV2:
         def __init__(self):
             self.circles = []
@@ -108,6 +115,7 @@ def test_rendering_shows_cue_then_target_and_cursor_without_text():
 
     trial = schedule()[0]
     cv2 = CV2()
+    np = ArrayStub()
     draw_screen(
         cv2,
         np,

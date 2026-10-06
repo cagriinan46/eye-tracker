@@ -526,15 +526,250 @@ def compare_sessions(reports: list[dict]) -> dict:
     }
 
 
+def _ratio(value, separation):
+    return value / separation if value is not None and separation else None
+
+
+def _half_median(trial, axis, half):
+    rows = [
+        r
+        for r in trial["samples"]
+        if r["feature_status"] == "usable"
+        and (r["trial_relative_seconds"] >= 1.5) == (half == "second")
+    ]
+    return median([r[f"{axis}_feature"] for r in rows]) if rows else None
+
+
+def _conditional_ordering(trials, axis, direction):
+    """Vertical per screen column, horizontal per screen row; equal trial weight."""
+    coordinate, orthogonal = (
+        ("target_y", "target_x") if axis == "vertical" else ("target_x", "target_y")
+    )
+    result = []
+    for block in (1, 2, 3, "pooled"):
+        for fixed in (0.2, 0.5, 0.8):
+            levels = []
+            for level in (0.2, 0.5, 0.8):
+                values = [
+                    t["summary"]["features"][axis]["median"]
+                    for t in trials
+                    if t[orthogonal] == fixed
+                    and t[coordinate] == level
+                    and (block == "pooled" or t["block"] == block)
+                ]
+                values = [v for v in values if v is not None]
+                levels.append(median(values) if values else None)
+            steps = [_delta(levels[i], levels[i + 1]) for i in (0, 1)]
+            ordered = (
+                all(d * direction > 0 for d in steps)
+                if direction is not None and all(d is not None for d in steps)
+                else None
+            )
+            result.append(
+                {
+                    "block": block,
+                    "orthogonal_level": fixed,
+                    "level_medians": levels,
+                    "signed_adjacent_separations": steps,
+                    "ordered": ordered,
+                }
+            )
+    return result
+
+
+def _diagnostic_details(report, base):
+    mapping = IndependentLinearMapping(**report["mapping_coefficients"])
+    calibration_rows = []
+    for target in base["calibration"]["presentations"]:
+        h = target["summary"]["features"]["horizontal"]["median"]
+        v = target["summary"]["features"]["vertical"]["median"]
+        x, y = mapping.predict(h, v)
+        calibration_rows.append(
+            {
+                "target_id": target["target_id"],
+                "target_x": target["target_x"],
+                "target_y": target["target_y"],
+                "horizontal_median": h,
+                "vertical_median": v,
+                "predicted_x": x,
+                "predicted_y": y,
+                "signed_x_error": x - target["target_x"],
+                "signed_y_error": y - target["target_y"],
+            }
+        )
+    temporal = []
+    for raw, summarized in zip(report["trials"], base["trials"], strict=True):
+        temporal.append(
+            {
+                "trial_order": raw["trial_order"],
+                "block": raw["block"],
+                "target_id": raw["target_id"],
+                **{
+                    axis: {
+                        "first_half_median": _half_median(raw, axis, "first"),
+                        "second_half_median": _half_median(raw, axis, "second"),
+                        "signed_half_shift": summarized["summary"]["temporal"][axis]["half_shift"],
+                    }
+                    for axis in AXES
+                },
+            }
+        )
+    axes, transfers = {}, [{"target_id": t["target_id"]} for t in base["transfer"]]
+    for axis in AXES:
+        levels = base["feature_levels"][axis]
+        cal = levels["calibration_level_medians"]
+        cal_separation = min(abs(cal[i + 1] - cal[i]) for i in (0, 1))
+        val_separation = levels["validation"][-1]["minimum_absolute_separation"]
+        summary = {
+            "minimum_calibration_adjacent_separation": cal_separation,
+            "minimum_validation_adjacent_separation": val_separation,
+            "median_absolute_transfer": base["transfer_summary"][axis]["absolute_shift"]["median"],
+            "maximum_absolute_transfer": max(
+                (
+                    t[axis]["absolute_shift"]
+                    for t in base["transfer"]
+                    if t[axis]["absolute_shift"] is not None
+                ),
+                default=None,
+            ),
+            "within_target_mad": robust(
+                [
+                    t["summary"]["features"][axis]["mad"]
+                    for t in base["trials"]
+                    if t["summary"]["features"][axis]["mad"] is not None
+                ]
+            ),
+            "within_target_iqr": robust(
+                [
+                    t["summary"]["features"][axis]["iqr"]
+                    for t in base["trials"]
+                    if t["summary"]["features"][axis]["iqr"] is not None
+                ]
+            ),
+            "ordering_by_orthogonal_level": _conditional_ordering(
+                base["trials"], axis, levels["calibration_direction"]
+            ),
+        }
+        ranges = [
+            t[axis]["maximum_shift"]
+            for t in base["repeatability"]
+            if t[axis]["maximum_shift"] is not None
+        ]
+        summary.update(
+            median_target_range=median(ranges) if ranges else None,
+            maximum_target_range=max(ranges) if ranges else None,
+            median_absolute_half_shift=robust(
+                [
+                    abs(t[axis]["signed_half_shift"])
+                    for t in temporal
+                    if t[axis]["signed_half_shift"] is not None
+                ]
+            )["median"],
+        )
+        for index, target in enumerate(base["transfer"]):
+            trials = [t for t in report["trials"] if t["target_id"] == target["target_id"]]
+            halves = {}
+            for half in ("first", "second"):
+                medians = [_half_median(t, axis, half) for t in trials]
+                usable = [v for v in medians if v is not None]
+                center = median(usable) if usable else None
+                halves[f"{half}_half_validation_median"] = center
+                halves[f"{half}_half_signed_transfer"] = _delta(
+                    target[axis]["calibration_median"], center
+                )
+            absolute = target[axis]["absolute_shift"]
+            transfers[index][axis] = {
+                **target[axis],
+                **halves,
+                "shift_over_calibration_separation": _ratio(absolute, cal_separation),
+                "shift_over_validation_separation": _ratio(absolute, val_separation),
+            }
+        for field, key in (
+            ("transfer_over_validation_separation", "shift_over_validation_separation"),
+            ("transfer_over_calibration_separation", "shift_over_calibration_separation"),
+        ):
+            summary[field] = robust([t[axis][key] for t in transfers if t[axis][key] is not None])
+        summary["median_absolute_second_half_transfer"] = robust(
+            [
+                abs(t[axis]["second_half_signed_transfer"])
+                for t in transfers
+                if t[axis]["second_half_signed_transfer"] is not None
+            ]
+        )["median"]
+        summary["maximum_absolute_second_half_transfer"] = max(
+            [
+                abs(t[axis]["second_half_signed_transfer"])
+                for t in transfers
+                if t[axis]["second_half_signed_transfer"] is not None
+            ],
+            default=None,
+        )
+        summary["within_iqr_over_validation_separation"] = robust(
+            [
+                _ratio(t["summary"]["features"][axis]["iqr"], val_separation)
+                for t in base["trials"]
+                if val_separation and t["summary"]["features"][axis]["iqr"] is not None
+            ]
+        )
+        axes[axis] = summary
+    return {
+        "axes": axes,
+        "target_transfer": transfers,
+        "temporal_trials": temporal,
+        "calibration_median_residuals": {
+            "targets": calibration_rows,
+            "x_mae": fmean(abs(t["signed_x_error"]) for t in calibration_rows),
+            "y_mae": fmean(abs(t["signed_y_error"]) for t in calibration_rows),
+        },
+    }
+
+
+def finalize_analysis(reports: list[dict]) -> dict:
+    """Recompute final one/two-session evidence; classify no scientific outcome in code."""
+    if not 1 <= len(reports) <= 2 or len(
+        {(r.get("participant"), r.get("session")) for r in reports}
+    ) != len(reports):
+        raise ValueError("supply one or two distinct complete captures")
+    if len({r.get("participant") for r in reports}) != 1:
+        raise ValueError("do not pool different participants")
+    sessions = []
+    for report in reports:
+        base = analyze_session(report)
+        sessions.append({**base, "diagnostic_details": _diagnostic_details(report, base)})
+    trials = [t for r in reports for t in r["trials"]]
+    return {
+        "sessions": sessions,
+        "pooled_mapping_residuals": {
+            "all": _residual_group(trials),
+            "by_row": _group(trials, "target_y", _residual_group),
+            "by_column": _group(trials, "target_x", _residual_group),
+            "by_target": _group(trials, "target_id", _residual_group),
+            "by_block": _group(trials, "block", _residual_group),
+        },
+        "note": "Pooled screen residuals are sample-weighted; raw feature diagnostics remain session-local.",
+    }
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("captures", nargs="+", type=Path)
     parser.add_argument("--output", type=Path)
+    parser.add_argument(
+        "--finalize",
+        action="store_true",
+        help="Include transfer, conditional ordering, calibration-median residuals, and pooled screen errors",
+    )
     args = parser.parse_args()
     if len(args.captures) not in (1, 2):
         parser.error("supply one capture or two sessions to compare")
     reports = [json.loads(path.read_text()) for path in args.captures]
-    result = analyze_session(reports[0]) if len(reports) == 1 else compare_sessions(reports)
+    result = (
+        finalize_analysis(reports)
+        if args.finalize
+        else analyze_session(reports[0])
+        if len(reports) == 1
+        else compare_sessions(reports)
+    )
     serialized = json.dumps(result, indent=2, allow_nan=False) + "\n"
     if args.output:
         if not args.output.resolve().is_relative_to(Path(".venv").resolve()):

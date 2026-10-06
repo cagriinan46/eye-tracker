@@ -13,8 +13,9 @@ over the full intended target window. This protocol records a complete fixed
 window regardless of predictions. It is a measurement experiment, not another
 hand-crafted feature search or an interaction success test.
 
-No live findings exist yet. No estimator, feature, calibration fitter, mapping,
-smoothing, clipping, ML, cursor movement, or clicking is added to production.
+The two-session findings are documented in [RESULTS.md](RESULTS.md). No estimator,
+feature, calibration fitter, mapping, smoothing, clipping, ML, cursor movement,
+or clicking is added to production.
 
 ## Frozen protocol
 
@@ -220,5 +221,15 @@ git diff --check
 Synthetic tests cover timing independent of gaze/camera queues, READY-before-
 camera orchestration, full-window records, schedule/cue identity, feature spread,
 ordering, transfer/drift, unclipped residuals, unavailable data, deterministic
-session comparison, and invalid/protocol mismatch rejection. Live camera/UI
-behavior and scientific conclusions await the two human sessions.
+session comparison, and invalid/protocol mismatch rejection. Both completed
+captures and the evidence-bounded diagnosis are documented in
+[RESULTS.md](RESULTS.md).
+
+## Finalized diagnostic report
+
+Use `--finalize` with one or two captures to add calibration-median residuals,
+vertical ordering within each screen column, horizontal ordering within each
+screen row, exact-target full/second-half transfer and separation ratios,
+block-range summaries, and sample-weighted pooled screen residuals. Feature
+scales remain session-local; no outcome A/B/C/D is automatically selected.
+See [RESULTS.md](RESULTS.md) for the command and the proposed next task.

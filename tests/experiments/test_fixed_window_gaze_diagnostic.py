@@ -459,3 +459,97 @@ def test_sample_sidecar_does_not_reuse_features_after_failed_read():
     )
     assert row["horizontal_feature"] is None and row["vertical_feature"] is None
     assert not row["camera_frame_available"] and row["feature_status"] == "unavailable"
+
+
+def test_final_diagnostics_mapping_medians_and_second_half_transfer():
+    from experiments.fixed_window_gaze_diagnostic.analysis import finalize_analysis
+
+    first, second = capture(0.03), capture(0.05)
+    second["session"] = "diagnostic-2"
+    result = finalize_analysis([first, second])
+    details = result["sessions"][0]["diagnostic_details"]
+    assert details["calibration_median_residuals"]["x_mae"] == pytest.approx(0)
+    assert details["calibration_median_residuals"]["y_mae"] == pytest.approx(0)
+    vertical = details["axes"]["vertical"]
+    assert vertical["median_target_range"] == pytest.approx(0.02)
+    assert vertical["median_absolute_transfer"] == pytest.approx(0.04)
+    assert vertical["median_absolute_second_half_transfer"] == pytest.approx(0.04)
+    assert vertical["median_absolute_half_shift"] == pytest.approx(0)
+    assert vertical["transfer_over_validation_separation"]["median"] == pytest.approx(0.04 / 0.3)
+    assert all(item["ordered"] for item in vertical["ordering_by_orthogonal_level"])
+    assert result["pooled_mapping_residuals"]["all"]["y_mae"] == pytest.approx(0.05)
+    assert len(details["target_transfer"]) == 9
+    assert len(result["pooled_mapping_residuals"]["by_target"]) == 9
+    assert len(details["temporal_trials"]) == 27
+    assert finalize_analysis([first, second]) == result
+
+
+def test_cross_column_ordering_is_not_hidden_by_row_pooling():
+    from experiments.fixed_window_gaze_diagnostic.analysis import finalize_analysis
+
+    report = capture()
+    # Break vertical ordering only in the left column without changing calibration.
+    for trial in report["trials"]:
+        if trial["target_x"] == 0.2 and trial["target_y"] == 0.2:
+            for row in trial["samples"]:
+                row["vertical_feature"] = -0.7
+                row["predicted_y"] = 0.7
+    result = finalize_analysis([report])["sessions"][0]["diagnostic_details"]
+    left = [
+        o
+        for o in result["axes"]["vertical"]["ordering_by_orthogonal_level"]
+        if o["orthogonal_level"] == 0.2
+    ]
+    assert len(left) == 4 and not any(o["ordered"] for o in left)
+
+
+def test_half_shift_and_transfer_are_distinct_and_mapping_uses_calibration_only():
+    from experiments.fixed_window_gaze_diagnostic.analysis import finalize_analysis
+
+    report = capture(0)
+    for trial in report["trials"]:
+        for row in trial["samples"]:
+            if row["trial_relative_seconds"] >= 1.5:
+                row["vertical_feature"] += 0.1
+                row["predicted_y"] -= 0.1
+    result = finalize_analysis([report])["sessions"][0]["diagnostic_details"]
+    assert result["axes"]["vertical"]["median_absolute_half_shift"] == pytest.approx(0.1)
+    assert result["axes"]["vertical"]["median_absolute_second_half_transfer"] == pytest.approx(0.11)
+    assert result["calibration_median_residuals"]["y_mae"] == pytest.approx(0)
+
+
+def test_final_analysis_retains_inconclusive_signal_loss():
+    from experiments.fixed_window_gaze_diagnostic.analysis import finalize_analysis
+
+    report = capture()
+    for trial in report["trials"]:
+        for row in trial["samples"]:
+            row.update(
+                feature_status="unavailable",
+                horizontal_feature=None,
+                vertical_feature=None,
+                gaze_status="unavailable",
+                predicted_x=None,
+                predicted_y=None,
+                unavailable_reason="missing_features",
+            )
+    result = finalize_analysis([report])
+    assert len(result["sessions"][0]["signal_limitations"]) == 27
+    assert result["pooled_mapping_residuals"]["all"]["y_mae"] is None
+    assert (
+        result["sessions"][0]["diagnostic_details"]["axes"]["vertical"]["maximum_absolute_transfer"]
+        is None
+    )
+
+
+def test_final_pooling_weights_raw_samples_not_session_means():
+    from experiments.fixed_window_gaze_diagnostic.analysis import finalize_analysis
+
+    first, second = capture(0.03), capture(0.05)
+    second["session"] = "diagnostic-2"
+    for trial in second["trials"]:
+        trial["samples"] = [deepcopy(row) for row in trial["samples"] for _ in (0, 1)]
+    result = finalize_analysis([first, second])
+    assert result["pooled_mapping_residuals"]["all"]["y_mae"] == pytest.approx(
+        (0.04 + 2 * 0.06) / 3
+    )

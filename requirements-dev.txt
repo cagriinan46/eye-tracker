@@ -1,2 +1,4 @@
 pytest
 ruff
+# Experiment-only SVD/affine least squares; also used by Experiment 006.
+numpy

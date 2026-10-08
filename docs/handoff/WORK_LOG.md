@@ -742,3 +742,28 @@ on e726a79 completed **SUCCESS**. [PR #82](https://github.com/cagriinan46/eye-tr
 **CLOSED unmerged** with an explanatory comment, per Fatih's decision; its branch
 was not deleted. This entry is a later commit with its own CI run. No merge by
 the agent; Fatih reviews and merges PR #83.
+
+## 2026-10-08 23:37 +03:00 — correction: PR #83 merged; Issue #84 head-assisted pointing preregistered
+
+**Correction** to the PR #83 publication entry (OPEN/UNMERGED): verified,
+[PR #83](https://github.com/cagriinan46/eye-tracker/pull/83) **MERGED** at
+2026-10-08T20:11:33Z (23:11 +03:00) by Fatih as `2f73004fe5a1aab71da32049d13cf08eb24c4d29`;
+Issue #81 CLOSED.
+
+**Approval:** Fatih in chat: "dikey ekseni baş hareketine baglı yapsak o nasıl olur
+bunu da bir deneme gibi yapalım". Claude stated upfront that pushing the branch
+puts the code on GitHub but not on main, and that failed code will not be
+merged (Fatih's preference). **Rollback point: main `2f73004`.** **Agent:** Claude
+Code (Claude Opus 5.5). **Issue:** [#84](https://github.com/cagriinan46/eye-tracker/issues/84).
+**Branch:** `experiment/84-head-vertical-targeting`.
+
+**Design (preregistered in the experiment README):** 15-presentation calibration
+in blocks eye_x (head still), head_y and head_x ("point your nose"); 1-D OLS
+lines; conditions HYBRID (eye horizontal + head pitch) and HEAD (head yaw + head
+pitch); Issue #81 zone mechanics (3×3 then 4×4 per condition, 50 trials, 1.0 s
+dwell on any cell, 5.0 s timeout, 7-frame/0.5 s median). Per-frame head pose, eye
+features, opening and blink are now logged. Pass per condition × layout: success
+≥ 80% and wrong ≤ 10% in both sessions.
+
+**Checks so far:** 9 new tests pass; drawings rendered offscreen with real
+OpenCV. Full-suite results follow in the commit check. Sessions after push.

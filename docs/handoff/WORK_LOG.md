@@ -798,3 +798,12 @@ Issue #81 mirror/head-rotation hypothesis. Within-target head-angle SD was
 and architecture; Fatih and Çağrı); (2) merge this working experiment code or
 keep results only (Fatih's rule). Comfort/fatigue not measured; Fatih asked to
 report comfort. No production change.
+
+## 2026-10-08 23:50 +03:00 — Issue #84 published; review pending
+
+Artifact commit **`84e2a3ac06a640665e69f266a072452013891027`** on
+`experiment/84-head-vertical-targeting`. Opened [PR #85](https://github.com/cagriinan46/eye-tracker/pull/85)
+(Closes #84), verified OPEN, non-draft, UNMERGED; [CI run37842402970](https://github.com/cagriinan46/eye-tracker/actions/runs/37842402970)
+on 84e2a3a completed **SUCCESS**. No `src/` change. This entry is a later commit
+with its own CI run. No merge by the agent; Fatih decides between merging the
+working experiment code and a results-only record.

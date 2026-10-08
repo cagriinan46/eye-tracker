@@ -507,3 +507,42 @@ and `893f1b9` full-screen fix). Opened [PR #76](https://github.com/cagriinan46/e
 (Closes #75), verified OPEN, non-draft, UNMERGED. [CI run37784938372](https://github.com/cagriinan46/eye-tracker/actions/runs/37784938372)
 on afc7f7c completed **SUCCESS**. This entry is a later commit with its own CI
 run. No merge by the agent; Fatih reviews and merges. Next task awaits approval.
+
+## 2026-10-08 21:51 +03:00 — correction: PR #76 merged; Issue #77 V2 preregistered
+
+**Correction** to the PR #76 publication entry (OPEN/UNMERGED): verified through
+GitHub, [PR #76](https://github.com/cagriinan46/eye-tracker/pull/76) **MERGED** at
+2026-10-08T14:13:09Z (17:13 +03:00) by Fatih (`MFatihErdemir`) as squash commit
+`9b97e9d44ca675c408e38049f080af9af0009728`; no tree difference from its head;
+Issue #75 CLOSED.
+
+**Approval:** after Claude outlined options for better vertical results, Fatih
+approved V2 in chat ("onaylıyorum, V2'yi başlat"): compare vertical signals in
+one protocol, experiment-only capture of blendshapes and head pose, full-screen
+5×5 calibration with repeated checkpoints, preregistered candidates and rule,
+two Fatih sessions. **Agent:** Claude Code (Claude Opus 5.5). **Issue:**
+[#77](https://github.com/cagriinan46/eye-tracker/issues/77). **Start:** main
+`9b97e9d`, branch `experiment/77-vertical-signal-comparison`.
+
+**Implementation (experiment-only):** `experiments/vertical_signal_comparison/`
+with `protocol.py` (50 presentations: 3 checkpoint blocks, shuffled 5×5
+calibration at 0.1–0.9, shuffled 4×4 validation at 0.2–0.8, seed 77),
+`capture.py` (`SignalExtractor` subclass of the production adapter requesting
+blendshapes and the transformation matrix; production adapter unchanged),
+`run.py` (requires `--screen-size`, refuses overwrite, serializes with
+`allow_nan=False` before opening the output file), `analysis.py` and README
+preregistration. Candidates R0, OPEN, OPEN_Q, BLEND, COMBO; pass per session =
+y MAE ≤ 0.08, ordering ≥ 19/21 of 96 pairs, |bias| ≤ 0.05; winner must pass
+both sessions. Blink frames (eyeBlink > 0.5) excluded from all candidates.
+
+**Pre-data hardware smoke (no data saved):** a first 60-frame probe right after
+opening the camera gave 0/60 usable frames (camera warm-up); after discarding
+30 warm-up reads, both the production adapter and `SignalExtractor` gave 60/60
+usable, and a 90-frame check found every blendshape/pose field in 90/90 frames.
+Median detector call 6.81 ms extended vs 6.70 ms production.
+
+**Checks:** `ruff check .` PASS; `ruff format --check .` PASS (230 files);
+`pytest` **454 passed** (14 new). One intermediate test failure (R0 vs
+production fitter compared slopes near zero with a relative tolerance) was a
+fixture problem and fixed by giving the synthetic feature a real y slope.
+Sessions follow after this commit is pushed.

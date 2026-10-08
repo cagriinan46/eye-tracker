@@ -379,3 +379,131 @@ non-draft, UNMERGED. [CI run37781221911](https://github.com/cagriinan46/eye-trac
 on 51cbe95 completed **SUCCESS**. This entry is a later commit with its own CI
 run. No merge by the agent; Fatih reviews and merges. Open question for Fatih:
 did the target window actually cover the full screen (reported 1200×700)?
+
+## 2026-10-08 16:30 +03:00 — correction: PR #74 merged; human priority decision
+
+Correction to the 16:10 entry (PR #74 OPEN/UNMERGED): verified through GitHub,
+[PR #74](https://github.com/cagriinan46/eye-tracker/pull/74) **MERGED** at
+2026-10-08T13:06:32Z (16:06 +03:00) by Fatih (`MFatihErdemir`) as squash commit
+`ea5bd9ee908062148ce7be534847dd7f82d51c03`; no tree difference from its head.
+Fatih has not yet answered whether the 16:00 validation window looked full screen.
+
+**Human decision (Fatih, chat, 2026-10-08):** the main goal is eye control, so
+the vertical axis is completed **before** Phase 2 or other subsystems. Fatih
+accepted Claude's proposed measurable exit criteria and timebox ("dediklerini
+yapalım"): held-out y MAE ≤ 0.08, y ordering ≥ 19/21 and |y bias| ≤ 0.05 for
+both developers in at least two sessions each, coarse 3×3 targeting ≥ 80%,
+timeboxed to 1–2 weeks followed by a team review. This is within Phase 1 of the
+roadmap, not a scope change; Çağrı may revise it on return. B2 recovery remains
+a joint decision for when Çağrı returns.
+
+## 2026-10-08 16:30 +03:00 — Issue #75 vertical diagnosis preregistered
+
+**Approval:** Fatih approved task V1 in chat ("dediklerini yapalım dikey eksen
+için iyi olacaksa"): diagnose Fatih's vertical failure as signal inadequacy vs
+drift before any fix; two new Fatih sessions with new unique outputs in `.venv/`.
+**Agent:** Claude Code (Claude Opus 5.5). **Issue:**
+[#75](https://github.com/cagriinan46/eye-tracker/issues/75). **Start:** main
+`ea5bd9ee908062148ce7be534847dd7f82d51c03`, branch
+`experiment/75-vertical-signal-drift-diagnosis`.
+
+**Scope change during planning:** the approved plan proposed adding feature
+logging to `validation/real_calibration.py`. Inspection found the merged Issue
+#44 collector `experiments.vertical_collapse_diagnostics.run` already records
+per-frame binocular/left/right features, eye opening, head-center proxy and
+mapping coefficients under the same protocol, and its README anticipated a
+Fatih run. It is reused unchanged, so **no harness or production code changes**.
+The 1200×700 window-measurement question is therefore not fixed here; it affects
+pixel-equivalent metrics only.
+
+**Preregistration (committed and pushed before any session):**
+[README](../../experiments/vertical_signal_drift_diagnosis/README.md) and
+`experiments/vertical_signal_drift_diagnosis/analysis.py` freeze the rule:
+SIGNAL if calibration R² < 0.80 or same-column ordering < 8/9; else INSTABILITY
+if held-out feature ordering < 17/21; else DRIFT if |shift_y| > 0.10; else
+NOT_REPRODUCED; overall only if A and B agree, otherwise MIXED. Thresholds were
+chosen after seeing the 16:00 prediction-level summary but before any Fatih
+feature data. 13 synthetic tests cover each category, sign handling, missing
+samples, combination and CLI. Session results will be appended after collection.
+
+## 2026-10-08 16:45 +03:00 — Issue #75: full-screen target defect found and fixed before sessions
+
+Time note for the preceding two entries: they were headed 16:30, but their
+commit `6b43f0f` was actually made and pushed at about **16:19 +03:00**.
+
+**Finding:** Fatih reported that the 16:00 validation targets appeared in the
+middle of the screen, not full screen. A probe (no camera) showed OpenCV on this
+Mac sets the window full screen (property 1.0) but displays the 1200×700 canvas
+centered at its own size; `getWindowImageRect` stayed 1200×700. Finder reports a
+1512×982-point desktop (3024×1964 Retina). Targets therefore spanned about 43%
+of the screen height instead of 60%. A 1512×982 canvas measured exactly
+1512×982 and Fatih visually confirmed the red test border was at the screen
+edges. **Every historical report found in the repository (Experiment 006,
+drift, collapse, sensitivity, position, fixed-center) records 1200×700**, so
+earlier vertical studies may also have used a reduced on-screen span; whether
+Çağrı's display showed the same effect is unverified and should be checked
+with him. This is a protocol observation, not a re-analysis of old data.
+
+**Fix (approved by Fatih: "evet tam ekrandı, düzeltmeyi uygula"):** shared
+`open_target_window` and `parse_screen_size` in `validation/real_calibration.py`;
+opt-in `--screen-size WIDTHxHEIGHT` on the validation harness and on the Issue
+#44 collector. With it, the canvas is drawn at display size after a 1.5 s
+full-screen settle, and the run fails if the measured area differs. Without it,
+behavior is byte-for-byte the historical sequence. Reports add
+`requested_screen_size`. Validation README documents the option. A real-display
+smoke call returned (1512, 982). The Issue #75 README records this as a protocol
+amendment made before any data; rule and thresholds unchanged.
+
+**Checks:** `.venv-fatih/bin/ruff check .` PASS; `ruff format --check .` PASS
+(223 files); `pytest` **440 passed** (5 new window/CLI tests + 13 analysis tests
+over the 422 main baseline); `git diff --check` PASS.
+
+## 2026-10-08 16:30 +03:00 — Issue #75 sessions completed: Fatih vertical failure is SIGNAL
+
+Time note: the previous entry was headed 16:45, but its commit `893f1b9` was
+made and pushed at **16:25 +03:00**. Header times from here on come from the
+system clock at writing time.
+
+Same approval/task as the Issue #75 entries. Both sessions ran with
+`--screen-size 1512x982`, camera index 0, `.venv-fatih` only:
+
+- Session A 16:26:14–16:27:08, exit 0; 1,502 reads, 0 failed, 0 no-face,
+  891/891 usable; `.venv/vertical-collapse-fatih-A.json` 781,140 B, SHA-256
+  `690e03fbb9bef4f03d636a659cddb60473c1a5f1e988a35f7e1fbbd89303ab10`.
+- Fatih stood up and reseated (results were not shown to him in between).
+- Session B 16:27:54–16:28:48, exit 0; 1,508 reads, 0 failed, 0 no-face,
+  893/893 usable; `.venv/vertical-collapse-fatih-B.json` 783,794 B, SHA-256
+  `97c4b870be240778e1a83ab35aa08889dcbe1aa51f9744ce0b996b15e3873eda`.
+- Both reports record a measured 1512×982 target image area. Outputs are
+  Git-ignored and not committed. All 3,695 pre-existing non-cache `.venv/`
+  files unchanged by size/mtime; B2 marker SHA unchanged.
+
+**Preregistered result** (`python -m experiments.vertical_signal_drift_diagnosis.analysis`):
+**A = SIGNAL, B = SIGNAL, overall SIGNAL.** Production vertical feature:
+calibration R² 0.238 / 0.205, column ordering 7/9 / 6/9, fitted direction
+reversed between sessions (β −0.00875 / +0.00427), held-out feature ordering
+6/21 / 14/21. Held-out predictions: y MAE 0.213 / 0.203, y ordering 6/21 / 14/21,
+y bias +0.185 / −0.131; x MAE 0.066 / 0.058 with 21/21. Full-screen targets did
+not rescue the production vertical estimate.
+
+**Descriptive:** binocular eye opening vs target y had calibration R² 0.970 /
+0.901 with 9/9 column ordering in both sessions (slope −0.089 / −0.070).
+**Exploratory, not preregistered:** eye opening ordered held-out targets 18/21
+and 21/21, but a calibration-only inverse line gave y MAE 0.209 / 0.146 with
+bias −0.194 / −0.108 (eyes more open during validation). Full tables and limits:
+[RESULTS](../../experiments/vertical_signal_drift_diagnosis/RESULTS.md).
+
+**Interpretation:** for Fatih the current iris-vs-corner vertical feature lacks
+usable vertical signal; recentering/filtering it is unlikely to help. Eye
+opening is a promising but shifting candidate. One participant, one day. No
+production change; no B2 action; no Çağrı data. Next options are proposed to
+Fatih and await approval.
+
+## 2026-10-08 16:31 +03:00 — Issue #75 published; review pending
+
+Artifact commit **`afc7f7c262d5920388f0d154777c81bd532f3bb8`** on
+`experiment/75-vertical-signal-drift-diagnosis` (after `6b43f0f` preregistration
+and `893f1b9` full-screen fix). Opened [PR #76](https://github.com/cagriinan46/eye-tracker/pull/76)
+(Closes #75), verified OPEN, non-draft, UNMERGED. [CI run37784938372](https://github.com/cagriinan46/eye-tracker/actions/runs/37784938372)
+on afc7f7c completed **SUCCESS**. This entry is a later commit with its own CI
+run. No merge by the agent; Fatih reviews and merges. Next task awaits approval.

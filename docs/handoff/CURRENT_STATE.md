@@ -1,6 +1,6 @@
 # RETURNING DEVELOPER — READ THIS FIRST
 
-Verified snapshot: **2026-10-08 16:05, Europe/Istanbul (UTC+03:00)**. This is the primary
+Verified snapshot: **2026-10-08 16:30, Europe/Istanbul (UTC+03:00)**. This is the primary
 operational dashboard. [WORK_LOG](WORK_LOG.md) records subsequent tasks and
 corrections; [PROJECT_CONTEXT](PROJECT_CONTEXT.md) explains the entire product.
 Refresh this dashboard after approved work; verify live GitHub state on return.
@@ -25,6 +25,9 @@ delivered. This handoff changes documentation only.**
 | Handoff documentation / PR #72 | MERGED 2026-10-08 15:36 +03:00 as a703de9 | Main CI green; handoff is on main |
 | Fatih environment `.venv-fatih` | Python 3.12.13; dev + vision deps; Ruff PASS; **422 passed** | Locally ignored; `.venv` untouched; PR #73 merged as b8aee60 |
 | Fatih validation session 1 | Camera index 0; held-out x MAE 0.048 (21/21), **y MAE 0.249 (7/21), y bias +0.25** | Pipeline runs on Fatih's Mac; vertical fails for Fatih; next step needs approval |
+| Vertical priority (Fatih decision) | Vertical before Phase 2; exit: y MAE ≤ 0.08, ordering ≥ 19/21, \|bias\| ≤ 0.05, 2 users × 2 sessions; 1–2 week timebox | Çağrı may revise on return |
+| Full-screen target defect | Historical runs drew a 1200×700 canvas centered on screen; opt-in `--screen-size` fix on Issue #75 branch | Check Çağrı's display; old vertical results used reduced span |
+| Issue #75 diagnosis (Fatih A/B) | Preregistered result **SIGNAL** in both: production vertical R² 0.24 / 0.21 | Eye opening R² 0.97 / 0.90 (descriptive), promising but shifts; PR pending |
 
 The first B2 calculation returned both sessions' aggregates in memory but
 failed serializing a NumPy boolean to JSON. The process exited; numerical

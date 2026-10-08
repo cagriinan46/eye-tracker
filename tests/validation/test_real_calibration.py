@@ -294,3 +294,75 @@ def test_calibration_fit_is_reported_separately_from_held_out_trials() -> None:
     assert len(result["trials"]) == 9
     assert result["summary"]["mean_normalized_error"] == pytest.approx(0.0, abs=1e-12)
     assert all(item["target_id"].startswith("C-") for item in result["trials"])
+
+
+class _FakeWindowCv2:
+    WINDOW_NORMAL = 0
+    WND_PROP_FULLSCREEN = 1
+    WINDOW_FULLSCREEN = 1
+
+    def __init__(self, rect: tuple[int, int, int, int]) -> None:
+        self.rect = rect
+        self.shown = []
+        self.waits = []
+
+    def namedWindow(self, _window, _flags) -> None:
+        pass
+
+    def setWindowProperty(self, _window, _prop, _value) -> None:
+        pass
+
+    def imshow(self, _window, image) -> None:
+        self.shown.append(image.shape)
+
+    def waitKey(self, delay: int) -> int:
+        self.waits.append(delay)
+        return -1
+
+    def getWindowImageRect(self, _window):
+        return self.rect
+
+
+def test_screen_size_parser_accepts_logical_points_only() -> None:
+    module = harness()
+    assert module.parse_screen_size("1512x982") == (1512, 982)
+    assert module.parse_screen_size("1512X982") == (1512, 982)
+    for text in ("1512", "0x982", "-1x982", "axb", "1x2x3"):
+        with pytest.raises(module.argparse.ArgumentTypeError):
+            module.parse_screen_size(text)
+    assert module._parse_args(["--camera-index", "0"]).screen_size is None
+    args = module._parse_args(["--camera-index", "0", "--screen-size", "1512x982"])
+    assert args.screen_size == (1512, 982)
+    with pytest.raises(SystemExit):
+        module._parse_args(["--camera-index", "0", "--screen-size", "big"])
+
+
+def test_target_window_keeps_legacy_canvas_without_screen_size() -> None:
+    np = pytest.importorskip("numpy")
+    module = harness()
+    cv2 = _FakeWindowCv2((0, 0, 1200, 700))
+
+    assert module.open_target_window(cv2, np, "w", None) == (1200, 700)
+    assert cv2.shown == [(700, 1200, 3)]
+    assert cv2.waits == [1]
+
+
+def test_target_window_draws_requested_full_screen(monkeypatch) -> None:
+    np = pytest.importorskip("numpy")
+    module = harness()
+    monkeypatch.setattr(module, "FULL_SCREEN_SETTLE_SECONDS", 0.0)
+    cv2 = _FakeWindowCv2((0, 0, 1512, 982))
+
+    assert module.open_target_window(cv2, np, "w", (1512, 982)) == (1512, 982)
+    assert cv2.shown == [(982, 1512, 3)]
+
+
+def test_target_window_rejects_partial_or_unknown_area(monkeypatch) -> None:
+    np = pytest.importorskip("numpy")
+    module = harness()
+    monkeypatch.setattr(module, "FULL_SCREEN_SETTLE_SECONDS", 0.0)
+
+    with pytest.raises(RuntimeError, match="not the requested"):
+        module.open_target_window(_FakeWindowCv2((0, 0, 1200, 700)), np, "w", (1512, 982))
+    with pytest.raises(RuntimeError, match="Could not determine"):
+        module.open_target_window(_FakeWindowCv2((0, 0, 0, 0)), np, "w", None)

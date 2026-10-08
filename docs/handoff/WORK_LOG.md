@@ -204,3 +204,73 @@ scientific computation or production change occurred. This appended incident
 record is the only additional file change; diff/link/scope checks remain required
 before its commit. Handoff awaits human review, and the next task still awaits
 human approval.
+
+## 2026-10-08 15:48 +03:00 — correction: handoff PR #72 merged
+
+Correction to the 15:30 and 15:33 entries, which recorded PR #72 as open and
+unmerged. Verified live through GitHub by Claude Code for Fatih:
+[PR #72](https://github.com/cagriinan46/eye-tracker/pull/72) **MERGED** at
+2026-10-08T12:36:37Z (15:36 +03:00) by Çağrı (`cagriinan46`), head
+`618a9f0cc71aa35427ea09d1a5c4a64fe1864ebb`, squash commit on main
+`a703de9d7a4a93f1c37c3e7570ae1e7da1ece8eb`. `git diff 618a9f0 a703de9` returned
+no difference, so main holds exactly the reviewed handoff content.
+[Main push CI run37778099516](https://github.com/cagriinan46/eye-tracker/actions/runs/37778099516)
+completed SUCCESS. Branch `docs/claude-project-handoff` still exists locally and
+on origin; it was not deleted in this session.
+
+PR #71 rechecked at the same time: OPEN, DRAFT, UNMERGED, head unchanged at
+`b0cb40dbb727eacc0091d5324285200e57dc6490`; its CI check remains pass. No open
+issues. Old local experiment branches whose remotes are gone were not deleted.
+
+## 2026-10-08 15:48 +03:00 — Fatih's local environment and data identity check
+
+**Human owner / approval:** Muhammet Fatih Erdemir, explicit chat request on
+2026-10-08: read the handoff, verify GitHub, create a separate Python 3.12
+environment named `.venv-fatih` without touching `.venv`, ignore it locally,
+install dependencies, run tests and Ruff, record the work, then propose (not
+start) the next task. Explicitly excluded: re-evaluating geometry-1/2 and any
+B2 recovery. Treated as a bounded documentation/environment exception; no issue.
+**Agent:** Claude Code (Claude Opus 5.5). **Start:** main
+`a703de9d7a4a93f1c37c3e7570ae1e7da1ece8eb`, clean; branch
+`docs/fatih-local-environment` created from it for this log only.
+
+**Environment:** Fatih's Mac (macOS 26 / Darwin 25.6.0, Apple Silicon). The
+existing `.venv` is a transferred copy whose `pyvenv.cfg` points at Çağrı's
+`/opt/homebrew` Python, which does not exist on this Mac, so it is not usable as
+an interpreter here; it was used only as a configuration reference (`pyvenv.cfg`
+read) and kept as the private data store. New `.venv-fatih` was created with
+`~/.local/bin/python3.12 -m venv .venv-fatih` (uv-managed CPython 3.12.13,
+matching `.venv`'s 3.12.13). It is ignored via `.git/info/exclude` only
+(`.venv-fatih/`), so no tracked ignore file changed. Installed: pip 26.2.1;
+`pip install -r requirements-dev.txt` → pytest 9.1.1, ruff 0.16.10, numpy 2.5.3;
+then `pip install --group vision` from pyproject → mediapipe 0.10.35,
+opencv-contrib-python 5.0.0.93 (+ transitive packages). `pip check`: no broken
+requirements. Imports of mediapipe/cv2/numpy succeeded. Requirements are not
+locked (ADR-004), so other machines may resolve newer unpinned dev packages.
+
+**Checks actually executed in `.venv-fatih`:**
+
+- `.venv-fatih/bin/ruff check .`: PASS ("All checks passed!").
+- `.venv-fatih/bin/ruff format --check .`: PASS, 219 files already formatted.
+- `.venv-fatih/bin/python -m pytest -q -p no:cacheprovider`: **422 passed,
+  0 failed**, once with dev requirements only (CI scope, 2.09 s) and again after
+  the vision group (1.53 s). Both runs used a scratch `sitecustomize` audit hook
+  (outside the repo) that raises on any file open under this repo's `.venv/`;
+  a probe confirmed the hook was active. No test was blocked. The count matches
+  the 422 main-derived tests recorded at 15:28; PR #71's 445 includes its
+  unmerged B2 tests and was not rerun here.
+
+**Data identity (no parsing):** every one of the 57 DATA_INVENTORY manifest
+entries is present under `.venv/` on Fatih's Mac and matches its recorded byte
+size and SHA-256 (57 ok / 0 mismatch / 0 missing), including both geometry
+captures, the detector model and the original one-shot marker
+(`763a89a3…7467660`, 445 bytes). Only `shasum`/`stat` were used; no capture JSON
+or CSV was decoded. `.venv/real-calibration-fatih.json` remains **absent** on
+this Mac too. A metadata fingerprint (size/mtime/path of all 5,959 files in
+`.venv/`) was identical before and after the work: `.venv` was not modified.
+
+**Not done:** no B2 repair/recovery/rerun, no geometry-1/2 evaluation, no camera
+run, no production/experiment/test change, no branch deletion, no merge.
+Production behavior unchanged. Next task is proposed to Fatih in chat and awaits
+explicit approval; this entry is not that approval. Commit/PR metadata will be
+appended after publication.

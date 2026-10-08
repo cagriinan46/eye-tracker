@@ -633,3 +633,101 @@ Artifact commit **`9ad27cafb29167249d945ecdfb1c1af3c92e2ea4`** on
 on 9ad27ca completed **SUCCESS**. This entry is a later commit with its own CI
 run. No merge by the agent; Fatih reviews and merges. The listed human
 decisions are pending; no follow-up task started.
+
+## 2026-10-08 22:42 +03:00 — correction: PR #80 merged; Issue #81 coarse zone targeting preregistered
+
+**Correction** to the PR #80 publication entry (OPEN/UNMERGED): verified,
+[PR #80](https://github.com/cagriinan46/eye-tracker/pull/80) **MERGED** at
+2026-10-08T19:18:07Z (22:18 +03:00) by Fatih as `9e55af69691d3dc1463aec34bfa5aba83fff4029`.
+
+**Approval:** Fatih chose option 3 of the Issue #79 list in chat ("3 numarayı bir
+deneyelim ama eski haline de dönebilelim"): try coarse-vertical interaction design,
+reversibly. **Rollback point: main `9e55af69691d3dc1463aec34bfa5aba83fff4029`.**
+All work is experiment-only (`experiments/coarse_vertical_targeting/` and its
+tests); `src/` is untouched; revert by not merging or `git revert` of the squash.
+**Agent:** Claude Code (Claude Opus 5.5). **Issue:**
+[#81](https://github.com/cagriinan46/eye-tracker/issues/81). **Branch:**
+`experiment/81-coarse-vertical-targeting`.
+
+**Design (preregistered in the README before data):** shuffled 5×5 calibration,
+live COMBO y and production-style x mapping, screen-filling 3×3 (each cell ×2) and
+4×4 (each ×1) grids, 34 trials, mirrored-cell cue 0.75 s, 7-frame/0.5 s median
+smoothing, 1.0 s dwell on any cell selects it (wrong cells count as wrong
+selections), 5.0 s timeout, shaded current-cell feedback. Pass per layout and
+session: success ≥ 80% and wrong ≤ 10%; a layout passes only if A and B pass.
+Session A 3×3 first, B 4×4 first.
+
+**Checks:** 12 new tests (schedule, mapping, blink exclusion, smoother, clamping,
+dwell, pass rule, schedule validation, CLI). One fixture initially made the
+COMBO design rank-deficient (features were linear combinations of each other);
+fixed in the fixture, not the code. `draw_grid` rendered offscreen with real
+OpenCV for both layouts and all states. Full-suite results are in the commit
+check below. Sessions follow after push.
+
+## 2026-10-08 22:53 +03:00 — Issue #81 sessions: coarse zone targeting FAILED
+
+Preregistration `e3d5237` pushed at 22:42 +03:00; full suite at that commit:
+`ruff check` PASS, `ruff format --check` PASS (240 files), `pytest` **466 passed**.
+
+**Sessions** (`--screen-size 1512x982`, camera 0, `.venv-fatih`): A 22:43:35–22:47:00,
+B 22:47:54–22:51:42 after reseating; both exit 0, 25/25 calibration, 34/34
+trials; reads 5,478 / 6,170, 0 failed, no-face 0 / 15. Files
+`.venv/coarse-vertical-fatih-A.json` (1,054,424 B, SHA-256
+`f5a4647aee03062b42c2ed51f10923c01e865f1468cb7a14cca1ae6e13024b62`) and `-B.json`
+(1,271,168 B, `0c8b410270c1cba71fd524aa54a1c497d4945979b196015881de1306cccd8bc1`),
+Git-ignored. All 3,699 pre-existing non-cache `.venv/` files unchanged; B2 marker
+unchanged. Six MediaPipe clearcut "Failed to send" lines per run.
+
+**Preregistered result: both layouts FAIL.** 3×3 success 22% / 44%, wrong 61% /
+22%; 4×4 success 6% / 19%, wrong 75% / 31% (A / B). The 3×3 ≥ 80% exit criterion
+is not met. Wrong selections were mostly one row above the target.
+
+**Exploratory:** live estimates were biased on both axes (median y −0.19 / −0.16,
+x +0.24 / +0.10), unlike Issue #77's open-loop x MAE ≈0.05; x bias grew within
+trials. An open-loop constant-offset simulation from the first six trials did
+not help. Possible causes (posture change, grid brightness affecting eye
+opening, feedback capture) cannot be separated: frames did not log head or
+eye-opening values. Details: [results record](../research/coarse-zone-targeting-results.md).
+
+**Rollback:** no production change; rollback point main `9e55af6` unchanged.
+Whether to keep this experiment and its negative result on main (recommended,
+as evidence) or close the PR unmerged is Fatih's choice. Next options await
+approval.
+
+## 2026-10-08 22:54 +03:00 — Issue #81 published; review pending
+
+Artifact commit **`d827637822c9a5655cdc2c4f55c2b4527b591770`** on
+`experiment/81-coarse-vertical-targeting`. Opened [PR #82](https://github.com/cagriinan46/eye-tracker/pull/82)
+(Closes #81), verified OPEN, non-draft, UNMERGED. [CI run37835375529](https://github.com/cagriinan46/eye-tracker/actions/runs/37835375529)
+on d827637 completed **SUCCESS**. Branch diff 10 files, no `src/` change. This
+entry is a later commit with its own CI run. No merge by the agent; Fatih decides
+whether to merge (keep the negative result) or close (exact rollback to 9e55af6).
+
+## 2026-10-08 23:05 +03:00 — Issue #81: code not merged by decision; results-only record; mirror observation
+
+The four preceding Issue #81 entries were written on the experiment branch and
+are carried to main unchanged except that the RESULTS link now points to the
+results-only record below.
+
+**Human decision (Fatih, chat):** "işe yaramadıgı için kodun degişmesine bence
+gerek yok": because the experiment did not work, its code is **not merged**.
+Only results and logs go to main. Claude closes
+[PR #82](https://github.com/cagriinan46/eye-tracker/pull/82) unmerged and keeps
+branch `experiment/81-coarse-vertical-targeting` (tip `62dc8f9`) as a
+reference. Main stays at rollback point `9e55af6` plus this documentation.
+Clarification given to Fatih: the branch and PR had already been pushed to
+GitHub before this decision. Raw session data (`.venv/coarse-vertical-fatih-*.json`)
+are Git-ignored and were never uploaded; GitHub holds only summary numbers.
+
+**Participant observation (Fatih):** during the test, moving the eyes right
+moved the feedback left and vice versa, "as if a mirror mode were on". Checked
+against data: no code mirror. The live x mapping slope (−11.1 / −8.0) has the
+same sign as Issue #77 (96/96 horizontal ordering), the camera image is never
+flipped, and median estimated x increased with target column except in A's 4×4
+block (rightmost column 0.47). Hypothesis, unproven: the features are
+eye-in-head; turning the head toward the target or the shaded feedback while
+fixating moves the eyes the opposite way inside the head, so the estimate moves
+opposite to the head turn. Head pose was not logged during trials (design
+gap). New record:
+[coarse-zone-targeting-results.md](../research/coarse-zone-targeting-results.md).
+No production change. Next direction awaits Fatih/Çağrı.

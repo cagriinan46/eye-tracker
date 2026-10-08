@@ -767,3 +767,34 @@ features, opening and blink are now logged. Pass per condition × layout: succes
 
 **Checks so far:** 9 new tests pass; drawings rendered offscreen with real
 OpenCV. Full-suite results follow in the commit check. Sessions after push.
+
+## 2026-10-08 23:49 +03:00 — Issue #84 sessions: head pointing PASSES; hybrid fails
+
+Preregistration `06bfbc2` pushed at 23:37 +03:00; full suite at that commit:
+`ruff check` PASS, `ruff format --check` PASS (241 files), `pytest` **463 passed**.
+
+**Sessions** (`--screen-size 1512x982`, camera 0, `.venv-fatih`): A 23:39:24–23:43:28,
+B 23:44:46–23:48:40 after reseating; both exit 0, 50/50 trials; reads 6,369 / 6,087,
+0 failed, no-face 18 / 114. Files `.venv/head-vertical-fatih-A.json` (3,509,097 B,
+SHA-256 `b155e116942eb2adc3ecb8110241cbf6738bb8c40aa6a3916b998cea513d3aba`) and
+`-B.json` (3,280,546 B, `ed54e2e36f3e6b0bb4aad879a1721934a89d20822063a7a26a25f90d7cd2529e`),
+Git-ignored. All 3,701 pre-existing non-cache `.venv/` files unchanged; B2 marker
+unchanged. MediaPipe clearcut "Failed to send" lines: 8 / 6.
+
+**Preregistered result:** **HEAD passes both layouts in both sessions** (3×3 100% /
+100%, 4×4 100% / 94%, one wrong selection, no timeouts; median success time
+≈2.0–2.5 s including 1.0 s dwell). **HYBRID fails** (3×3 56% / 67%, 4×4 56% / 50%);
+its errors were mostly wrong columns, i.e. eye-based horizontal failed while head
+pitch carried the vertical. The accepted "coarse 3×3 ≥ 80%" criterion is met by
+head pointing, not by eye gaze.
+
+**Exploratory:** calibration head pitch spanned about 40–53° top to bottom (vs
+≈20° physically expected at an assumed 55 cm; cause unmeasured); yaw about 30–40°.
+During the "head still" eye block, yaw still drifted ≈4°, consistent with the
+Issue #81 mirror/head-rotation hypothesis. Within-target head-angle SD was
+0.6–1.2°. [RESULTS](../../experiments/head_vertical_targeting/RESULTS.md).
+
+**Human decisions:** (1) whether head pointing becomes the primary pointer (scope
+and architecture; Fatih and Çağrı); (2) merge this working experiment code or
+keep results only (Fatih's rule). Comfort/fatigue not measured; Fatih asked to
+report comfort. No production change.

@@ -180,3 +180,27 @@ Outstanding decision and proposed next task are unchanged: humans decide whether
 to authorize audited B2 recovery, or retain incomplete/inconclusive status.
 Fatih first reads CLAUDE and its ordered context, verifies code/private assets,
 and proposes a bounded task for explicit approval. No new approval was granted.
+
+## 2026-10-08 15:33 +03:00 — publication retry and CI status correction
+
+Same documentation task/authorization. The publication-record commit
+`85195e78154e96070cc4664c142102803a8cb43f` initially failed to push because the
+Mac could not resolve `github.com`; repeated normal pushes and a read-only
+remote-ref query failed for the same reason. No Git history/data was reset.
+Verified a current DNS answer and reachable HTTPS with normal TLS validation;
+a **command-scoped** `http.curloptResolve` override then pushed the commit
+successfully. No persistent Git/DNS/network settings were changed. This is a
+publication infrastructure incident, not permission for B2 recovery.
+
+Correction to the 15:30 pending-CI observation: [run37777293463](https://github.com/cagriinan46/eye-tracker/actions/runs/37777293463)
+subsequently completed **SUCCESS** on artifact
+`203210adc2daa20173845607f84f2928ffe10fcc`. Later publication-log commits trigger
+their own runs; consult the latest PR72 head/Actions for their status. Earlier
+CI success is never substituted for a later-head check.
+
+Read-only remote refs still matched main d175b4c, original PR70 head c4ad261,
+and preserved active B2 branch b0cb40d. PR71 remains open/draft/unmerged; no
+scientific computation or production change occurred. This appended incident
+record is the only additional file change; diff/link/scope checks remain required
+before its commit. Handoff awaits human review, and the next task still awaits
+human approval.

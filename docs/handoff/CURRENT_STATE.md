@@ -1,6 +1,6 @@
 # RETURNING DEVELOPER — READ THIS FIRST
 
-Verified snapshot: **2026-10-08 16:30, Europe/Istanbul (UTC+03:00)**. This is the primary
+Verified snapshot: **2026-10-08 21:59, Europe/Istanbul (UTC+03:00)**. This is the primary
 operational dashboard. [WORK_LOG](WORK_LOG.md) records subsequent tasks and
 corrections; [PROJECT_CONTEXT](PROJECT_CONTEXT.md) explains the entire product.
 Refresh this dashboard after approved work; verify live GitHub state on return.
@@ -27,7 +27,8 @@ delivered. This handoff changes documentation only.**
 | Fatih validation session 1 | Camera index 0; held-out x MAE 0.048 (21/21), **y MAE 0.249 (7/21), y bias +0.25** | Pipeline runs on Fatih's Mac; vertical fails for Fatih; next step needs approval |
 | Vertical priority (Fatih decision) | Vertical before Phase 2; exit: y MAE ≤ 0.08, ordering ≥ 19/21, \|bias\| ≤ 0.05, 2 users × 2 sessions; 1–2 week timebox | Çağrı may revise on return |
 | Full-screen target defect | Historical runs drew a 1200×700 canvas centered on screen; opt-in `--screen-size` fix on Issue #75 branch | Check Çağrı's display; old vertical results used reduced span |
-| Issue #75 diagnosis (Fatih A/B) | Preregistered result **SIGNAL** in both: production vertical R² 0.24 / 0.21 | Eye opening R² 0.97 / 0.90 (descriptive), promising but shifts; PR pending |
+| Issue #75 diagnosis (Fatih A/B) | Preregistered **SIGNAL** (3×3 row-major protocol): production vertical R² 0.24 / 0.21 | PR #76 merged; its eye-opening reading was later corrected by #77 |
+| Issue #77 signal comparison (Fatih A/B) | **No winner.** Best COMBO y MAE 0.092 / 0.109; R0 R² 0.71 / 0.77 under 5×5 shuffled full screen | Repeatability of fixations limits vertical; eye opening drifts; PR pending |
 
 The first B2 calculation returned both sessions' aggregates in memory but
 failed serializing a NumPy boolean to JSON. The process exited; numerical

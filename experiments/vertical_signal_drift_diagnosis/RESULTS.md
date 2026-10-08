@@ -108,3 +108,12 @@ data that suggested it.
 3. B2 recovery (R1/R2 representations) remains a joint decision; these results
    suggest geometry normalization of the same iris/corner feature may not fix
    Fatih's case, but this was not tested.
+
+## Later correction (Issue #77, 2026-10-08)
+
+The eye-opening observations above came from a calibration run in row-major
+order, so a time trend could not be separated from a row effect. The Issue #77
+protocol shuffled calibration and added repeated checkpoints: eye opening then
+drifted by about 0.5 screen-y over a session and was not better than the
+production feature. See [Issue #77 RESULTS](../vertical_signal_comparison/RESULTS.md).
+The SIGNAL classification above is unchanged for its own protocol.

@@ -546,3 +546,39 @@ Median detector call 6.81 ms extended vs 6.70 ms production.
 production fitter compared slopes near zero with a relative tolerance) was a
 fixture problem and fixed by giving the synthetic feature a real y slope.
 Sessions follow after this commit is pushed.
+
+## 2026-10-08 21:59 +03:00 — Issue #77 sessions: no winner; eye-opening finding corrected
+
+Small correction to the previous entry: `ruff format --check .` reported 231
+files at the preregistration commit `e4cd8dc` (230 was the count before the
+README was added). Preregistration pushed at 21:51 +03:00.
+
+**Sessions** (`--screen-size 1512x982`, camera 0, `.venv-fatih`):
+A 21:53:15–21:55:00, B 21:56:01–21:57:46 after reseating; both exit 0, 50
+presentations, 0 failed reads, 0 no-face; usable 1,790 / 1,781, common frames
+after blink exclusion 1,786 / 1,781. Files `.venv/vertical-signals-fatih-A.json`
+(2,162,026 B, SHA-256 `e3b0127d2f8e920d3ec48c756e5d09139e05b5018bb2d5b10326d8b0f3ace25a`)
+and `-B.json` (2,150,241 B, `06b550bcc746ef472ef03ca7b331b3a642bf11daab9d4757055f91aa81a03bfd`),
+Git-ignored. All 3,697 pre-existing non-cache `.venv/` files unchanged; B2 marker
+unchanged. Detector median 5.63 / 5.73 ms.
+
+**Telemetry observation:** both runs' stderr contained MediaPipe
+`portable_clearcut_uploader` "Failed to send to clearcut: FAILED_PRECONDITION"
+lines (2 lines each). Earlier runs today with production options showed none.
+The open telemetry question in PROJECT_CONTEXT remains unresolved; this is a
+recorded observation, not an investigation.
+
+**Preregistered result: no winner.** Mean y MAE ranking COMBO 0.100, R0 0.138,
+OPEN_Q 0.150, OPEN 0.150, BLEND 0.255; none passed both sessions. COMBO: A y MAE
+0.092, ordering 95/96, bias +0.031 (failed MAE only); B 0.109, 83/96, −0.007.
+R0 calibration R² 0.707 / 0.771 (vs 0.24 / 0.21 in #75). x MAE 0.046 / 0.062,
+96/96. Checkpoint repeats varied widely (mean |block3−block1| R0 0.105 / 0.163,
+OPEN ≈0.5). Exploratory single-checkpoint recentering made R0/COMBO worse.
+
+**Correction of an earlier interpretation (mine):** the 16:30 #75 entry and
+RESULTS called eye opening "promising". #75 calibration was row-major, so time
+trend and row were confounded; with shuffled calibration, eye opening drifted
+≈0.5 screen-y and was not better than R0. A dated correction note was appended
+to the #75 RESULTS without altering its original text.
+Full tables: [RESULTS](../../experiments/vertical_signal_comparison/RESULTS.md).
+No production change, no B2 action. Next options await Fatih's approval.

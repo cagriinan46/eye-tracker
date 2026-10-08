@@ -592,3 +592,44 @@ verified OPEN, non-draft, UNMERGED. [CI run37828546276](https://github.com/cagri
 on 9f78bc0 completed **SUCCESS**. Branch diff: 11 files, no `src/` change. This
 entry is a later commit with its own CI run. No merge by the agent; Fatih
 reviews and merges. Next task awaits approval.
+
+## 2026-10-08 22:12 +03:00 — correction: PR #78 merged; Issue #79 appearance-model options
+
+**Correction** to the PR #78 publication entry (OPEN/UNMERGED): verified,
+[PR #78](https://github.com/cagriinan46/eye-tracker/pull/78) **MERGED** at
+2026-10-08T19:08:12Z (22:08 +03:00) by Fatih as `5449f91921a734ca77b241d7a8fae2865dec422f`;
+Issue #77 CLOSED.
+
+**Approval:** Fatih chose option A in chat ("A ya başlayalım o zaman"): a decision
+document on appearance-based gaze models, no code. **Agent:** Claude Code
+(Claude Opus 5.5). **Issue:** [#79](https://github.com/cagriinan46/eye-tracker/issues/79).
+**Start:** main `5449f91`, branch `docs/79-appearance-gaze-options`.
+
+**Work:** web research (search results, the L2CS-Net arXiv abstract, the
+ETH-XGaze, L2CS-Net, FAZE and UniGaze GitHub pages) and a new
+[docs/research/appearance-gaze-options.md](../research/appearance-gaze-options.md).
+Nothing downloaded or installed. Unsuccessful: the Noldus white paper PDF could
+not be read on this Mac (no pdftotext/pdftoppm), so its figures are marked as
+search-summary, vendor-reported values. The FAZE and UniGaze code license files
+were not read.
+
+**Findings:** Fatih's display is about 30.2 × 19.6 cm; the 0.08 y MAE criterion is
+1.57 cm (≈1.6° at an assumed, unmeasured 55 cm). COMBO's 0.092 / 0.109 is
+1.8 / 2.1 cm. Calibrated webcam systems in the literature report about 2 cm or
+2°, and appearance models report 3–4° on benchmarks, so a large vertical gain
+from an appearance model is not supported by published numbers. All candidate
+weights are non-commercial or trained on non-commercial datasets.
+
+**Human decisions requested:** licensing of non-commercial weights for the
+prototype; a bounded L2CS-Net/ONNX spike with stop rule (option 1); designing
+for coarse vertical (option 2); revisiting the 0.08 exit criterion (option 3);
+running the Issue #77 protocol with Çağrı (option 4). No production change.
+
+## 2026-10-08 22:13 +03:00 — Issue #79 published; review pending
+
+Artifact commit **`9ad27cafb29167249d945ecdfb1c1af3c92e2ea4`** on
+`docs/79-appearance-gaze-options`. Opened [PR #80](https://github.com/cagriinan46/eye-tracker/pull/80)
+(Closes #79), verified OPEN, non-draft, UNMERGED. [CI run37830213613](https://github.com/cagriinan46/eye-tracker/actions/runs/37830213613)
+on 9ad27ca completed **SUCCESS**. This entry is a later commit with its own CI
+run. No merge by the agent; Fatih reviews and merges. The listed human
+decisions are pending; no follow-up task started.

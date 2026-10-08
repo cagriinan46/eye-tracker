@@ -498,3 +498,12 @@ usable vertical signal; recentering/filtering it is unlikely to help. Eye
 opening is a promising but shifting candidate. One participant, one day. No
 production change; no B2 action; no Çağrı data. Next options are proposed to
 Fatih and await approval.
+
+## 2026-10-08 16:31 +03:00 — Issue #75 published; review pending
+
+Artifact commit **`afc7f7c262d5920388f0d154777c81bd532f3bb8`** on
+`experiment/75-vertical-signal-drift-diagnosis` (after `6b43f0f` preregistration
+and `893f1b9` full-screen fix). Opened [PR #76](https://github.com/cagriinan46/eye-tracker/pull/76)
+(Closes #75), verified OPEN, non-draft, UNMERGED. [CI run37784938372](https://github.com/cagriinan46/eye-tracker/actions/runs/37784938372)
+on afc7f7c completed **SUCCESS**. This entry is a later commit with its own CI
+run. No merge by the agent; Fatih reviews and merges. Next task awaits approval.

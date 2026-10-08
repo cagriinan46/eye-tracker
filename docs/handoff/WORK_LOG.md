@@ -379,3 +379,49 @@ non-draft, UNMERGED. [CI run37781221911](https://github.com/cagriinan46/eye-trac
 on 51cbe95 completed **SUCCESS**. This entry is a later commit with its own CI
 run. No merge by the agent; Fatih reviews and merges. Open question for Fatih:
 did the target window actually cover the full screen (reported 1200×700)?
+
+## 2026-10-08 16:30 +03:00 — correction: PR #74 merged; human priority decision
+
+Correction to the 16:10 entry (PR #74 OPEN/UNMERGED): verified through GitHub,
+[PR #74](https://github.com/cagriinan46/eye-tracker/pull/74) **MERGED** at
+2026-10-08T13:06:32Z (16:06 +03:00) by Fatih (`MFatihErdemir`) as squash commit
+`ea5bd9ee908062148ce7be534847dd7f82d51c03`; no tree difference from its head.
+Fatih has not yet answered whether the 16:00 validation window looked full screen.
+
+**Human decision (Fatih, chat, 2026-10-08):** the main goal is eye control, so
+the vertical axis is completed **before** Phase 2 or other subsystems. Fatih
+accepted Claude's proposed measurable exit criteria and timebox ("dediklerini
+yapalım"): held-out y MAE ≤ 0.08, y ordering ≥ 19/21 and |y bias| ≤ 0.05 for
+both developers in at least two sessions each, coarse 3×3 targeting ≥ 80%,
+timeboxed to 1–2 weeks followed by a team review. This is within Phase 1 of the
+roadmap, not a scope change; Çağrı may revise it on return. B2 recovery remains
+a joint decision for when Çağrı returns.
+
+## 2026-10-08 16:30 +03:00 — Issue #75 vertical diagnosis preregistered
+
+**Approval:** Fatih approved task V1 in chat ("dediklerini yapalım dikey eksen
+için iyi olacaksa"): diagnose Fatih's vertical failure as signal inadequacy vs
+drift before any fix; two new Fatih sessions with new unique outputs in `.venv/`.
+**Agent:** Claude Code (Claude Opus 5.5). **Issue:**
+[#75](https://github.com/cagriinan46/eye-tracker/issues/75). **Start:** main
+`ea5bd9ee908062148ce7be534847dd7f82d51c03`, branch
+`experiment/75-vertical-signal-drift-diagnosis`.
+
+**Scope change during planning:** the approved plan proposed adding feature
+logging to `validation/real_calibration.py`. Inspection found the merged Issue
+#44 collector `experiments.vertical_collapse_diagnostics.run` already records
+per-frame binocular/left/right features, eye opening, head-center proxy and
+mapping coefficients under the same protocol, and its README anticipated a
+Fatih run. It is reused unchanged, so **no harness or production code changes**.
+The 1200×700 window-measurement question is therefore not fixed here; it affects
+pixel-equivalent metrics only.
+
+**Preregistration (committed and pushed before any session):**
+[README](../../experiments/vertical_signal_drift_diagnosis/README.md) and
+`experiments/vertical_signal_drift_diagnosis/analysis.py` freeze the rule:
+SIGNAL if calibration R² < 0.80 or same-column ordering < 8/9; else INSTABILITY
+if held-out feature ordering < 17/21; else DRIFT if |shift_y| > 0.10; else
+NOT_REPRODUCED; overall only if A and B agree, otherwise MIXED. Thresholds were
+chosen after seeing the 16:00 prediction-level summary but before any Fatih
+feature data. 13 synthetic tests cover each category, sign handling, missing
+samples, combination and CLI. Session results will be appended after collection.

@@ -457,3 +457,44 @@ amendment made before any data; rule and thresholds unchanged.
 **Checks:** `.venv-fatih/bin/ruff check .` PASS; `ruff format --check .` PASS
 (223 files); `pytest` **440 passed** (5 new window/CLI tests + 13 analysis tests
 over the 422 main baseline); `git diff --check` PASS.
+
+## 2026-10-08 16:30 +03:00 — Issue #75 sessions completed: Fatih vertical failure is SIGNAL
+
+Time note: the previous entry was headed 16:45, but its commit `893f1b9` was
+made and pushed at **16:25 +03:00**. Header times from here on come from the
+system clock at writing time.
+
+Same approval/task as the Issue #75 entries. Both sessions ran with
+`--screen-size 1512x982`, camera index 0, `.venv-fatih` only:
+
+- Session A 16:26:14–16:27:08, exit 0; 1,502 reads, 0 failed, 0 no-face,
+  891/891 usable; `.venv/vertical-collapse-fatih-A.json` 781,140 B, SHA-256
+  `690e03fbb9bef4f03d636a659cddb60473c1a5f1e988a35f7e1fbbd89303ab10`.
+- Fatih stood up and reseated (results were not shown to him in between).
+- Session B 16:27:54–16:28:48, exit 0; 1,508 reads, 0 failed, 0 no-face,
+  893/893 usable; `.venv/vertical-collapse-fatih-B.json` 783,794 B, SHA-256
+  `97c4b870be240778e1a83ab35aa08889dcbe1aa51f9744ce0b996b15e3873eda`.
+- Both reports record a measured 1512×982 target image area. Outputs are
+  Git-ignored and not committed. All 3,695 pre-existing non-cache `.venv/`
+  files unchanged by size/mtime; B2 marker SHA unchanged.
+
+**Preregistered result** (`python -m experiments.vertical_signal_drift_diagnosis.analysis`):
+**A = SIGNAL, B = SIGNAL, overall SIGNAL.** Production vertical feature:
+calibration R² 0.238 / 0.205, column ordering 7/9 / 6/9, fitted direction
+reversed between sessions (β −0.00875 / +0.00427), held-out feature ordering
+6/21 / 14/21. Held-out predictions: y MAE 0.213 / 0.203, y ordering 6/21 / 14/21,
+y bias +0.185 / −0.131; x MAE 0.066 / 0.058 with 21/21. Full-screen targets did
+not rescue the production vertical estimate.
+
+**Descriptive:** binocular eye opening vs target y had calibration R² 0.970 /
+0.901 with 9/9 column ordering in both sessions (slope −0.089 / −0.070).
+**Exploratory, not preregistered:** eye opening ordered held-out targets 18/21
+and 21/21, but a calibration-only inverse line gave y MAE 0.209 / 0.146 with
+bias −0.194 / −0.108 (eyes more open during validation). Full tables and limits:
+[RESULTS](../../experiments/vertical_signal_drift_diagnosis/RESULTS.md).
+
+**Interpretation:** for Fatih the current iris-vs-corner vertical feature lacks
+usable vertical signal; recentering/filtering it is unlikely to help. Eye
+opening is a promising but shifting candidate. One participant, one day. No
+production change; no B2 action; no Çağrı data. Next options are proposed to
+Fatih and await approval.

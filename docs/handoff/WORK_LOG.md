@@ -663,3 +663,33 @@ COMBO design rank-deficient (features were linear combinations of each other);
 fixed in the fixture, not the code. `draw_grid` rendered offscreen with real
 OpenCV for both layouts and all states. Full-suite results are in the commit
 check below. Sessions follow after push.
+
+## 2026-10-08 22:53 +03:00 — Issue #81 sessions: coarse zone targeting FAILED
+
+Preregistration `e3d5237` pushed at 22:42 +03:00; full suite at that commit:
+`ruff check` PASS, `ruff format --check` PASS (240 files), `pytest` **466 passed**.
+
+**Sessions** (`--screen-size 1512x982`, camera 0, `.venv-fatih`): A 22:43:35–22:47:00,
+B 22:47:54–22:51:42 after reseating; both exit 0, 25/25 calibration, 34/34
+trials; reads 5,478 / 6,170, 0 failed, no-face 0 / 15. Files
+`.venv/coarse-vertical-fatih-A.json` (1,054,424 B, SHA-256
+`f5a4647aee03062b42c2ed51f10923c01e865f1468cb7a14cca1ae6e13024b62`) and `-B.json`
+(1,271,168 B, `0c8b410270c1cba71fd524aa54a1c497d4945979b196015881de1306cccd8bc1`),
+Git-ignored. All 3,699 pre-existing non-cache `.venv/` files unchanged; B2 marker
+unchanged. Six MediaPipe clearcut "Failed to send" lines per run.
+
+**Preregistered result: both layouts FAIL.** 3×3 success 22% / 44%, wrong 61% /
+22%; 4×4 success 6% / 19%, wrong 75% / 31% (A / B). The 3×3 ≥ 80% exit criterion
+is not met. Wrong selections were mostly one row above the target.
+
+**Exploratory:** live estimates were biased on both axes (median y −0.19 / −0.16,
+x +0.24 / +0.10), unlike Issue #77's open-loop x MAE ≈0.05; x bias grew within
+trials. An open-loop constant-offset simulation from the first six trials did
+not help. Possible causes (posture change, grid brightness affecting eye
+opening, feedback capture) cannot be separated: frames did not log head or
+eye-opening values. Details: [RESULTS](../../experiments/coarse_vertical_targeting/RESULTS.md).
+
+**Rollback:** no production change; rollback point main `9e55af6` unchanged.
+Whether to keep this experiment and its negative result on main (recommended,
+as evidence) or close the PR unmerged is Fatih's choice. Next options await
+approval.

@@ -731,3 +731,14 @@ opposite to the head turn. Head pose was not logged during trials (design
 gap). New record:
 [coarse-zone-targeting-results.md](../research/coarse-zone-targeting-results.md).
 No production change. Next direction awaits Fatih/Çağrı.
+
+## 2026-10-08 23:06 +03:00 — Issue #81 results-only record published; PR #82 closed
+
+Artifact commit **`e726a79d8576d987403f77b96f4d1884aa453afa`** on
+`docs/81-coarse-targeting-results` (3 documentation files). Opened
+[PR #83](https://github.com/cagriinan46/eye-tracker/pull/83) (Closes #81), verified
+OPEN, non-draft, UNMERGED; [CI run37836876885](https://github.com/cagriinan46/eye-tracker/actions/runs/37836876885)
+on e726a79 completed **SUCCESS**. [PR #82](https://github.com/cagriinan46/eye-tracker/pull/82)
+**CLOSED unmerged** with an explanatory comment, per Fatih's decision; its branch
+was not deleted. This entry is a later commit with its own CI run. No merge by
+the agent; Fatih reviews and merges PR #83.

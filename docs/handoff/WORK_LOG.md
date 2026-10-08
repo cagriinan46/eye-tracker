@@ -368,3 +368,14 @@ without new analysis.
 beyond published numbers, no tuning, no code change, no second session.
 Production behavior unchanged. Next options are proposed to Fatih in chat and
 await approval.
+
+## 2026-10-08 16:10 +03:00 — validation record published; review pending
+
+Same task/approval as the 16:05 validation entry. Artifact commit
+**`51cbe9503ab36bb82bcb1d8f243a75106953c526`** changed only CURRENT_STATE and
+WORK_LOG; pushed `docs/fatih-real-calibration-validation` and opened
+[PR #74](https://github.com/cagriinan46/eye-tracker/pull/74), verified OPEN,
+non-draft, UNMERGED. [CI run37781221911](https://github.com/cagriinan46/eye-tracker/actions/runs/37781221911)
+on 51cbe95 completed **SUCCESS**. This entry is a later commit with its own CI
+run. No merge by the agent; Fatih reviews and merges. Open question for Fatih:
+did the target window actually cover the full screen (reported 1200×700)?

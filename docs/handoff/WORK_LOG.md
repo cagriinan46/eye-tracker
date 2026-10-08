@@ -624,3 +624,12 @@ weights are non-commercial or trained on non-commercial datasets.
 prototype; a bounded L2CS-Net/ONNX spike with stop rule (option 1); designing
 for coarse vertical (option 2); revisiting the 0.08 exit criterion (option 3);
 running the Issue #77 protocol with Çağrı (option 4). No production change.
+
+## 2026-10-08 22:13 +03:00 — Issue #79 published; review pending
+
+Artifact commit **`9ad27cafb29167249d945ecdfb1c1af3c92e2ea4`** on
+`docs/79-appearance-gaze-options`. Opened [PR #80](https://github.com/cagriinan46/eye-tracker/pull/80)
+(Closes #79), verified OPEN, non-draft, UNMERGED. [CI run37830213613](https://github.com/cagriinan46/eye-tracker/actions/runs/37830213613)
+on 9ad27ca completed **SUCCESS**. This entry is a later commit with its own CI
+run. No merge by the agent; Fatih reviews and merges. The listed human
+decisions are pending; no follow-up task started.

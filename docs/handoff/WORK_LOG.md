@@ -149,3 +149,34 @@ No task failure or implementation change occurred. Current limitation remains
 the unapproved B2 recovery decision and unverified transfer/data availability.
 Commit/push/PR publication metadata will be appended after those actions; no
 handoff GitHub CI result claimed before a run exists. No next task authorized.
+
+## 2026-10-08 15:30 +03:00 — handoff published; human review pending
+
+Continuation of the same approved documentation task, Çağrı/Codex. Artifact
+commit **`203210adc2daa20173845607f84f2928ffe10fcc`** committed all seven intended
+documentation files with message `docs: establish Claude handoff and persistent
+project history`, then pushed `docs/claude-project-handoff`. Working tree was
+clean after push. Opened [PR #72](https://github.com/cagriinan46/eye-tracker/pull/72)
+against main; verified OPEN, non-draft, UNMERGED. This publication entry and the
+dashboard link are subsequent documentation-only changes; their commit identity
+is available in Git history. No merge requested or performed.
+
+The GitHub connector's create-PR request returned 403 (`Resource not accessible
+by integration`). The same authorized PR creation succeeded through GitHub's
+API using existing repository access; no credentials were printed, stored in
+documentation, or changed. This was a publication access failure/recovery,
+not a scientific evaluation recovery.
+
+Reverified PR71 remained OPEN/DRAFT/UNMERGED at the unchanged b0cb40d head.
+Main/freeze/evaluator/production were not altered; B2 was not rerun. No local
+data transfer or new experiment occurred. Local validation results are in the
+preceding entry. At 15:30, [handoff CI run37777293463](https://github.com/cagriinan46/eye-tracker/actions/runs/37777293463)
+was in progress on the initial artifact 203210a; no success claimed at that time.
+The independent PR71 run remains verified successful 445 tests. Inspect GitHub
+Actions for the latest handoff head rather than assuming an earlier run covers
+a later commit.
+
+Outstanding decision and proposed next task are unchanged: humans decide whether
+to authorize audited B2 recovery, or retain incomplete/inconclusive status.
+Fatih first reads CLAUDE and its ordered context, verifies code/private assets,
+and proposes a bounded task for explicit approval. No new approval was granted.

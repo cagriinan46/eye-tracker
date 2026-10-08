@@ -22,6 +22,7 @@ delivered. This handoff changes documentation only.**
 | Scientific R1/R2 result | No retained PROMISING/FAIL decision | Serialization failure is not scientific failure |
 | geometry-2 | **Consumed by the first authorized attempt** | Cannot be described as still unopened/untouched |
 | Production behavior | No change from B2 or this handoff | R0 remains the baseline; no replacement selected |
+| Handoff documentation / PR #72 | Published / OPEN, UNMERGED | Human review pending; no next task started |
 
 The first B2 calculation returned both sessions' aggregates in memory but
 failed serializing a NumPy boolean to JSON. The process exited; numerical
@@ -89,8 +90,11 @@ and [machine-readable failure record](https://github.com/cagriinan46/eye-tracker
 
 The historical CI blocker is **resolved**, not a second active blocker. As of
 the GitHub inventory, PR #71 was the only open PR and no non-PR issues were open;
-the handoff documentation PR will be separate and must remain unmerged pending
-human review. No stale branch was deleted by this task. Old local experiment
+the separate [handoff documentation PR #72](https://github.com/cagriinan46/eye-tracker/pull/72)
+is now open/unmerged pending human review, on `docs/claude-project-handoff`.
+Its initial artifact commit is `203210adc2daa20173845607f84f2928ffe10fcc`;
+publication records are appended afterward. See WORK_LOG and GitHub for checks
+at each head. No stale branch was deleted by this task. Old local experiment
 branches were retained; cleanup requires separate proof of merged/inactive
 status. Main was clean before switching; ignored experimental data were preserved.
 

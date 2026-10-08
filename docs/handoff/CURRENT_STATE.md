@@ -1,6 +1,6 @@
 # RETURNING DEVELOPER — READ THIS FIRST
 
-Verified snapshot: **2026-10-08 15:48, Europe/Istanbul (UTC+03:00)**. This is the primary
+Verified snapshot: **2026-10-08 16:05, Europe/Istanbul (UTC+03:00)**. This is the primary
 operational dashboard. [WORK_LOG](WORK_LOG.md) records subsequent tasks and
 corrections; [PROJECT_CONTEXT](PROJECT_CONTEXT.md) explains the entire product.
 Refresh this dashboard after approved work; verify live GitHub state on return.
@@ -23,7 +23,8 @@ delivered. This handoff changes documentation only.**
 | geometry-2 | **Consumed by the first authorized attempt** | Cannot be described as still unopened/untouched |
 | Production behavior | No change from B2 or this handoff | R0 remains the baseline; no replacement selected |
 | Handoff documentation / PR #72 | MERGED 2026-10-08 15:36 +03:00 as a703de9 | Main CI green; handoff is on main |
-| Fatih environment `.venv-fatih` | Python 3.12.13; dev + vision deps; Ruff PASS; **422 passed** | Locally ignored; `.venv` untouched; next task awaits approval |
+| Fatih environment `.venv-fatih` | Python 3.12.13; dev + vision deps; Ruff PASS; **422 passed** | Locally ignored; `.venv` untouched; PR #73 merged as b8aee60 |
+| Fatih validation session 1 | Camera index 0; held-out x MAE 0.048 (21/21), **y MAE 0.249 (7/21), y bias +0.25** | Pipeline runs on Fatih's Mac; vertical fails for Fatih; next step needs approval |
 
 The first B2 calculation returned both sessions' aggregates in memory but
 failed serializing a NumPy boolean to JSON. The process exited; numerical
@@ -84,7 +85,8 @@ and [machine-readable failure record](https://github.com/cagriinan46/eye-tracker
 2. Explicit human authorization is required for any recovery/recomputation of
    consumed geometry-2. Infrastructure repair alone does not authorize it.
 3. Private data/model identity on Fatih's Mac was hash-verified (57/57) without
-   parsing; `.venv/real-calibration-fatih.json` is absent. Verification is not
+   parsing; the old `.venv/real-calibration-fatih.json` is absent, and the new
+   `.venv/real-calibration-fatih-20261008.json` holds session 1. Verification is not
    permission to use the data; see [DATA_INVENTORY](DATA_INVENTORY.md).
 4. Vertical robustness/cross-user reliability and Phase 1 targeting are unresolved.
 5. Third-party MediaPipe telemetry behavior is unresolved; no safe chair or

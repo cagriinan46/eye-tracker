@@ -286,3 +286,96 @@ non-draft, UNMERGED. [CI run37779593684](https://github.com/cagriinan46/eye-trac
 on 802d9c6 completed **SUCCESS**. This publication entry is a later commit with
 its own CI run; check the latest PR #73 head. No merge requested or performed by
 the agent; Fatih reviews and merges. Next task still awaits Fatih's approval.
+
+## 2026-10-08 16:05 +03:00 — correction: PR #73 merged
+
+Correction to the 15:55 entry (PR #73 OPEN/UNMERGED, review pending). Verified
+through GitHub: [PR #73](https://github.com/cagriinan46/eye-tracker/pull/73)
+**MERGED** at 2026-10-08T12:55:11Z (15:55 +03:00) by Fatih (`MFatihErdemir`) as
+squash commit `b8aee60179a543fa0a3b55f9529a601c7ba7f0af`; `git diff` against the
+PR head `3db235d` showed no difference. The agent did not merge it. Branch
+`docs/fatih-local-environment` was not deleted in this session.
+
+## 2026-10-08 16:05 +03:00 — Fatih production-path calibration validation, session 1
+
+**Human owner / approval:** Muhammet Fatih Erdemir, explicit chat approval on
+2026-10-08 for one session of the existing 9-calibration + 16-validation
+protocol with himself as participant; use only `.venv-fatih`; save the result
+only to a new, unique Fatih-owned JSON inside `.venv/` without overwriting
+anything; do not delete/modify Çağrı's `.venv` contents, models, captures or
+the B2 marker; do not rerun or repair B2. This is the new participant capture
+authorization required by CLAUDE.md. **Agent:** Claude Code (Claude Opus 5.5).
+**Start:** main `b8aee60179a543fa0a3b55f9529a601c7ba7f0af`, clean; log branch
+`docs/fatih-real-calibration-validation`. No code changed.
+
+**Pre-checks:** `system_profiler SPCameraDataType` listed one camera, the
+built-in "MacBook Pro Kamerası". An OpenCV AVFoundation probe (frames read in
+memory, never saved) opened index 0 at 1920×1080; indices 1 and 2 were out of
+bounds. So **index 0** is the built-in camera on Fatih's Mac (Çağrı's setup used
+1). Model `.venv/models/face_landmarker.task` 3,758,596 bytes, SHA-256
+`64184e22…bc9ff`, matching DATA_INVENTORY. Output path confirmed absent first.
+
+**Command (15:59:30–16:00:23 +03:00, exit 0):**
+`PYTHONPATH=src .venv-fatih/bin/python -m validation.real_calibration
+--camera-index 0 --model .venv/models/face_landmarker.task --output
+.venv/real-calibration-fatih-20261008.json`. Output written with exclusive
+create: 16,969 bytes, SHA-256
+`3552acbcc6ad48ac595fdd53a8aa13aed60d653d74a88ae3b853d894f297365b`; local and
+Git-ignored, not committed. A size/mtime fingerprint of all 3,694 other
+non-cache `.venv/` files was identical before and after; marker SHA unchanged
+(`763a89a3…7467660`). Stderr held only MediaPipe/TFLite init messages; no
+`portable_clearcut_uploader` line appeared in this run (not proof of no
+telemetry).
+
+**Collection:** seed 42; 9 calibration + 16 held-out presentations; 50.57 s;
+1,511 camera reads, 0 failed, 0 no-face observations (≈29.9 reads/s); 901
+sampling attempts, 901 usable (34–37 per presentation), 0 unavailable.
+`window_image_area` was reported as **1200×700**, which equals the harness's
+initial canvas, so fullscreen may not have been applied when it was measured.
+Pixel-equivalent errors below are in that 1200×700 image area, not monitor
+pixels; normalized coordinates are unaffected. Whether the window looked full
+screen is still to be confirmed by Fatih.
+
+**Results (normalized screen units; Fatih only, not pooled):**
+
+| Metric | Calibration fit (9) | Held-out (16) |
+| --- | --- | --- |
+| x MAE / median / p95 | 0.0332 / 0.0252 / 0.0723 | **0.0481** / 0.0371 / 0.1132 |
+| y MAE / median / p95 | 0.1748 / 0.1566 / 0.3057 | **0.2487** / 0.2386 / 0.5234 |
+| 2D error mean / median | 0.1818 / 0.1586 | 0.2591 / 0.2425 |
+| Signed bias x / y | ≈0 / ≈0 (OLS) | −0.0364 / **+0.2477** |
+| Ordering x / y | 27/27 / **19/27** | **21/21** / **7/21** |
+| Pixel-equivalent mean (1200×700 area) | 134.1 | 191.5 |
+
+**Interpretation (descriptive, one session):** the production pipeline works end
+to end on Fatih's Mac (camera, model, 100% availability). Horizontal mapping is
+good and comparable to Çağrı's PR #43 run (x MAE 0.0519, 21/21). Vertical
+mapping carries **no usable information on held-out targets**: mean predicted y
+was ≈0.76 for the 0.35 targets, ≈0.79 for 0.50 and ≈0.70 for 0.65 (ordering
+7/21), and all predictions shifted
+downward by ≈+0.25. The vertical failure is already in the calibration fit:
+predicted-y row means were ≈0.35 / 0.58 / 0.57 for the 0.2 / 0.5 / 0.8 rows, so
+the middle and bottom rows were not separated, and within rows y varied with
+column (top row 0.25 → 0.29 → 0.51). This repeats Fatih's 2026-09-25 PR #43
+finding (y ordering 4/21) in a different form: the earlier output was flat near
+0.50–0.52, this one is spread out but biased and unordered. Possible
+contributors (lid occlusion when looking down, head pose, feature shift between
+calibration and validation, glasses) are **hypotheses only**; the report holds
+no feature values, so feature gain/drift cannot be separated from this file
+without new analysis.
+
+**Not done:** no B2 action, no geometry-1/2 access, no Çağrı-data comparison
+beyond published numbers, no tuning, no code change, no second session.
+Production behavior unchanged. Next options are proposed to Fatih in chat and
+await approval.
+
+## 2026-10-08 16:10 +03:00 — validation record published; review pending
+
+Same task/approval as the 16:05 validation entry. Artifact commit
+**`51cbe9503ab36bb82bcb1d8f243a75106953c526`** changed only CURRENT_STATE and
+WORK_LOG; pushed `docs/fatih-real-calibration-validation` and opened
+[PR #74](https://github.com/cagriinan46/eye-tracker/pull/74), verified OPEN,
+non-draft, UNMERGED. [CI run37781221911](https://github.com/cagriinan46/eye-tracker/actions/runs/37781221911)
+on 51cbe95 completed **SUCCESS**. This entry is a later commit with its own CI
+run. No merge by the agent; Fatih reviews and merges. Open question for Fatih:
+did the target window actually cover the full screen (reported 1200×700)?

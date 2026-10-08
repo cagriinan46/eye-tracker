@@ -742,3 +742,68 @@ on e726a79 completed **SUCCESS**. [PR #82](https://github.com/cagriinan46/eye-tr
 **CLOSED unmerged** with an explanatory comment, per Fatih's decision; its branch
 was not deleted. This entry is a later commit with its own CI run. No merge by
 the agent; Fatih reviews and merges PR #83.
+
+## 2026-10-08 23:37 +03:00 — correction: PR #83 merged; Issue #84 head-assisted pointing preregistered
+
+**Correction** to the PR #83 publication entry (OPEN/UNMERGED): verified,
+[PR #83](https://github.com/cagriinan46/eye-tracker/pull/83) **MERGED** at
+2026-10-08T20:11:33Z (23:11 +03:00) by Fatih as `2f73004fe5a1aab71da32049d13cf08eb24c4d29`;
+Issue #81 CLOSED.
+
+**Approval:** Fatih in chat: "dikey ekseni baş hareketine baglı yapsak o nasıl olur
+bunu da bir deneme gibi yapalım". Claude stated upfront that pushing the branch
+puts the code on GitHub but not on main, and that failed code will not be
+merged (Fatih's preference). **Rollback point: main `2f73004`.** **Agent:** Claude
+Code (Claude Opus 5.5). **Issue:** [#84](https://github.com/cagriinan46/eye-tracker/issues/84).
+**Branch:** `experiment/84-head-vertical-targeting`.
+
+**Design (preregistered in the experiment README):** 15-presentation calibration
+in blocks eye_x (head still), head_y and head_x ("point your nose"); 1-D OLS
+lines; conditions HYBRID (eye horizontal + head pitch) and HEAD (head yaw + head
+pitch); Issue #81 zone mechanics (3×3 then 4×4 per condition, 50 trials, 1.0 s
+dwell on any cell, 5.0 s timeout, 7-frame/0.5 s median). Per-frame head pose, eye
+features, opening and blink are now logged. Pass per condition × layout: success
+≥ 80% and wrong ≤ 10% in both sessions.
+
+**Checks so far:** 9 new tests pass; drawings rendered offscreen with real
+OpenCV. Full-suite results follow in the commit check. Sessions after push.
+
+## 2026-10-08 23:49 +03:00 — Issue #84 sessions: head pointing PASSES; hybrid fails
+
+Preregistration `06bfbc2` pushed at 23:37 +03:00; full suite at that commit:
+`ruff check` PASS, `ruff format --check` PASS (241 files), `pytest` **463 passed**.
+
+**Sessions** (`--screen-size 1512x982`, camera 0, `.venv-fatih`): A 23:39:24–23:43:28,
+B 23:44:46–23:48:40 after reseating; both exit 0, 50/50 trials; reads 6,369 / 6,087,
+0 failed, no-face 18 / 114. Files `.venv/head-vertical-fatih-A.json` (3,509,097 B,
+SHA-256 `b155e116942eb2adc3ecb8110241cbf6738bb8c40aa6a3916b998cea513d3aba`) and
+`-B.json` (3,280,546 B, `ed54e2e36f3e6b0bb4aad879a1721934a89d20822063a7a26a25f90d7cd2529e`),
+Git-ignored. All 3,701 pre-existing non-cache `.venv/` files unchanged; B2 marker
+unchanged. MediaPipe clearcut "Failed to send" lines: 8 / 6.
+
+**Preregistered result:** **HEAD passes both layouts in both sessions** (3×3 100% /
+100%, 4×4 100% / 94%, one wrong selection, no timeouts; median success time
+≈2.0–2.5 s including 1.0 s dwell). **HYBRID fails** (3×3 56% / 67%, 4×4 56% / 50%);
+its errors were mostly wrong columns, i.e. eye-based horizontal failed while head
+pitch carried the vertical. The accepted "coarse 3×3 ≥ 80%" criterion is met by
+head pointing, not by eye gaze.
+
+**Exploratory:** calibration head pitch spanned about 40–53° top to bottom (vs
+≈20° physically expected at an assumed 55 cm; cause unmeasured); yaw about 30–40°.
+During the "head still" eye block, yaw still drifted ≈4°, consistent with the
+Issue #81 mirror/head-rotation hypothesis. Within-target head-angle SD was
+0.6–1.2°. [RESULTS](../../experiments/head_vertical_targeting/RESULTS.md).
+
+**Human decisions:** (1) whether head pointing becomes the primary pointer (scope
+and architecture; Fatih and Çağrı); (2) merge this working experiment code or
+keep results only (Fatih's rule). Comfort/fatigue not measured; Fatih asked to
+report comfort. No production change.
+
+## 2026-10-08 23:50 +03:00 — Issue #84 published; review pending
+
+Artifact commit **`84e2a3ac06a640665e69f266a072452013891027`** on
+`experiment/84-head-vertical-targeting`. Opened [PR #85](https://github.com/cagriinan46/eye-tracker/pull/85)
+(Closes #84), verified OPEN, non-draft, UNMERGED; [CI run37842402970](https://github.com/cagriinan46/eye-tracker/actions/runs/37842402970)
+on 84e2a3a completed **SUCCESS**. No `src/` change. This entry is a later commit
+with its own CI run. No merge by the agent; Fatih decides between merging the
+working experiment code and a results-only record.

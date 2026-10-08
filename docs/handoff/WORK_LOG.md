@@ -633,3 +633,33 @@ Artifact commit **`9ad27cafb29167249d945ecdfb1c1af3c92e2ea4`** on
 on 9ad27ca completed **SUCCESS**. This entry is a later commit with its own CI
 run. No merge by the agent; Fatih reviews and merges. The listed human
 decisions are pending; no follow-up task started.
+
+## 2026-10-08 22:42 +03:00 — correction: PR #80 merged; Issue #81 coarse zone targeting preregistered
+
+**Correction** to the PR #80 publication entry (OPEN/UNMERGED): verified,
+[PR #80](https://github.com/cagriinan46/eye-tracker/pull/80) **MERGED** at
+2026-10-08T19:18:07Z (22:18 +03:00) by Fatih as `9e55af69691d3dc1463aec34bfa5aba83fff4029`.
+
+**Approval:** Fatih chose option 3 of the Issue #79 list in chat ("3 numarayı bir
+deneyelim ama eski haline de dönebilelim"): try coarse-vertical interaction design,
+reversibly. **Rollback point: main `9e55af69691d3dc1463aec34bfa5aba83fff4029`.**
+All work is experiment-only (`experiments/coarse_vertical_targeting/` and its
+tests); `src/` is untouched; revert by not merging or `git revert` of the squash.
+**Agent:** Claude Code (Claude Opus 5.5). **Issue:**
+[#81](https://github.com/cagriinan46/eye-tracker/issues/81). **Branch:**
+`experiment/81-coarse-vertical-targeting`.
+
+**Design (preregistered in the README before data):** shuffled 5×5 calibration,
+live COMBO y and production-style x mapping, screen-filling 3×3 (each cell ×2) and
+4×4 (each ×1) grids, 34 trials, mirrored-cell cue 0.75 s, 7-frame/0.5 s median
+smoothing, 1.0 s dwell on any cell selects it (wrong cells count as wrong
+selections), 5.0 s timeout, shaded current-cell feedback. Pass per layout and
+session: success ≥ 80% and wrong ≤ 10%; a layout passes only if A and B pass.
+Session A 3×3 first, B 4×4 first.
+
+**Checks:** 12 new tests (schedule, mapping, blink exclusion, smoother, clamping,
+dwell, pass rule, schedule validation, CLI). One fixture initially made the
+COMBO design rank-deficient (features were linear combinations of each other);
+fixed in the fixture, not the code. `draw_grid` rendered offscreen with real
+OpenCV for both layouts and all states. Full-suite results are in the commit
+check below. Sessions follow after push.

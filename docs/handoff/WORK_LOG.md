@@ -274,3 +274,15 @@ run, no production/experiment/test change, no branch deletion, no merge.
 Production behavior unchanged. Next task is proposed to Fatih in chat and awaits
 explicit approval; this entry is not that approval. Commit/PR metadata will be
 appended after publication.
+
+## 2026-10-08 15:55 +03:00 — Fatih environment record published; review pending
+
+Same task/authorization as the 15:48 environment entry. Artifact commit
+**`802d9c64e3f22ccf1ff25ca2e5165e7d4cf5a25c`** (`docs: record Fatih local
+environment and PR #72 merge`) changed only CURRENT_STATE and WORK_LOG; pushed
+`docs/fatih-local-environment` and opened
+[PR #73](https://github.com/cagriinan46/eye-tracker/pull/73), verified OPEN,
+non-draft, UNMERGED. [CI run37779593684](https://github.com/cagriinan46/eye-tracker/actions/runs/37779593684)
+on 802d9c6 completed **SUCCESS**. This publication entry is a later commit with
+its own CI run; check the latest PR #73 head. No merge requested or performed by
+the agent; Fatih reviews and merges. Next task still awaits Fatih's approval.

@@ -582,3 +582,13 @@ trend and row were confounded; with shuffled calibration, eye opening drifted
 to the #75 RESULTS without altering its original text.
 Full tables: [RESULTS](../../experiments/vertical_signal_comparison/RESULTS.md).
 No production change, no B2 action. Next options await Fatih's approval.
+
+## 2026-10-08 22:00 +03:00 — Issue #77 published; review pending
+
+Artifact commit **`9f78bc004cd382cd31e8d5cccdf9382648818439`** on
+`experiment/77-vertical-signal-comparison` (after preregistration `e4cd8dc`).
+Opened [PR #78](https://github.com/cagriinan46/eye-tracker/pull/78) (Closes #77),
+verified OPEN, non-draft, UNMERGED. [CI run37828546276](https://github.com/cagriinan46/eye-tracker/actions/runs/37828546276)
+on 9f78bc0 completed **SUCCESS**. Branch diff: 11 files, no `src/` change. This
+entry is a later commit with its own CI run. No merge by the agent; Fatih
+reviews and merges. Next task awaits approval.

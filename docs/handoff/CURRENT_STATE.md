@@ -1,6 +1,6 @@
 # RETURNING DEVELOPER — READ THIS FIRST
 
-Verified snapshot: **2026-10-08, Europe/Istanbul (UTC+03:00)**. This is the primary
+Verified snapshot: **2026-10-08 15:48, Europe/Istanbul (UTC+03:00)**. This is the primary
 operational dashboard. [WORK_LOG](WORK_LOG.md) records subsequent tasks and
 corrections; [PROJECT_CONTEXT](PROJECT_CONTEXT.md) explains the entire product.
 Refresh this dashboard after approved work; verify live GitHub state on return.
@@ -15,14 +15,15 @@ delivered. This handoff changes documentation only.**
 | Phase 0 | Exit gate met for entering Phase 1 | Feasibility evidence, not a finished product |
 | Phase 1 | Reusable pipeline implemented; interaction exit criteria incomplete | Precise OS-cursor work remains paused |
 | Stage A / PR #69 | COMPLETE / MERGED | Raw-geometry instrumentation on main |
-| geometry-1 and geometry-2 collection | COMPLETE; local files match recorded hashes/sizes | Fatih's copies are UNVERIFIED |
+| geometry-1 and geometry-2 collection | COMPLETE; local files match recorded hashes/sizes | Fatih's Mac: all 57 manifest files hash-verified 2026-10-08 |
 | Stage B1 / PR #70 | COMPLETE / MERGED by squash | Exactly R0/R1/R2 frozen; freeze content intact |
 | Stage B2 / PR #71 | INCOMPLETE / OPEN, DRAFT, UNMERGED | Preserve active branch and failure evidence |
 | PR #71 CI | **GREEN: 445 tests passed** | Previous missing-Git-object CI failure fixed |
 | Scientific R1/R2 result | No retained PROMISING/FAIL decision | Serialization failure is not scientific failure |
 | geometry-2 | **Consumed by the first authorized attempt** | Cannot be described as still unopened/untouched |
 | Production behavior | No change from B2 or this handoff | R0 remains the baseline; no replacement selected |
-| Handoff documentation / PR #72 | Published / OPEN, UNMERGED | Human review pending; no next task started |
+| Handoff documentation / PR #72 | MERGED 2026-10-08 15:36 +03:00 as a703de9 | Main CI green; handoff is on main |
+| Fatih environment `.venv-fatih` | Python 3.12.13; dev + vision deps; Ruff PASS; **422 passed** | Locally ignored; `.venv` untouched; next task awaits approval |
 
 The first B2 calculation returned both sessions' aggregates in memory but
 failed serializing a NumPy boolean to JSON. The process exited; numerical
@@ -82,8 +83,9 @@ and [machine-readable failure record](https://github.com/cagriinan46/eye-tracker
 1. Output serialization defect and lost scientific metrics remain unresolved.
 2. Explicit human authorization is required for any recovery/recomputation of
    consumed geometry-2. Infrastructure repair alone does not authorize it.
-3. Required private data and model availability on Fatih's machine is UNVERIFIED;
-   follow [DATA_INVENTORY](DATA_INVENTORY.md) and confirm hashes before approved use.
+3. Private data/model identity on Fatih's Mac was hash-verified (57/57) without
+   parsing; `.venv/real-calibration-fatih.json` is absent. Verification is not
+   permission to use the data; see [DATA_INVENTORY](DATA_INVENTORY.md).
 4. Vertical robustness/cross-user reliability and Phase 1 targeting are unresolved.
 5. Third-party MediaPipe telemetry behavior is unresolved; no safe chair or
    desktop OS-input adapter has been delivered.
@@ -91,7 +93,7 @@ and [machine-readable failure record](https://github.com/cagriinan46/eye-tracker
 The historical CI blocker is **resolved**, not a second active blocker. As of
 the GitHub inventory, PR #71 was the only open PR and no non-PR issues were open;
 the separate [handoff documentation PR #72](https://github.com/cagriinan46/eye-tracker/pull/72)
-is now open/unmerged pending human review, on `docs/claude-project-handoff`.
+was merged by Çağrı at 2026-10-08 15:36 +03:00 (see WORK_LOG correction).
 Its initial artifact commit is `203210adc2daa20173845607f84f2928ffe10fcc`;
 publication records are appended afterward. See WORK_LOG and GitHub for checks
 at each head. No stale branch was deleted by this task. Old local experiment

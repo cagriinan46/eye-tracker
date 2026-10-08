@@ -507,3 +507,88 @@ and `893f1b9` full-screen fix). Opened [PR #76](https://github.com/cagriinan46/e
 (Closes #75), verified OPEN, non-draft, UNMERGED. [CI run37784938372](https://github.com/cagriinan46/eye-tracker/actions/runs/37784938372)
 on afc7f7c completed **SUCCESS**. This entry is a later commit with its own CI
 run. No merge by the agent; Fatih reviews and merges. Next task awaits approval.
+
+## 2026-10-08 21:51 +03:00 — correction: PR #76 merged; Issue #77 V2 preregistered
+
+**Correction** to the PR #76 publication entry (OPEN/UNMERGED): verified through
+GitHub, [PR #76](https://github.com/cagriinan46/eye-tracker/pull/76) **MERGED** at
+2026-10-08T14:13:09Z (17:13 +03:00) by Fatih (`MFatihErdemir`) as squash commit
+`9b97e9d44ca675c408e38049f080af9af0009728`; no tree difference from its head;
+Issue #75 CLOSED.
+
+**Approval:** after Claude outlined options for better vertical results, Fatih
+approved V2 in chat ("onaylıyorum, V2'yi başlat"): compare vertical signals in
+one protocol, experiment-only capture of blendshapes and head pose, full-screen
+5×5 calibration with repeated checkpoints, preregistered candidates and rule,
+two Fatih sessions. **Agent:** Claude Code (Claude Opus 5.5). **Issue:**
+[#77](https://github.com/cagriinan46/eye-tracker/issues/77). **Start:** main
+`9b97e9d`, branch `experiment/77-vertical-signal-comparison`.
+
+**Implementation (experiment-only):** `experiments/vertical_signal_comparison/`
+with `protocol.py` (50 presentations: 3 checkpoint blocks, shuffled 5×5
+calibration at 0.1–0.9, shuffled 4×4 validation at 0.2–0.8, seed 77),
+`capture.py` (`SignalExtractor` subclass of the production adapter requesting
+blendshapes and the transformation matrix; production adapter unchanged),
+`run.py` (requires `--screen-size`, refuses overwrite, serializes with
+`allow_nan=False` before opening the output file), `analysis.py` and README
+preregistration. Candidates R0, OPEN, OPEN_Q, BLEND, COMBO; pass per session =
+y MAE ≤ 0.08, ordering ≥ 19/21 of 96 pairs, |bias| ≤ 0.05; winner must pass
+both sessions. Blink frames (eyeBlink > 0.5) excluded from all candidates.
+
+**Pre-data hardware smoke (no data saved):** a first 60-frame probe right after
+opening the camera gave 0/60 usable frames (camera warm-up); after discarding
+30 warm-up reads, both the production adapter and `SignalExtractor` gave 60/60
+usable, and a 90-frame check found every blendshape/pose field in 90/90 frames.
+Median detector call 6.81 ms extended vs 6.70 ms production.
+
+**Checks:** `ruff check .` PASS; `ruff format --check .` PASS (230 files);
+`pytest` **454 passed** (14 new). One intermediate test failure (R0 vs
+production fitter compared slopes near zero with a relative tolerance) was a
+fixture problem and fixed by giving the synthetic feature a real y slope.
+Sessions follow after this commit is pushed.
+
+## 2026-10-08 21:59 +03:00 — Issue #77 sessions: no winner; eye-opening finding corrected
+
+Small correction to the previous entry: `ruff format --check .` reported 231
+files at the preregistration commit `e4cd8dc` (230 was the count before the
+README was added). Preregistration pushed at 21:51 +03:00.
+
+**Sessions** (`--screen-size 1512x982`, camera 0, `.venv-fatih`):
+A 21:53:15–21:55:00, B 21:56:01–21:57:46 after reseating; both exit 0, 50
+presentations, 0 failed reads, 0 no-face; usable 1,790 / 1,781, common frames
+after blink exclusion 1,786 / 1,781. Files `.venv/vertical-signals-fatih-A.json`
+(2,162,026 B, SHA-256 `e3b0127d2f8e920d3ec48c756e5d09139e05b5018bb2d5b10326d8b0f3ace25a`)
+and `-B.json` (2,150,241 B, `06b550bcc746ef472ef03ca7b331b3a642bf11daab9d4757055f91aa81a03bfd`),
+Git-ignored. All 3,697 pre-existing non-cache `.venv/` files unchanged; B2 marker
+unchanged. Detector median 5.63 / 5.73 ms.
+
+**Telemetry observation:** both runs' stderr contained MediaPipe
+`portable_clearcut_uploader` "Failed to send to clearcut: FAILED_PRECONDITION"
+lines (2 lines each). Earlier runs today with production options showed none.
+The open telemetry question in PROJECT_CONTEXT remains unresolved; this is a
+recorded observation, not an investigation.
+
+**Preregistered result: no winner.** Mean y MAE ranking COMBO 0.100, R0 0.138,
+OPEN_Q 0.150, OPEN 0.150, BLEND 0.255; none passed both sessions. COMBO: A y MAE
+0.092, ordering 95/96, bias +0.031 (failed MAE only); B 0.109, 83/96, −0.007.
+R0 calibration R² 0.707 / 0.771 (vs 0.24 / 0.21 in #75). x MAE 0.046 / 0.062,
+96/96. Checkpoint repeats varied widely (mean |block3−block1| R0 0.105 / 0.163,
+OPEN ≈0.5). Exploratory single-checkpoint recentering made R0/COMBO worse.
+
+**Correction of an earlier interpretation (mine):** the 16:30 #75 entry and
+RESULTS called eye opening "promising". #75 calibration was row-major, so time
+trend and row were confounded; with shuffled calibration, eye opening drifted
+≈0.5 screen-y and was not better than R0. A dated correction note was appended
+to the #75 RESULTS without altering its original text.
+Full tables: [RESULTS](../../experiments/vertical_signal_comparison/RESULTS.md).
+No production change, no B2 action. Next options await Fatih's approval.
+
+## 2026-10-08 22:00 +03:00 — Issue #77 published; review pending
+
+Artifact commit **`9f78bc004cd382cd31e8d5cccdf9382648818439`** on
+`experiment/77-vertical-signal-comparison` (after preregistration `e4cd8dc`).
+Opened [PR #78](https://github.com/cagriinan46/eye-tracker/pull/78) (Closes #77),
+verified OPEN, non-draft, UNMERGED. [CI run37828546276](https://github.com/cagriinan46/eye-tracker/actions/runs/37828546276)
+on 9f78bc0 completed **SUCCESS**. Branch diff: 11 files, no `src/` change. This
+entry is a later commit with its own CI run. No merge by the agent; Fatih
+reviews and merges. Next task awaits approval.

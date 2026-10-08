@@ -693,3 +693,12 @@ eye-opening values. Details: [RESULTS](../../experiments/coarse_vertical_targeti
 Whether to keep this experiment and its negative result on main (recommended,
 as evidence) or close the PR unmerged is Fatih's choice. Next options await
 approval.
+
+## 2026-10-08 22:54 +03:00 — Issue #81 published; review pending
+
+Artifact commit **`d827637822c9a5655cdc2c4f55c2b4527b591770`** on
+`experiment/81-coarse-vertical-targeting`. Opened [PR #82](https://github.com/cagriinan46/eye-tracker/pull/82)
+(Closes #81), verified OPEN, non-draft, UNMERGED. [CI run37835375529](https://github.com/cagriinan46/eye-tracker/actions/runs/37835375529)
+on d827637 completed **SUCCESS**. Branch diff 10 files, no `src/` change. This
+entry is a later commit with its own CI run. No merge by the agent; Fatih decides
+whether to merge (keep the negative result) or close (exact rollback to 9e55af6).

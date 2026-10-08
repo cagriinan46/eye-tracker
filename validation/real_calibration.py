@@ -334,6 +334,52 @@ def _draw_target(
     return canvas
 
 
+LEGACY_CANVAS_SIZE = (1200, 700)
+FULL_SCREEN_SETTLE_SECONDS = 1.5
+
+
+def parse_screen_size(text: str) -> tuple[int, int]:
+    """Parse ``WIDTHxHEIGHT`` logical screen points, e.g. ``1512x982``."""
+    try:
+        width, height = (int(part) for part in text.lower().split("x"))
+    except ValueError:
+        raise argparse.ArgumentTypeError("screen size must look like 1512x982") from None
+    if width <= 0 or height <= 0:
+        raise argparse.ArgumentTypeError("screen size must be positive")
+    return width, height
+
+
+def open_target_window(
+    cv2, np, window: str, screen_size: tuple[int, int] | None
+) -> tuple[int, int]:
+    """Open the full-screen target window and return its drawn image-area size.
+
+    macOS OpenCV shows a full-screen window's image centered at its own size, so
+    the historical 1200×700 canvas covered only part of the display. With an
+    explicit screen size the canvas matches the display; without it the original
+    behavior is preserved for comparability with earlier sessions.
+    """
+    cv2.namedWindow(window, cv2.WINDOW_NORMAL)
+    cv2.setWindowProperty(window, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+    width, height = screen_size or LEGACY_CANVAS_SIZE
+    cv2.imshow(window, np.full((height, width, 3), 24, dtype=np.uint8))
+    if screen_size is None:
+        cv2.waitKey(1)
+    else:
+        settle_until = time.monotonic() + FULL_SCREEN_SETTLE_SECONDS
+        while time.monotonic() < settle_until:
+            cv2.waitKey(50)
+    _, _, measured_width, measured_height = cv2.getWindowImageRect(window)
+    if measured_width <= 0 or measured_height <= 0:
+        raise RuntimeError("Could not determine target-window image-area dimensions")
+    if screen_size is not None and (measured_width, measured_height) != screen_size:
+        raise RuntimeError(
+            f"Target window is {measured_width}x{measured_height}, not the requested "
+            f"{screen_size[0]}x{screen_size[1]} full screen"
+        )
+    return measured_width, measured_height
+
+
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -348,6 +394,11 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--output", type=Path, help="New JSON result path under the ignored .venv directory"
+    )
+    parser.add_argument(
+        "--screen-size",
+        type=parse_screen_size,
+        help="Logical display size WIDTHxHEIGHT; draws targets over the full screen",
     )
     args = parser.parse_args(argv)
     if args.camera_index < 0:
@@ -379,14 +430,8 @@ def run(args: argparse.Namespace) -> int:
         with MediaPipeFaceLandmarkExtractor(args.model) as detector:
             recorded_extractor = RecordingExtractor(detector)
             source.open()
-            cv2.namedWindow(window, cv2.WINDOW_NORMAL)
             window_created = True
-            cv2.setWindowProperty(window, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
-            cv2.imshow(window, np.full((700, 1200, 3), 24, dtype=np.uint8))
-            cv2.waitKey(1)
-            _, _, width, height = cv2.getWindowImageRect(window)
-            if width <= 0 or height <= 0:
-                raise RuntimeError("Could not determine target-window image-area dimensions")
+            width, height = open_target_window(cv2, np, window, args.screen_size)
 
             order = build_presentations(seed=args.seed)
             calibration_observations: list[tuple[Target, list[tuple[float, float]]]] = []
@@ -448,6 +493,7 @@ def run(args: argparse.Namespace) -> int:
                 "camera_index": args.camera_index,
                 "camera_resolution": recorded_source.resolution,
                 "window_image_area": [width, height],
+                "requested_screen_size": list(args.screen_size) if args.screen_size else None,
                 "elapsed_seconds": elapsed,
                 "seed": args.seed,
                 "settle_seconds": SETTLE_SECONDS,

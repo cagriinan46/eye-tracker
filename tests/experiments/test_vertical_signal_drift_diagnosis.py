@@ -213,3 +213,14 @@ def test_cli_prints_sessions_and_combined_result(tmp_path, capsys) -> None:
     output = json.loads(capsys.readouterr().out)
     assert output["combined"]["overall"] == analysis.DRIFT
     assert analysis.main([str(tmp_path / "missing.json")]) == 1
+
+
+def test_issue_44_collector_accepts_full_screen_size_without_changing_default() -> None:
+    from experiments.vertical_collapse_diagnostics.run import parse_args
+
+    base = ["--participant", "fatih", "--session", "A", "--camera-index", "0"]
+    output = ["--output", ".venv/vertical-collapse-fatih-A.json"]
+    assert parse_args(base + output).screen_size is None
+    assert parse_args(base + output + ["--screen-size", "1512x982"]).screen_size == (1512, 982)
+    with pytest.raises(SystemExit):
+        parse_args(base + output + ["--screen-size", "0x982"])

@@ -26,9 +26,11 @@ changes to eye opening or posture. From the repository root:
 
 ```bash
 PYTHONPATH=src:. .venv-fatih/bin/python -m experiments.vertical_collapse_diagnostics.run \
-  --participant fatih --session A --camera-index 0 --output .venv/vertical-collapse-fatih-A.json
+  --participant fatih --session A --camera-index 0 --screen-size 1512x982 \
+  --output .venv/vertical-collapse-fatih-A.json
 PYTHONPATH=src:. .venv-fatih/bin/python -m experiments.vertical_collapse_diagnostics.run \
-  --participant fatih --session B --camera-index 0 --output .venv/vertical-collapse-fatih-B.json
+  --participant fatih --session B --camera-index 0 --screen-size 1512x982 \
+  --output .venv/vertical-collapse-fatih-B.json
 PYTHONPATH=src:. .venv-fatih/bin/python -m experiments.vertical_signal_drift_diagnosis.analysis \
   .venv/vertical-collapse-fatih-A.json .venv/vertical-collapse-fatih-B.json
 ```
@@ -36,6 +38,22 @@ PYTHONPATH=src:. .venv-fatih/bin/python -m experiments.vertical_signal_drift_dia
 Outputs are new, Git-ignored files; the collector refuses to overwrite. No other
 local dataset (Çağrı's captures, geometry-1/2, B2 marker) is read. A cancelled or
 failed session is recorded as such; a retry uses a new filename and is reported.
+
+### Protocol amendment before data collection (2026-10-08)
+
+After the preregistration commit `6b43f0f` and **before any session**, Fatih
+reported that the 16:00 validation targets did not fill the screen. Probing
+showed macOS OpenCV makes the window full screen but shows the historical
+1200×700 canvas centered at its own size; Fatih's logical display is 1512×982
+points, so targets covered about 79%×71% of the screen. All historical reports
+also record 1200×700. A new opt-in `--screen-size WIDTHxHEIGHT` option on the
+collector and the validation harness draws the canvas at display size and
+refuses to run if the measured image area differs; the default path is
+unchanged. Fatih visually confirmed a full-screen test pattern. A/B use
+`--screen-size 1512x982`. Target coordinates, timing, the classification rule
+and all thresholds are unchanged. Consequence: these sessions differ from the
+16:00 session and from historical runs in on-screen target span, so any
+`NOT_REPRODUCED` result must consider display size as an explanation.
 
 ## Frozen classification rule
 

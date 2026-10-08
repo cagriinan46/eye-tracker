@@ -425,3 +425,35 @@ NOT_REPRODUCED; overall only if A and B agree, otherwise MIXED. Thresholds were
 chosen after seeing the 16:00 prediction-level summary but before any Fatih
 feature data. 13 synthetic tests cover each category, sign handling, missing
 samples, combination and CLI. Session results will be appended after collection.
+
+## 2026-10-08 16:45 +03:00 — Issue #75: full-screen target defect found and fixed before sessions
+
+Time note for the preceding two entries: they were headed 16:30, but their
+commit `6b43f0f` was actually made and pushed at about **16:19 +03:00**.
+
+**Finding:** Fatih reported that the 16:00 validation targets appeared in the
+middle of the screen, not full screen. A probe (no camera) showed OpenCV on this
+Mac sets the window full screen (property 1.0) but displays the 1200×700 canvas
+centered at its own size; `getWindowImageRect` stayed 1200×700. Finder reports a
+1512×982-point desktop (3024×1964 Retina). Targets therefore spanned about 43%
+of the screen height instead of 60%. A 1512×982 canvas measured exactly
+1512×982 and Fatih visually confirmed the red test border was at the screen
+edges. **Every historical report found in the repository (Experiment 006,
+drift, collapse, sensitivity, position, fixed-center) records 1200×700**, so
+earlier vertical studies may also have used a reduced on-screen span; whether
+Çağrı's display showed the same effect is unverified and should be checked
+with him. This is a protocol observation, not a re-analysis of old data.
+
+**Fix (approved by Fatih: "evet tam ekrandı, düzeltmeyi uygula"):** shared
+`open_target_window` and `parse_screen_size` in `validation/real_calibration.py`;
+opt-in `--screen-size WIDTHxHEIGHT` on the validation harness and on the Issue
+#44 collector. With it, the canvas is drawn at display size after a 1.5 s
+full-screen settle, and the run fails if the measured area differs. Without it,
+behavior is byte-for-byte the historical sequence. Reports add
+`requested_screen_size`. Validation README documents the option. A real-display
+smoke call returned (1512, 982). The Issue #75 README records this as a protocol
+amendment made before any data; rule and thresholds unchanged.
+
+**Checks:** `.venv-fatih/bin/ruff check .` PASS; `ruff format --check .` PASS
+(223 files); `pytest` **440 passed** (5 new window/CLI tests + 13 analysis tests
+over the 422 main baseline); `git diff --check` PASS.

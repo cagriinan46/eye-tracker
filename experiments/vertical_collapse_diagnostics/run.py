@@ -26,6 +26,8 @@ from validation.real_calibration import (
     build_presentations,
     collect_presentation,
     fit_session_calibration,
+    open_target_window,
+    parse_screen_size,
     summarize_calibration_fit,
     summarize_held_out,
 )
@@ -39,6 +41,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--model", type=Path, default=Path(".venv/models/face_landmarker.task"))
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument(
+        "--screen-size",
+        type=parse_screen_size,
+        help="Logical display size WIDTHxHEIGHT; draws targets over the full screen",
+    )
     args = parser.parse_args(argv)
     if args.camera_index < 0:
         parser.error("camera index must be nonnegative")
@@ -85,14 +92,8 @@ def run(args: argparse.Namespace) -> int:
         with MediaPipeFaceLandmarkExtractor(args.model) as detector:
             recorded_extractor = RecordingExtractor(detector)
             source.open()
-            cv2.namedWindow(window, cv2.WINDOW_NORMAL)
             window_created = True
-            cv2.setWindowProperty(window, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
-            cv2.imshow(window, np.full((700, 1200, 3), 24, dtype=np.uint8))
-            cv2.waitKey(1)
-            _, _, width, height = cv2.getWindowImageRect(window)
-            if width <= 0 or height <= 0:
-                raise RuntimeError("Could not determine target-window image-area dimensions")
+            width, height = open_target_window(cv2, np, window, args.screen_size)
 
             order = build_presentations(seed=args.seed)
             calibration_observations: list[tuple[Target, list[tuple[float, float]]]] = []
@@ -173,6 +174,7 @@ def run(args: argparse.Namespace) -> int:
                 "camera_index": args.camera_index,
                 "camera_resolution": recorded_source.resolution,
                 "window_image_area": [width, height],
+                "requested_screen_size": list(args.screen_size) if args.screen_size else None,
                 "elapsed_seconds": time.monotonic() - started,
                 "seed": args.seed,
                 "settle_seconds": SETTLE_SECONDS,

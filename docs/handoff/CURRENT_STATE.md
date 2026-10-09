@@ -1,6 +1,6 @@
 # RETURNING DEVELOPER — READ THIS FIRST
 
-Verified snapshot: **2026-10-08 23:49, Europe/Istanbul (UTC+03:00)**. This is the primary
+Verified snapshot: **2026-10-09 15:38, Europe/Istanbul (UTC+03:00)**. This is the primary
 operational dashboard. [WORK_LOG](WORK_LOG.md) records subsequent tasks and
 corrections; [PROJECT_CONTEXT](PROJECT_CONTEXT.md) explains the entire product.
 Refresh this dashboard after approved work; verify live GitHub state on return.
@@ -31,7 +31,8 @@ delivered. This handoff changes documentation only.**
 | Issue #77 signal comparison (Fatih A/B) | **No winner.** Best COMBO y MAE 0.092 / 0.109; R0 R² 0.71 / 0.77 under 5×5 shuffled full screen | PR #78 merged; repeatability limits vertical; eye opening drifts |
 | Issue #79 appearance-model options | Decision document (PR #80 merged); criterion 0.08 ≈ 1.57 cm is at/below published calibrated webcam accuracy | Human decisions on NC weights, L2CS spike, exit criterion, Çağrı #77 run still open |
 | Issue #81 coarse zone targeting (Fatih A/B) | **FAIL:** 3×3 success 22% / 44%, wrong 61% / 22%; 4×4 6% / 19% | Code not merged (Fatih's decision); results-only record on main; Fatih reported a "mirror" feeling (head-rotation hypothesis) |
-| Issue #84 head-assisted pointing (Fatih A/B) | **HEAD pointer PASSES**: 3×3 100% / 100%, 4×4 100% / 94%; HYBRID (eyes x + head y) fails | **Decision needed:** head as primary pointer (scope); gain/comfort untested; PR pending |
+| Issue #84 head-assisted pointing (Fatih A/B) | **HEAD pointer PASSES**: 3×3 100% / 100%, 4×4 100% / 94%; HYBRID (eyes x + head y) fails | PR #85 MERGED (fe7d4a7). **Decision needed:** head as primary pointer (scope); gain/comfort untested |
+| Issue #86 iPhone ARKit (Live Link Face) checks (Fatih) | Exploratory, valid run 5 only: eye pitch separates down weakly (≈1.5–2°), up inconsistent, `eyeLookUp` always 0; **no better vertical signal than webcam** | Results-only record; no code, no `src/`; Stage 2/3 not started; next direction awaits Fatih |
 
 The first B2 calculation returned both sessions' aggregates in memory but
 failed serializing a NumPy boolean to JSON. The process exited; numerical

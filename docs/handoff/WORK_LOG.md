@@ -807,3 +807,59 @@ Artifact commit **`84e2a3ac06a640665e69f266a072452013891027`** on
 on 84e2a3a completed **SUCCESS**. No `src/` change. This entry is a later commit
 with its own CI run. No merge by the agent; Fatih decides between merging the
 working experiment code and a results-only record.
+
+## 2026-10-09 15:38 +03:00 — correction: PR #85 merged; Issue #86 iPhone ARKit signal checks recorded
+
+**Correction** to the PR #85 publication entry (OPEN/UNMERGED): verified,
+[PR #85](https://github.com/cagriinan46/eye-tracker/pull/85) **MERGED** at
+2026-10-08T21:00:03Z (2026-10-09 00:00 +03:00) as `fe7d4a7aec0d8b7913a0e84140cb12ce678cacc8`;
+Issue #84 CLOSED. Merged by Fatih's decision (working experiment code kept).
+
+**Request (Fatih, chat):** try iPhone TrueDepth/ARKit derived numbers (no
+images) as an alternative vertical gaze source; Stage 1 discovery, Stage 2
+signal validation, Stage 3 `GazeSource` design only if Stage 2 is positive;
+`.venv-fatih` only; no own iOS app. **Agent:** Claude Code (Claude Opus 5.5).
+**Start:** main `fe7d4a7`, clean.
+
+**Stage 1 (discovery):** web research and the open-source PyLiveLinkFace
+decoder established the Live Link Face UDP 11111 format; iFacialMocap's
+protocol page was read. Neither app provides `lookAtPoint` or 4×4 eye
+transforms. A stdlib listener in the Claude session scratch directory (not in
+the repository) was tested with synthetic packets, then with Fatih's iPhone over
+his personal hotspot. Nothing was written under `.venv/`; no images or video.
+
+**Sanity checks (Fatih in chat approved each attempt):** five runs between
+14:57 and 15:31 +03:00. Run 1 free looking (Fatih had not performed the
+direction looks); runs 2–3 silent on-screen dots with the phone in portrait,
+**invalid vertically** because the phone covered the lower screen (Fatih's
+report); run 4 **no data** because the Mac had joined another network
+(172.20.34.163) and packets went to the old address; run 5 landscape, all dots
+visible, 4,993 face packets, valid. Claude's early readings from runs 1–2
+("lookUp barely responds", "no vertical separation") were premature and were
+retracted in chat.
+
+**Result (run 5, exploratory, not preregistered):** eye pitch separated
+**down** from center in both cycles (+0.024 / +0.033 rad) but **up** only in
+cycle 2; `eyeLookUp` stayed 0 throughout; top–bottom range 1.6°–4.3° vs ≈20°
+physical; horizontal left/right ordering correct, ≈7° vs ≈30°. Conclusion: **no
+meaningfully better vertical signal than the webcam**; Stages 2 and 3 not
+started. Details, packet layout, limitations and five alternatives:
+[iphone-arkit-signal-check.md](../research/iphone-arkit-signal-check.md).
+
+**Approval for this record:** Fatih in chat, "a yı yapalım" (results-only
+documentation). [Issue #86](https://github.com/cagriinan46/eye-tracker/issues/86),
+branch `docs/86-iphone-arkit-signal-check`. Unresolved: source of the "y MAE
+0.175" figure in the request; the next direction (head pointing decision with
+Çağrı, Continuity Camera placement test, or other) awaits Fatih. No production
+change.
+
+## 2026-10-09 15:38 +03:00 — Issue #86 published; review pending
+
+Artifact commit **`4767be84841b4480145ccbc5a1175087f3abccf9`** on
+`docs/86-iphone-arkit-signal-check` (3 documentation files). Checks at that
+commit with `.venv-fatih`: `ruff check` PASS, `ruff format --check` PASS (243
+files), `pytest` **463 passed**, `git diff --check` clean. Opened
+[PR #87](https://github.com/cagriinan46/eye-tracker/pull/87) (Closes #86), verified
+OPEN, non-draft, UNMERGED; [CI run37931350933](https://github.com/cagriinan46/eye-tracker/actions/runs/37931350933)
+on 4767be8 completed **SUCCESS**. This entry is a later commit with its own CI
+run. No merge by the agent; Fatih reviews and merges.

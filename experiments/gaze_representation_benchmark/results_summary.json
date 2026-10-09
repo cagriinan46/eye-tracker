@@ -1,0 +1,86 @@
+{
+  "candidate_decisions": {
+    "R1": null,
+    "R2": null
+  },
+  "capture_identity_after_attempt": "both SHA-256 hashes and sizes unchanged",
+  "captures": {
+    "geometry-1": {
+      "bytes": 42114167,
+      "integrity": {
+        "calibration_geometry_frames": 296,
+        "camera_reads": 3808,
+        "complete_z_frames": 2557,
+        "failed_camera_reads": 0,
+        "malformed_pose_frames": 0,
+        "missing_geometry_attempts": 0,
+        "missing_z_frames": 0,
+        "no_face_observations": 0,
+        "note": "Schema/R0 consistency only; no R1/R2 evaluation or holdout outcome inspection.",
+        "partial_xy_frames": 0,
+        "partial_z_frames": 0,
+        "participant": "cagri",
+        "pose_transform_frames": 0,
+        "protocol_name": "raw_geometry_gaze_diagnostic",
+        "protocol_version": 1,
+        "session": "geometry-1",
+        "session_role": "development",
+        "unavailable_validation_samples": 0,
+        "usable_validation_samples": 2261,
+        "validation_geometry_frames": 2261
+      },
+      "sha256": "c7f64d5e5e6a305b689c3488f20ef1a4a4932f797c265496b1df5be7dd97ae25"
+    },
+    "geometry-2": {
+      "bytes": 42100225,
+      "integrity": {
+        "calibration_geometry_frames": 296,
+        "camera_reads": 3810,
+        "complete_z_frames": 2555,
+        "failed_camera_reads": 0,
+        "malformed_pose_frames": 0,
+        "missing_geometry_attempts": 0,
+        "missing_z_frames": 0,
+        "no_face_observations": 1,
+        "note": "Schema/R0 consistency only; no R1/R2 evaluation or holdout outcome inspection.",
+        "partial_xy_frames": 0,
+        "partial_z_frames": 0,
+        "participant": "cagri",
+        "pose_transform_frames": 0,
+        "protocol_name": "raw_geometry_gaze_diagnostic",
+        "protocol_version": 1,
+        "session": "geometry-2",
+        "session_role": "holdout",
+        "unavailable_validation_samples": 0,
+        "usable_validation_samples": 2259,
+        "validation_geometry_frames": 2259
+      },
+      "sha256": "cce93847ba928413a5571e92fb94318783a2661edb32770d181ce128042f9409"
+    }
+  },
+  "checks": {
+    "git_diff_check": "passed",
+    "pytest": {
+      "passed": 445
+    },
+    "ruff_check": "passed",
+    "ruff_format_check": "passed"
+  },
+  "evaluation_status": "aborted_before_output_serialization_completed",
+  "evaluator_commit": "14843fd0e43f4e7f7e661b74498c32414452d84d",
+  "failure": {
+    "diagnosis": "NumPy boolean from a numerical threshold comparison is not accepted by the standard JSON encoder. Reproduced on standalone synthetic np.float64(0.5) <= 0.75; no participant re-evaluation.",
+    "location": "evaluate.py:392 -> serialize(result):314 -> json.dumps",
+    "message": "Object of type bool is not JSON serializable",
+    "original_one_shot_marker_status": "started",
+    "outcome_aggregates_persisted": false,
+    "outcome_calculation_returned": true,
+    "outcome_values_printed": false,
+    "post_outcome_code_changes": false,
+    "retries": 0,
+    "type": "TypeError"
+  },
+  "freeze_commit": "c4ad261b63fcce3b3998ce8335f8d81fa2118b32",
+  "freeze_merge": "PR #70 squash merge d175b4ce37eb11ede33ff75342af9b36ddd83d75 has exactly the original freeze tree; original freeze commit is not a main ancestor.",
+  "outcome_metrics": null
+}

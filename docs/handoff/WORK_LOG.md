@@ -808,7 +808,7 @@ on 84e2a3a completed **SUCCESS**. No `src/` change. This entry is a later commit
 with its own CI run. No merge by the agent; Fatih decides between merging the
 working experiment code and a results-only record.
 
-## 2026-10-09 15:40 +03:00 — correction: PR #85 merged; Issue #86 iPhone ARKit signal checks recorded
+## 2026-10-09 15:38 +03:00 — correction: PR #85 merged; Issue #86 iPhone ARKit signal checks recorded
 
 **Correction** to the PR #85 publication entry (OPEN/UNMERGED): verified,
 [PR #85](https://github.com/cagriinan46/eye-tracker/pull/85) **MERGED** at

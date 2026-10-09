@@ -852,3 +852,14 @@ branch `docs/86-iphone-arkit-signal-check`. Unresolved: source of the "y MAE
 0.175" figure in the request; the next direction (head pointing decision with
 Çağrı, Continuity Camera placement test, or other) awaits Fatih. No production
 change.
+
+## 2026-10-09 15:38 +03:00 — Issue #86 published; review pending
+
+Artifact commit **`4767be84841b4480145ccbc5a1175087f3abccf9`** on
+`docs/86-iphone-arkit-signal-check` (3 documentation files). Checks at that
+commit with `.venv-fatih`: `ruff check` PASS, `ruff format --check` PASS (243
+files), `pytest` **463 passed**, `git diff --check` clean. Opened
+[PR #87](https://github.com/cagriinan46/eye-tracker/pull/87) (Closes #86), verified
+OPEN, non-draft, UNMERGED; [CI run37931350933](https://github.com/cagriinan46/eye-tracker/actions/runs/37931350933)
+on 4767be8 completed **SUCCESS**. This entry is a later commit with its own CI
+run. No merge by the agent; Fatih reviews and merges.

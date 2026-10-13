@@ -942,3 +942,31 @@ verified OPEN, non-draft, UNMERGED; [CI run38377468674](https://github.com/cagri
 on 356abc8 completed **SUCCESS**. No `src/` change. This entry is a later commit
 with its own CI run. No merge by the agent; Fatih decides between merging (with
 the small `run.py` output-path change) and a results-only record.
+
+## 2026-10-13 12:47 +03:00 — PR #89 merged; Issue #90 dual-camera preregistration
+
+**Correction to pending state:** PR #89 (Issue #88) was **merged by Fatih** at
+2026-10-13 09:40:54Z as `f042500bf272588c3f401e60e68856aefb517870`; its tree is
+identical to reviewed head `cfc086f`. Main synchronized.
+
+**Issue #90** (approved in chat, "çift kamerayla deneyelim"; preregistration
+approved by Fatih, "hazır"): built-in camera (top) and iPhone Continuity Camera
+(bottom, USB, #88 stand) recorded **simultaneously** with the frozen #77
+protocol; tests whether fusing both cameras beats the best single camera.
+Branch `experiment/90-dual-camera-vertical`. New experiment-only collector and
+analysis in `experiments/dual_camera_vertical/` (two MediaPipe instances, rows
+tagged per camera, derived numbers only); frozen #77 code unchanged. Decision
+rule in the [README](../../experiments/dual_camera_vertical/README.md): primary
+`LATE` (mean of the two cameras' COMBO predictions) better if its mean y MAE ≤
+best of ten single-camera methods − 0.01; secondary `SPLIT`; "vertical solved"
+if `LATE` or `SPLIT` passes both sessions; placement replication with the #88
+0.02 rule. Checks before commit: `ruff check` PASS, `ruff format --check` PASS
+(250 files), `pytest` **472 passed**, `git diff --check` clean.
+
+**No-save smoke test** (scratchpad script, nothing written): lens cover dropped
+index 1 brightness 149.4 → 127.8 and left index 0 at 126.3 → 127.7, so
+**index 0 = built-in (top), 1 = iPhone (bottom)**. Both 1920×1080, no failed
+reads; 295 loops in 22.1 s = **13.3 loops/s per camera** (vs ≈30 fps single
+camera in #88), inter-camera frame gap median 16.8 ms, max 52.7 ms; face found
+295/295 (top) and 277/295 (bottom, includes the covered phase); detector median
+7.9 / 6.9 ms.

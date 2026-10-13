@@ -997,3 +997,12 @@ downward +0.03…+0.16 within ≈100 s; per-camera rate ≈13 fps; one person, o
 day, ≈1.1 cm mean error on this display. Product use needs an iPhone + cable +
 stand and a multi-camera Vision layer: human decision. Details:
 [RESULTS](../../experiments/dual_camera_vertical/RESULTS.md).
+
+## 2026-10-13 13:58 +03:00 — Issue #90 published; review pending
+
+Results commit **`f43aed2dc4ea953871247de1d0e38396df805aa4`** on
+`experiment/90-dual-camera-vertical`. Opened
+[PR #91](https://github.com/cagriinan46/eye-tracker/pull/91) (Closes #90),
+verified OPEN, non-draft, UNMERGED; [CI run 38386687457](https://github.com/cagriinan46/eye-tracker/actions/runs/38386687457)
+on f43aed2 completed **SUCCESS**. This entry is a later commit with its own CI
+run. No merge by the agent; Fatih decides.

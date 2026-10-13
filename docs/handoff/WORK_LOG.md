@@ -943,7 +943,7 @@ on 356abc8 completed **SUCCESS**. No `src/` change. This entry is a later commit
 with its own CI run. No merge by the agent; Fatih decides between merging (with
 the small `run.py` output-path change) and a results-only record.
 
-## 2026-10-13 12:47 +03:00 — PR #89 merged; Issue #90 dual-camera preregistration
+## 2026-10-13 13:47 +03:00 — PR #89 merged; Issue #90 dual-camera preregistration
 
 **Correction to pending state:** PR #89 (Issue #88) was **merged by Fatih** at
 2026-10-13 09:40:54Z as `f042500bf272588c3f401e60e68856aefb517870`; its tree is

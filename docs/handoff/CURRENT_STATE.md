@@ -1,6 +1,6 @@
 # RETURNING DEVELOPER — READ THIS FIRST
 
-Verified snapshot: **2026-10-13 12:35, Europe/Istanbul (UTC+03:00)**. This is the primary
+Verified snapshot: **2026-10-13 13:55, Europe/Istanbul (UTC+03:00)**. This is the primary
 operational dashboard. [WORK_LOG](WORK_LOG.md) records subsequent tasks and
 corrections; [PROJECT_CONTEXT](PROJECT_CONTEXT.md) explains the entire product.
 Refresh this dashboard after approved work; verify live GitHub state on return.
@@ -33,7 +33,8 @@ delivered. This handoff changes documentation only.**
 | Issue #81 coarse zone targeting (Fatih A/B) | **FAIL:** 3×3 success 22% / 44%, wrong 61% / 22%; 4×4 6% / 19% | Code not merged (Fatih's decision); results-only record on main; Fatih reported a "mirror" feeling (head-rotation hypothesis) |
 | Issue #84 head-assisted pointing (Fatih A/B) | **HEAD pointer PASSES**: 3×3 100% / 100%, 4×4 100% / 94%; HYBRID (eyes x + head y) fails | PR #85 MERGED (fe7d4a7). **Decision needed:** head as primary pointer (scope); gain/comfort untested |
 | Issue #86 iPhone ARKit (Live Link Face) checks (Fatih) | Exploratory, valid run 5 only: eye pitch separates down weakly (≈1.5–2°), up inconsistent, `eyeLookUp` always 0; **no better vertical signal than webcam** | PR #87 MERGED (e15e793). Results-only record; no code, no `src/`; Stage 2/3 not started; next direction awaits Fatih |
-| Issue #88 camera placement (Fatih, ABBA 4 sessions) | iPhone (Continuity Camera, USB) below screen: COMBO mean y MAE **0.077 vs 0.103** built-in → placement better (preregistered); passes iPhone A only, **vertical not solved**; drift not smaller | **Decision needed:** low/external camera vs head pointing; merge small `run.py` change or results only; PR pending |
+| Issue #88 camera placement (Fatih, ABBA 4 sessions) | iPhone (Continuity Camera, USB) below screen: COMBO mean y MAE **0.077 vs 0.103** built-in → placement better (preregistered); passes iPhone A only, **vertical not solved**; drift not smaller | PR #89 MERGED (f042500) with the `run.py` output-path change |
+| Issue #90 simultaneous dual camera (Fatih A/B) | **LATE fusion (mean of built-in-top and iPhone-bottom COMBO) passes both sessions**: y MAE 0.054 / 0.057 vs best single camera 0.068; first two-session pass for Fatih; margin over rule only 0.002; gain largely bias cancellation; drift persists; ≈13 fps per camera | **Decision needed:** Çağrı session + longer drift session vs head pointing (#84); multi-camera is an architecture/scope decision; PR pending |
 
 The first B2 calculation returned both sessions' aggregates in memory but
 failed serializing a NumPy boolean to JSON. The process exited; numerical

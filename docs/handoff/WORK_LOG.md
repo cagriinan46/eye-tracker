@@ -942,3 +942,67 @@ verified OPEN, non-draft, UNMERGED; [CI run38377468674](https://github.com/cagri
 on 356abc8 completed **SUCCESS**. No `src/` change. This entry is a later commit
 with its own CI run. No merge by the agent; Fatih decides between merging (with
 the small `run.py` output-path change) and a results-only record.
+
+## 2026-10-13 13:47 +03:00 — PR #89 merged; Issue #90 dual-camera preregistration
+
+**Correction to pending state:** PR #89 (Issue #88) was **merged by Fatih** at
+2026-10-13 09:40:54Z as `f042500bf272588c3f401e60e68856aefb517870`; its tree is
+identical to reviewed head `cfc086f`. Main synchronized.
+
+**Issue #90** (approved in chat, "çift kamerayla deneyelim"; preregistration
+approved by Fatih, "hazır"): built-in camera (top) and iPhone Continuity Camera
+(bottom, USB, #88 stand) recorded **simultaneously** with the frozen #77
+protocol; tests whether fusing both cameras beats the best single camera.
+Branch `experiment/90-dual-camera-vertical`. New experiment-only collector and
+analysis in `experiments/dual_camera_vertical/` (two MediaPipe instances, rows
+tagged per camera, derived numbers only); frozen #77 code unchanged. Decision
+rule in the [README](../../experiments/dual_camera_vertical/README.md): primary
+`LATE` (mean of the two cameras' COMBO predictions) better if its mean y MAE ≤
+best of ten single-camera methods − 0.01; secondary `SPLIT`; "vertical solved"
+if `LATE` or `SPLIT` passes both sessions; placement replication with the #88
+0.02 rule. Checks before commit: `ruff check` PASS, `ruff format --check` PASS
+(250 files), `pytest` **472 passed**, `git diff --check` clean.
+
+**No-save smoke test** (scratchpad script, nothing written): lens cover dropped
+index 1 brightness 149.4 → 127.8 and left index 0 at 126.3 → 127.7, so
+**index 0 = built-in (top), 1 = iPhone (bottom)**. Both 1920×1080, no failed
+reads; 295 loops in 22.1 s = **13.3 loops/s per camera** (vs ≈30 fps single
+camera in #88), inter-camera frame gap median 16.8 ms, max 52.7 ms; face found
+295/295 (top) and 277/295 (bottom, includes the covered phase); detector median
+7.9 / 6.9 ms.
+
+## 2026-10-13 13:55 +03:00 — Issue #90 sessions: LATE fusion passes both sessions
+
+Preregistration `4be1081` (log-time correction `840e640`) pushed before session A.
+Sessions (`fatih-dual`, top index 0 built-in, bottom index 1 iPhone, 1512x982,
+`.venv-fatih`, reseat between, results not inspected until both ended):
+A 13:49:30–13:51:16 (895 loops), B 13:52:28–13:54:14 (726 loops); both exit 0,
+50/50 presentations, 50/50 common presentations, no failed reads or missing
+faces; both valid. Git-ignored files: `validation/results/dual-camera-fatih-A.json`
+(2,239,146 B, SHA-256 `e79a5bd935da37d891b0d110c46f2527a47b775d6d6b7e44f29929a0de809395`),
+`-B.json` (1,818,053 B, `00243f5f143ef1be8cf568b87c32b6f06a6be100995a6b65b83b9f24069ed169`).
+`.venv/` neither read nor written.
+
+**Preregistered result:** `LATE` (mean of top and bottom COMBO predictions)
+y MAE **0.054 / 0.057**, bias −0.039 / +0.018, ordering 96 / 94 of 96 →
+**passes both sessions; vertical solved by fusion: YES**. Primary "fusion
+better": **YES**, 0.056 ≤ best single (BOTTOM:BLEND 0.068) − 0.01 (margin 0.012,
+0.002 above the rule). Secondary SPLIT 0.069: NO. Placement replication
+(bottom best 0.068 vs top best TOP:COMBO 0.083, rule 0.02): **NO**. No
+single-camera method passed both sessions.
+
+**Exploratory / limits:** gain is largely bias cancellation between cameras
+(COMBO biases A −0.005 / −0.072, B +0.086 / −0.050); LATE checkpoints drift
+downward +0.03…+0.16 within ≈100 s; per-camera rate ≈13 fps; one person, one
+day, ≈1.1 cm mean error on this display. Product use needs an iPhone + cable +
+stand and a multi-camera Vision layer: human decision. Details:
+[RESULTS](../../experiments/dual_camera_vertical/RESULTS.md).
+
+## 2026-10-13 13:56 +03:00 — Issue #90 published; review pending
+
+Results commit **`f43aed2dc4ea953871247de1d0e38396df805aa4`** on
+`experiment/90-dual-camera-vertical`. Opened
+[PR #91](https://github.com/cagriinan46/eye-tracker/pull/91) (Closes #90),
+verified OPEN, non-draft, UNMERGED; [CI run 38386687457](https://github.com/cagriinan46/eye-tracker/actions/runs/38386687457)
+on f43aed2 completed **SUCCESS**. This entry is a later commit with its own CI
+run. No merge by the agent; Fatih decides.

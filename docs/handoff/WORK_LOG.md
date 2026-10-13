@@ -932,3 +932,13 @@ unchanged (≈0.03–0.05). Position and sensor are confounded. Details:
 cable/stand practicality, scope), versus head pointing (#84); whether to merge
 this branch's small `run.py` output-path change or keep results only. No
 production change.
+
+## 2026-10-13 12:36 +03:00 — Issue #88 published; review pending
+
+Artifact commit **`356abc8467b2ead80e3ae5f8aac2bd749b4dd0cc`** on
+`experiment/88-camera-placement-vertical` (after preregistration `b518be7`).
+Opened [PR #89](https://github.com/cagriinan46/eye-tracker/pull/89) (Closes #88),
+verified OPEN, non-draft, UNMERGED; [CI run38377468674](https://github.com/cagriinan46/eye-tracker/actions/runs/38377468674)
+on 356abc8 completed **SUCCESS**. No `src/` change. This entry is a later commit
+with its own CI run. No merge by the agent; Fatih decides between merging (with
+the small `run.py` output-path change) and a results-only record.

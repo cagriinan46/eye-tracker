@@ -19,3 +19,6 @@ venv/
 *.swp
 *.swo
 *~
+
+# Derived participant numbers from experiments (never commit)
+validation/results/

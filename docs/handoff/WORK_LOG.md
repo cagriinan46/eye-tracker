@@ -1041,3 +1041,25 @@ cover test): sphere pitch median center −0.04° / −0.24°, top +1.31° / +2.
 bottom −3.43° / −3.69° (lock 90 frames); production vertical −0.057 / −0.064 /
 −0.040 (center/top/bottom, first cycle). The feature responds in the expected
 direction with a ≈5–6° top–bottom range.
+
+## 2026-10-13 14:47 +03:00 — Issue #92 sessions: eye-sphere feature negative
+
+Preregistration `ae48969` pushed before session A. Sessions (`fatih-sphere`,
+index 0 built-in, 1512x982, `.venv-fatih`, reseat between, results not inspected
+until both ended): A 14:37:44–14:39:28, B 14:40:01–14:41:45; both exit 0, 50/50
+presentations, 1,775 / 1,779 rows all usable with eye-sphere numbers, no missing
+faces; both valid; lock at presentation 2 (33 / 35 frames). Git-ignored files:
+`validation/results/sphere-gaze-fatih-A.json` (3,346,654 B, SHA-256
+`ef92422143aa95b930f57c3327cf558bf89e1653c0c97f0d669512e063768b1d`), `-B.json`
+(3,355,877 B, `ec2d7f465bcc0445e628f3e84de9c284b40b7e743b6abe6fbe1e0342f521c6d5`).
+`.venv/` neither read nor written. Between the smoke test and session A, Fatih
+removed an accidental "h" typed into `tests/gaze/test_calibration_aggregation.py`
+(never committed; tree clean before session A).
+
+**Preregistered result: negative.** Mean y MAE SPHERE **0.140** vs R0 0.129
+(primary: NO), SPHERE_COMBO 0.139 vs COMBO 0.123 (secondary: NO); no sphere
+candidate passed any session (solved: NO). SPHERE calibration R² 0.66 / 0.29.
+Only R0 passed one session (A 0.059). Session B had a large within-session
+shift for all methods (R0 centre checkpoint 0.46 / 0.11 / 0.33); built-in COMBO
+was worse than in #88/#90. Prototype's own ±5° mapping (descriptive): 0.261 /
+0.076. Code not merged (Fatih's rule); kept on the experiment branch.

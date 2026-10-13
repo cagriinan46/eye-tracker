@@ -998,7 +998,7 @@ day, ≈1.1 cm mean error on this display. Product use needs an iPhone + cable +
 stand and a multi-camera Vision layer: human decision. Details:
 [RESULTS](../../experiments/dual_camera_vertical/RESULTS.md).
 
-## 2026-10-13 13:58 +03:00 — Issue #90 published; review pending
+## 2026-10-13 13:56 +03:00 — Issue #90 published; review pending
 
 Results commit **`f43aed2dc4ea953871247de1d0e38396df805aa4`** on
 `experiment/90-dual-camera-vertical`. Opened

@@ -970,3 +970,30 @@ reads; 295 loops in 22.1 s = **13.3 loops/s per camera** (vs ≈30 fps single
 camera in #88), inter-camera frame gap median 16.8 ms, max 52.7 ms; face found
 295/295 (top) and 277/295 (bottom, includes the covered phase); detector median
 7.9 / 6.9 ms.
+
+## 2026-10-13 13:55 +03:00 — Issue #90 sessions: LATE fusion passes both sessions
+
+Preregistration `4be1081` (log-time correction `840e640`) pushed before session A.
+Sessions (`fatih-dual`, top index 0 built-in, bottom index 1 iPhone, 1512x982,
+`.venv-fatih`, reseat between, results not inspected until both ended):
+A 13:49:30–13:51:16 (895 loops), B 13:52:28–13:54:14 (726 loops); both exit 0,
+50/50 presentations, 50/50 common presentations, no failed reads or missing
+faces; both valid. Git-ignored files: `validation/results/dual-camera-fatih-A.json`
+(2,239,146 B, SHA-256 `e79a5bd935da37d891b0d110c46f2527a47b775d6d6b7e44f29929a0de809395`),
+`-B.json` (1,818,053 B, `00243f5f143ef1be8cf568b87c32b6f06a6be100995a6b65b83b9f24069ed169`).
+`.venv/` neither read nor written.
+
+**Preregistered result:** `LATE` (mean of top and bottom COMBO predictions)
+y MAE **0.054 / 0.057**, bias −0.039 / +0.018, ordering 96 / 94 of 96 →
+**passes both sessions; vertical solved by fusion: YES**. Primary "fusion
+better": **YES**, 0.056 ≤ best single (BOTTOM:BLEND 0.068) − 0.01 (margin 0.012,
+0.002 above the rule). Secondary SPLIT 0.069: NO. Placement replication
+(bottom best 0.068 vs top best TOP:COMBO 0.083, rule 0.02): **NO**. No
+single-camera method passed both sessions.
+
+**Exploratory / limits:** gain is largely bias cancellation between cameras
+(COMBO biases A −0.005 / −0.072, B +0.086 / −0.050); LATE checkpoints drift
+downward +0.03…+0.16 within ≈100 s; per-camera rate ≈13 fps; one person, one
+day, ≈1.1 cm mean error on this display. Product use needs an iPhone + cable +
+stand and a multi-camera Vision layer: human decision. Details:
+[RESULTS](../../experiments/dual_camera_vertical/RESULTS.md).

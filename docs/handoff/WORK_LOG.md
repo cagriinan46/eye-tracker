@@ -1006,3 +1006,38 @@ Results commit **`f43aed2dc4ea953871247de1d0e38396df805aa4`** on
 verified OPEN, non-draft, UNMERGED; [CI run 38386687457](https://github.com/cagriinan46/eye-tracker/actions/runs/38386687457)
 on f43aed2 completed **SUCCESS**. This entry is a later commit with its own CI
 run. No merge by the agent; Fatih decides.
+
+## 2026-10-13 14:35 +03:00 — PR #91 merged; Issue #92 eye-sphere preregistration
+
+**Correction to pending state:** PR #91 (Issue #90) was **merged by Fatih** at
+2026-10-13 11:00:52Z as `9926105d8615481b71562ac3abba3d556c554575`; tree identical
+to reviewed head `0d49a1d`. Main synchronized. Verified-merged inactive branches
+`experiment/88-camera-placement-vertical` and `experiment/90-dual-camera-vertical`
+deleted locally and on origin; other branches untouched.
+
+**Human decision (Fatih, chat, 2026-10-13):** eye (gaze) control is the
+priority; head pointing (#84) and other directions are secondary. The iPhone is
+too costly as a camera; a standard webcam (Logitech Brio 100 or similar) is to
+be bought for the low/dual-camera setup. Çağrı may revise on return.
+
+**Issue #92** (approved in chat, "webcami almadan şimdiki laptop kameram ile
+bunu bir deneyelim"; preregistration approved, "hazır"): port of the 3D
+eye-sphere gaze feature from Jason Orlosky's MIT prototype
+(JEOresearch/EyeTracker `Webcam3DTracker/MonitorTracking.py`) to the frozen #77
+protocol on the built-in camera. Branch `experiment/92-sphere-gaze-vertical`.
+New `experiments/sphere_gaze_vertical/` (extractor adds nose-PCA head-frame
+rotation, nose scale and scale-normalized local iris coordinates per frame;
+analysis locks eyeball centres at the first `K-center` checkpoint, radius 20 px
+× width/640). The #77 collector `run()` gained optional `signal_extractor` and
+`experiment` parameters (defaults unchanged). Decision rule in the
+[README](../../experiments/sphere_gaze_vertical/README.md): primary SPHERE ≤ R0 −
+0.02; secondary SPHERE_COMBO ≤ COMBO − 0.01; solved if either passes both
+sessions. Checks before commit: `ruff check` PASS, `ruff format --check` PASS
+(257 files), `pytest` **483 passed**, `git diff --check` clean.
+
+**No-save smoke test** (scratchpad, nothing written; index 0, 1920×1080, 29.7 fps;
+"Fatih Kamerası" still listed by macOS, index 0 = built-in per today's #90
+cover test): sphere pitch median center −0.04° / −0.24°, top +1.31° / +2.52°,
+bottom −3.43° / −3.69° (lock 90 frames); production vertical −0.057 / −0.064 /
+−0.040 (center/top/bottom, first cycle). The feature responds in the expected
+direction with a ≈5–6° top–bottom range.

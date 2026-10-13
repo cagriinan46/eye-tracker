@@ -48,7 +48,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return args
 
 
-def run(args: argparse.Namespace) -> int:
+def run(
+    args: argparse.Namespace,
+    signal_extractor=SignalExtractor,
+    experiment: str = "issue-77-vertical-signal-comparison",
+) -> int:
+    """Run one session; later experiments may pass an extractor with extra side outputs."""
     if not args.model.is_file():
         print(f"Face Landmarker model not found: {args.model}", file=sys.stderr)
         return 1
@@ -66,7 +71,7 @@ def run(args: argparse.Namespace) -> int:
     recorded_source = RecordingSource(source)
     window_created = False
     try:
-        with SignalExtractor(args.model) as signals:
+        with signal_extractor(args.model) as signals:
             recorded_extractor = RecordingExtractor(signals)
             source.open()
             window_created = True
@@ -111,7 +116,7 @@ def run(args: argparse.Namespace) -> int:
                     **presentation_counts,
                 }
             report = {
-                "experiment": "issue-77-vertical-signal-comparison",
+                "experiment": experiment,
                 "participant": args.participant,
                 "session": args.session,
                 "condition": "normal comfortable posture; natural eye opening and blinking",

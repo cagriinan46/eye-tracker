@@ -1,6 +1,6 @@
 # RETURNING DEVELOPER — READ THIS FIRST
 
-Verified snapshot: **2026-10-13 13:55, Europe/Istanbul (UTC+03:00)**. This is the primary
+Verified snapshot: **2026-10-13 14:43, Europe/Istanbul (UTC+03:00)**. This is the primary
 operational dashboard. [WORK_LOG](WORK_LOG.md) records subsequent tasks and
 corrections; [PROJECT_CONTEXT](PROJECT_CONTEXT.md) explains the entire product.
 Refresh this dashboard after approved work; verify live GitHub state on return.
@@ -34,7 +34,9 @@ delivered. This handoff changes documentation only.**
 | Issue #84 head-assisted pointing (Fatih A/B) | **HEAD pointer PASSES**: 3×3 100% / 100%, 4×4 100% / 94%; HYBRID (eyes x + head y) fails | PR #85 MERGED (fe7d4a7). **Decision needed:** head as primary pointer (scope); gain/comfort untested |
 | Issue #86 iPhone ARKit (Live Link Face) checks (Fatih) | Exploratory, valid run 5 only: eye pitch separates down weakly (≈1.5–2°), up inconsistent, `eyeLookUp` always 0; **no better vertical signal than webcam** | PR #87 MERGED (e15e793). Results-only record; no code, no `src/`; Stage 2/3 not started; next direction awaits Fatih |
 | Issue #88 camera placement (Fatih, ABBA 4 sessions) | iPhone (Continuity Camera, USB) below screen: COMBO mean y MAE **0.077 vs 0.103** built-in → placement better (preregistered); passes iPhone A only, **vertical not solved**; drift not smaller | PR #89 MERGED (f042500) with the `run.py` output-path change |
-| Issue #90 simultaneous dual camera (Fatih A/B) | **LATE fusion (mean of built-in-top and iPhone-bottom COMBO) passes both sessions**: y MAE 0.054 / 0.057 vs best single camera 0.068; first two-session pass for Fatih; margin over rule only 0.002; gain largely bias cancellation; drift persists; ≈13 fps per camera | **Decision needed:** Çağrı session + longer drift session vs head pointing (#84); multi-camera is an architecture/scope decision; PR pending |
+| Issue #90 simultaneous dual camera (Fatih A/B) | **LATE fusion (mean of built-in-top and iPhone-bottom COMBO) passes both sessions**: y MAE 0.054 / 0.057 vs best single camera 0.068; first two-session pass for Fatih; margin over rule only 0.002; gain largely bias cancellation; drift persists; ≈13 fps per camera | PR #91 MERGED (9926105) with code. Next: webcam (e.g. Brio 100) below screen replacing the iPhone; Çağrı session and a longer drift session still open |
+| Priority (Fatih decision, 2026-10-13) | **Eye (gaze) control first**; head pointing (#84) and other work secondary; standard webcam to be bought instead of iPhone | Çağrı may revise on return |
+| Issue #92 3D eye-sphere feature (Orlosky prototype port, built-in camera, Fatih A/B) | **Negative**: SPHERE mean y MAE 0.140 vs R0 0.129; SPHERE_COMBO 0.139 vs COMBO 0.123; calibration R² 0.66 / 0.29; no sphere candidate passed any session | Code not merged (branch `experiment/92-sphere-gaze-vertical` kept); results-only record PR pending |
 
 The first B2 calculation returned both sessions' aggregates in memory but
 failed serializing a NumPy boolean to JSON. The process exited; numerical

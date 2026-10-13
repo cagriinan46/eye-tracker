@@ -1042,7 +1042,7 @@ bottom −3.43° / −3.69° (lock 90 frames); production vertical −0.057 / �
 −0.040 (center/top/bottom, first cycle). The feature responds in the expected
 direction with a ≈5–6° top–bottom range.
 
-## 2026-10-13 14:47 +03:00 — Issue #92 sessions: eye-sphere feature negative
+## 2026-10-13 14:43 +03:00 — Issue #92 sessions: eye-sphere feature negative
 
 Preregistration `ae48969` pushed before session A. Sessions (`fatih-sphere`,
 index 0 built-in, 1512x982, `.venv-fatih`, reseat between, results not inspected

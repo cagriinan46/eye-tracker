@@ -1006,3 +1006,79 @@ Results commit **`f43aed2dc4ea953871247de1d0e38396df805aa4`** on
 verified OPEN, non-draft, UNMERGED; [CI run 38386687457](https://github.com/cagriinan46/eye-tracker/actions/runs/38386687457)
 on f43aed2 completed **SUCCESS**. This entry is a later commit with its own CI
 run. No merge by the agent; Fatih decides.
+
+## 2026-10-13 14:35 +03:00 — PR #91 merged; Issue #92 eye-sphere preregistration
+
+**Correction to pending state:** PR #91 (Issue #90) was **merged by Fatih** at
+2026-10-13 11:00:52Z as `9926105d8615481b71562ac3abba3d556c554575`; tree identical
+to reviewed head `0d49a1d`. Main synchronized. Verified-merged inactive branches
+`experiment/88-camera-placement-vertical` and `experiment/90-dual-camera-vertical`
+deleted locally and on origin; other branches untouched.
+
+**Human decision (Fatih, chat, 2026-10-13):** eye (gaze) control is the
+priority; head pointing (#84) and other directions are secondary. The iPhone is
+too costly as a camera; a standard webcam (Logitech Brio 100 or similar) is to
+be bought for the low/dual-camera setup. Çağrı may revise on return.
+
+**Issue #92** (approved in chat, "webcami almadan şimdiki laptop kameram ile
+bunu bir deneyelim"; preregistration approved, "hazır"): port of the 3D
+eye-sphere gaze feature from Jason Orlosky's MIT prototype
+(JEOresearch/EyeTracker `Webcam3DTracker/MonitorTracking.py`) to the frozen #77
+protocol on the built-in camera. Branch `experiment/92-sphere-gaze-vertical`.
+New `experiments/sphere_gaze_vertical/` (extractor adds nose-PCA head-frame
+rotation, nose scale and scale-normalized local iris coordinates per frame;
+analysis locks eyeball centres at the first `K-center` checkpoint, radius 20 px
+× width/640). The #77 collector `run()` gained optional `signal_extractor` and
+`experiment` parameters (defaults unchanged). Decision rule in the
+[README](https://github.com/cagriinan46/eye-tracker/blob/experiment/92-sphere-gaze-vertical/experiments/sphere_gaze_vertical/README.md) (experiment branch, not merged): primary SPHERE ≤ R0 −
+0.02; secondary SPHERE_COMBO ≤ COMBO − 0.01; solved if either passes both
+sessions. Checks before commit: `ruff check` PASS, `ruff format --check` PASS
+(257 files), `pytest` **483 passed**, `git diff --check` clean.
+
+**No-save smoke test** (scratchpad, nothing written; index 0, 1920×1080, 29.7 fps;
+"Fatih Kamerası" still listed by macOS, index 0 = built-in per today's #90
+cover test): sphere pitch median center −0.04° / −0.24°, top +1.31° / +2.52°,
+bottom −3.43° / −3.69° (lock 90 frames); production vertical −0.057 / −0.064 /
+−0.040 (center/top/bottom, first cycle). The feature responds in the expected
+direction with a ≈5–6° top–bottom range.
+
+## 2026-10-13 14:43 +03:00 — Issue #92 sessions: eye-sphere feature negative
+
+Preregistration `ae48969` pushed before session A. Sessions (`fatih-sphere`,
+index 0 built-in, 1512x982, `.venv-fatih`, reseat between, results not inspected
+until both ended): A 14:37:44–14:39:28, B 14:40:01–14:41:45; both exit 0, 50/50
+presentations, 1,775 / 1,779 rows all usable with eye-sphere numbers, no missing
+faces; both valid; lock at presentation 2 (33 / 35 frames). Git-ignored files:
+`validation/results/sphere-gaze-fatih-A.json` (3,346,654 B, SHA-256
+`ef92422143aa95b930f57c3327cf558bf89e1653c0c97f0d669512e063768b1d`), `-B.json`
+(3,355,877 B, `ec2d7f465bcc0445e628f3e84de9c284b40b7e743b6abe6fbe1e0342f521c6d5`).
+`.venv/` neither read nor written. Between the smoke test and session A, Fatih
+removed an accidental "h" typed into `tests/gaze/test_calibration_aggregation.py`
+(never committed; tree clean before session A).
+
+**Preregistered result: negative.** Mean y MAE SPHERE **0.140** vs R0 0.129
+(primary: NO), SPHERE_COMBO 0.139 vs COMBO 0.123 (secondary: NO); no sphere
+candidate passed any session (solved: NO). SPHERE calibration R² 0.66 / 0.29.
+Only R0 passed one session (A 0.059). Session B had a large within-session
+shift for all methods (R0 centre checkpoint 0.46 / 0.11 / 0.33); built-in COMBO
+was worse than in #88/#90. Prototype's own ±5° mapping (descriptive): 0.261 /
+0.076. Code not merged (Fatih's rule); kept on the experiment branch.
+
+## 2026-10-13 14:43 +03:00 — Issue #92 results-only record
+
+Code and full results remain on `experiment/92-sphere-gaze-vertical` (head
+`a7ce540`, pushed; preregistration `ae48969`, results `6aa14ac`), **not merged**
+and no code PR opened (Fatih's rule for failed experiments). This branch
+`docs/92-sphere-gaze-results` carries only the
+[results record](../research/sphere-gaze-vertical-results.md), this log and
+CURRENT_STATE. The #77 collector's optional `signal_extractor`/`experiment`
+parameters exist only on the experiment branch.
+
+## 2026-10-13 14:44 +03:00 — Issue #92 record published; review pending
+
+Docs commit **`c61e1924302d0d08ffc48788c1118d7147272776`** on
+`docs/92-sphere-gaze-results`. Opened
+[PR #93](https://github.com/cagriinan46/eye-tracker/pull/93) (Closes #92), verified
+OPEN, non-draft, UNMERGED; [CI run 38392227636](https://github.com/cagriinan46/eye-tracker/actions/runs/38392227636)
+on c61e192 completed **SUCCESS**. This entry is a later commit with its own CI
+run. No merge by the agent; Fatih decides.

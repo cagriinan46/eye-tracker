@@ -864,7 +864,7 @@ OPEN, non-draft, UNMERGED; [CI run37931350933](https://github.com/cagriinan46/ey
 on 4767be8 completed **SUCCESS**. This entry is a later commit with its own CI
 run. No merge by the agent; Fatih reviews and merges.
 
-## 2026-10-13 12:20 +03:00 — correction: PR #87 merged; Issue #88 camera placement preregistered
+## 2026-10-13 12:15 +03:00 — correction: PR #87 merged; Issue #88 camera placement preregistered
 
 **Correction** to the PR #87 publication entry (OPEN/UNMERGED): verified,
 [PR #87](https://github.com/cagriinan46/eye-tracker/pull/87) **MERGED** at
@@ -892,3 +892,43 @@ rear, below screen) A → iPhone B → built-in B. "iPhone placement better" if 
 four sessions are valid and the best iPhone candidate's mean y MAE is at least
 0.02 below the best built-in one; "vertical solved" if the iPhone pair has a
 #77 winner. Otherwise negative; invalid sessions make it inconclusive.
+
+## 2026-10-13 12:35 +03:00 — Issue #88 sessions: iPhone below screen better, vertical not solved
+
+Preregistration `b518be7` committed at 12:15:25 +03:00 and pushed before session 1; full suite at that commit:
+`ruff check` PASS, `ruff format --check` PASS (244 files), `pytest` **463 passed**.
+
+**Setup:** wireless Continuity Camera did not appear while the iPhone shared
+its connection (Personal Hotspot); the USB cable worked. A no-save brightness
+test (cover the iPhone lens) established **OpenCV index 0 = built-in, 1 =
+iPhone**, the opposite of Swift's AVFoundation device list. Video effects off
+was requested but not explicitly confirmed by Fatih.
+
+**Sessions** (`--screen-size 1512x982`, `.venv-fatih`, model `.venv-fatih/models/`,
+reseat between, results hidden until all four ended): built-in A 12:24:04–12:25:48,
+iPhone A 12:26:12–12:27:57, iPhone B 12:30:05–12:31:50, built-in B 12:32:19–12:34:03;
+all exit 0, 50/50 presentations, 25/25 calibration and 16/16 validation, all
+valid. Git-ignored files in `validation/results/`:
+`camera-placement-fatih-builtin-A.json` (2,160,959 B, SHA-256
+`b44173fc6371e73a4ccbacce0cc39a31f26af0a27061983b0bfd5c50c3a46ab2`),
+`-iphone-A.json` (2,182,613 B, `92182600c3bea7f1b54e18677d9bfdd18c988be6c6263cef7c2667823da1761b`),
+`-iphone-B.json` (2,172,047 B, `1908bf67fe01d8f625b3a9e60a08e1aa82902a8b44b770daa7c66d261301b4cf`),
+`-builtin-B.json` (2,166,134 B, `8ac448de4d3a3d49a7fc24f99301f43a1ea4eedff95cc88019c789ee491fe228`).
+`.venv/` was neither read nor written. One MediaPipe clearcut "Failed to send"
+line per run.
+
+**Preregistered result:** best candidate COMBO for both cameras; mean y MAE
+**0.077 iPhone vs 0.103 built-in** → **"iPhone placement better": YES** (margin
+0.025 vs required 0.020). **"Vertical solved": NO** — COMBO passed iPhone A
+(y MAE 0.071, bias −0.045, ordering 96/96; first single-session pass for Fatih)
+but failed iPhone B on y MAE (0.084). No #77 winner for either camera.
+
+**Exploratory:** eye opening degraded from below (OPEN R² 0.47 / 0.32);
+checkpoint drift was not smaller with the iPhone (top −0.21 / −0.38). x MAE
+unchanged (≈0.03–0.05). Position and sensor are confounded. Details:
+[RESULTS](../../experiments/camera_placement_vertical/RESULTS.md).
+
+**Human decisions:** whether to pursue a low/external camera (Çağrı session,
+cable/stand practicality, scope), versus head pointing (#84); whether to merge
+this branch's small `run.py` output-path change or keep results only. No
+production change.

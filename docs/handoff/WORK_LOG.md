@@ -1074,7 +1074,7 @@ and no code PR opened (Fatih's rule for failed experiments). This branch
 CURRENT_STATE. The #77 collector's optional `signal_extractor`/`experiment`
 parameters exist only on the experiment branch.
 
-## 2026-10-13 14:45 +03:00 — Issue #92 record published; review pending
+## 2026-10-13 14:44 +03:00 — Issue #92 record published; review pending
 
 Docs commit **`c61e1924302d0d08ffc48788c1118d7147272776`** on
 `docs/92-sphere-gaze-results`. Opened

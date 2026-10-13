@@ -22,6 +22,9 @@ from validation.real_calibration import (
     parse_screen_size,
 )
 
+# Git-ignored locations for derived participant numbers (Issue #88 adds validation/results).
+IGNORED_OUTPUT_DIRS = (".venv", "validation/results")
+
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -37,8 +40,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         parser.error("camera index must be nonnegative")
     if not args.participant.strip():
         parser.error("participant ID must not be blank")
-    if not args.output.resolve().is_relative_to(Path(".venv").resolve()):
-        parser.error("derived numerical output must be inside the Git-ignored .venv directory")
+    output = args.output.resolve()
+    if not any(output.is_relative_to(Path(d).resolve()) for d in IGNORED_OUTPUT_DIRS):
+        parser.error(
+            "derived numerical output must be inside a Git-ignored directory: .venv or validation/results"
+        )
     return args
 
 

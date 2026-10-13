@@ -863,3 +863,32 @@ files), `pytest` **463 passed**, `git diff --check` clean. Opened
 OPEN, non-draft, UNMERGED; [CI run37931350933](https://github.com/cagriinan46/eye-tracker/actions/runs/37931350933)
 on 4767be8 completed **SUCCESS**. This entry is a later commit with its own CI
 run. No merge by the agent; Fatih reviews and merges.
+
+## 2026-10-13 12:20 +03:00 — correction: PR #87 merged; Issue #88 camera placement preregistered
+
+**Correction** to the PR #87 publication entry (OPEN/UNMERGED): verified,
+[PR #87](https://github.com/cagriinan46/eye-tracker/pull/87) **MERGED** at
+2026-10-09T12:44:00Z (15:44 +03:00) by Fatih as `e15e793d239d92e0b7282474c0ec3c213bd032ae`;
+merged content identical to branch `docs/86-iphone-arkit-signal-check` (branch
+not deleted). No other main change or open PR besides #71 at 2026-10-13 12:14.
+
+**Approval:** Fatih chose option 2 of the Issue #86 alternatives ("2 yi
+deneyelim") and approved the four proposal points ("1–4 tamam"): merge #87
+first, a fresh official model copy, `validation/results/` output, and the
+decision rule. **Agent:** Claude Code (Claude Opus 5.5). **Issue:**
+[#88](https://github.com/cagriinan46/eye-tracker/issues/88). **Branch:**
+`experiment/88-camera-placement-vertical` from main `e15e793`.
+
+**Setup:** official MediaPipe `face_landmarker.task` downloaded to
+`.venv-fatih/models/` (3,758,596 B, SHA-256 `64184e22…6544e0bc9ff`, identical to
+DATA_INVENTORY); `.venv/` not read. `run.py` of Issue #77 now also accepts the
+new Git-ignored `validation/results/` (test extended); frozen analysis
+untouched.
+
+**Design (preregistered in the
+[experiment README](../../experiments/camera_placement_vertical/README.md)):**
+Issue #77 protocol unchanged; sessions built-in A → iPhone (Continuity Camera,
+rear, below screen) A → iPhone B → built-in B. "iPhone placement better" if all
+four sessions are valid and the best iPhone candidate's mean y MAE is at least
+0.02 below the best built-in one; "vertical solved" if the iPhone pair has a
+#77 winner. Otherwise negative; invalid sessions make it inconclusive.

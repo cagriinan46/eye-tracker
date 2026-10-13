@@ -197,6 +197,10 @@ def test_collector_requires_screen_size_and_ignored_output() -> None:
         parse_args(base + output)
     with pytest.raises(SystemExit):
         parse_args(base + ["--output", "elsewhere.json", "--screen-size", "1512x982"])
+    results = ["--output", "validation/results/camera-placement-fatih-A.json"]
+    assert parse_args(base + results + ["--screen-size", "1512x982"]).output.name.endswith("A.json")
+    with pytest.raises(SystemExit):
+        parse_args(base + ["--output", "validation/other.json", "--screen-size", "1512x982"])
 
 
 # Analysis

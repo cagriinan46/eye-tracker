@@ -1073,3 +1073,12 @@ and no code PR opened (Fatih's rule for failed experiments). This branch
 [results record](../research/sphere-gaze-vertical-results.md), this log and
 CURRENT_STATE. The #77 collector's optional `signal_extractor`/`experiment`
 parameters exist only on the experiment branch.
+
+## 2026-10-13 14:45 +03:00 — Issue #92 record published; review pending
+
+Docs commit **`c61e1924302d0d08ffc48788c1118d7147272776`** on
+`docs/92-sphere-gaze-results`. Opened
+[PR #93](https://github.com/cagriinan46/eye-tracker/pull/93) (Closes #92), verified
+OPEN, non-draft, UNMERGED; [CI run 38392227636](https://github.com/cagriinan46/eye-tracker/actions/runs/38392227636)
+on c61e192 completed **SUCCESS**. This entry is a later commit with its own CI
+run. No merge by the agent; Fatih decides.

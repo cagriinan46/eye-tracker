@@ -20,6 +20,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
+      - name: Fetch and verify original representation freeze
+        shell: bash
+        run: |
+          freeze_commit=c4ad261b63fcce3b3998ce8335f8d81fa2118b32
+          git fetch --no-tags --depth=1 origin refs/pull/70/head
+          test "$(git rev-parse FETCH_HEAD)" = "$freeze_commit"
+          git cat-file -e "${freeze_commit}^{commit}"
+          git show "${freeze_commit}:experiments/gaze_representation_benchmark/__init__.py"
+
       - name: Set up Python 3.12
         uses: actions/setup-python@v7
         with:

@@ -1,4 +1,4 @@
-"""Session-local gaze calibration with a small, replaceable mapping baseline.
+"""Session-local calibration: RBF-kernel SVR and the historical linear baseline.
 
 Calibration pairs numerical gaze features with known target positions observed in
 one session. Fitted coefficients are never persisted or shared between sessions:
@@ -10,11 +10,16 @@ Coordinates are normalized to the calibration area: ``x`` increases to the right
 clipped, so extrapolation error stays visible instead of being hidden at the edge.
 """
 
+from __future__ import annotations
+
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from math import isfinite
 from statistics import linear_regression, median
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
+
+if TYPE_CHECKING:
+    from sklearn.pipeline import Pipeline
 
 # Lower bound carried over from Experiment 006's fit; it is not a chosen
 # calibration layout or point count, which remain undecided.
@@ -154,3 +159,116 @@ def _fit_axis(
 
 def _is_finite_number(value: object) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool) and isfinite(value)
+
+
+@dataclass(frozen=True, slots=True)
+class SVRCalibrationSample(CalibrationSample):
+    """Per-target medians; pose angles are in degrees in pitch/yaw/roll order."""
+
+    pitch: float
+    yaw: float
+    roll: float
+
+    def __post_init__(self) -> None:
+        CalibrationSample.__post_init__(self)
+        if not all(_is_finite_number(v) for v in (self.pitch, self.yaw, self.roll)):
+            raise ValueError("head pose angles must be finite numbers")
+
+
+@dataclass(frozen=True, slots=True)
+class SVRMapping:
+    """Two fitted RBF-kernel SVR regressors with pixel and normalized outputs, requiring five inputs.
+
+    Each model consumes horizontal, vertical, pitch, yaw, roll (degrees).
+    The live app supplies all five inputs; the legacy two-input pipeline stays separate.
+    Scalers are fitted only on calibration data and never updated in predict. No clipping or temporal smoothing occurs.
+    Screen dimensions describe the calibrated drawable area, not camera resolution.
+    """
+
+    svr_x: Pipeline
+    svr_y: Pipeline
+    screen_width: int
+    screen_height: int
+
+    def predict_pixels(
+        self,
+        horizontal_feature: float,
+        vertical_feature: float,
+        pitch: float,
+        yaw: float,
+        roll: float,
+    ) -> tuple[float, float]:
+        if not all(
+            _is_finite_number(v) for v in (horizontal_feature, vertical_feature, pitch, yaw, roll)
+        ):
+            raise ValueError("gaze features must be finite numbers")
+        features = [[horizontal_feature, vertical_feature, pitch, yaw, roll]]
+        point = (float(self.svr_x.predict(features)[0]), float(self.svr_y.predict(features)[0]))
+        if not all(isfinite(value) for value in point):
+            raise ValueError("SVR prediction must be finite")
+        return point
+
+    def predict(
+        self,
+        horizontal_feature: float,
+        vertical_feature: float,
+        pitch: float,
+        yaw: float,
+        roll: float,
+    ) -> tuple[float, float]:
+        """Return normalized coordinates for the five-input live SVR application."""
+        x, y = self.predict_pixels(horizontal_feature, vertical_feature, pitch, yaw, roll)
+        return x / self.screen_width, y / self.screen_height
+
+
+def fit_svr(
+    samples: Iterable[SVRCalibrationSample],
+    *,
+    screen_width: int,
+    screen_height: int,
+) -> SVRMapping:
+    """Fit two RBF-kernel SVRs to per-target medians and actual drawable-area pixel targets.
+
+    Discard blink/invalid frames, then median all five features per target.
+    This low-level fitter requires >=3 distinct feature vectors with variation in
+    both eye features and both target axes; collection owns the protocol's target-count gate.
+    Only input features are standardized; targets remain in drawable-area pixels.
+    RBF kernel, gamma=0.1, C=1000 and epsilon=1.0 pixels are experimental settings, not
+    validated accuracy thresholds. Fixed pixel-unit settings are resolution dependent.
+
+    The historical fit_independent_linear remains available for frozen experiments.
+    """
+    from sklearn.pipeline import make_pipeline
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.svm import SVR
+
+    if any(type(size) is not int or size <= 0 for size in (screen_width, screen_height)):
+        raise ValueError("screen dimensions must be positive integers")
+    samples = tuple(samples)
+    if not all(isinstance(sample, SVRCalibrationSample) for sample in samples):
+        raise TypeError("calibration samples must be SVRCalibrationSample instances")
+    if len(samples) < MIN_CALIBRATION_SAMPLES:
+        raise ValueError("at least three calibration samples are required")
+    features = [(s.horizontal_feature, s.vertical_feature, s.pitch, s.yaw, s.roll) for s in samples]
+    if len(set(features)) < MIN_CALIBRATION_SAMPLES:
+        raise ValueError("at least three distinct calibration feature vectors are required")
+    for field in ("horizontal_feature", "vertical_feature", "target_x", "target_y"):
+        if len({getattr(sample, field) for sample in samples}) < 2:
+            raise ValueError(f"{field} does not vary across calibration samples")
+
+    def fit_axis(targets):
+        regressor = SVR(kernel="rbf", C=1000.0, epsilon=1.0, gamma=0.1)
+        # Alternatives for a NEW calibration; no accuracy/stability guarantee:
+        # regressor = SVR(kernel="linear", C=1000.0, epsilon=1.0)
+        # regressor = SVR(kernel="poly", degree=2, C=1000.0, epsilon=1.0,
+        #                 gamma=0.1, coef0=1.0)
+        model = make_pipeline(StandardScaler(), regressor)
+        model.fit(features, targets)
+        return model
+
+    return SVRMapping(
+        svr_x=fit_axis([sample.target_x * screen_width for sample in samples]),
+        svr_y=fit_axis([sample.target_y * screen_height for sample in samples]),
+        screen_width=screen_width,
+        screen_height=screen_height,
+    )

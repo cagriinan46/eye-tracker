@@ -1,7 +1,8 @@
 """Local diagnostic demo: fresh 25-target calibration, then frozen live predictions.
 
 One MacBook camera supplies eye features and pitch/yaw/roll to two RBF SVRs.
-Feedback is visible: this is not a blinded validation.
+Default feedback is visible; --diagnostic hides predictions during a finite probe.
+Neither mode independently verifies fixation or establishes gaze accuracy.
 EMA smooths the displayed point. Raw predictions remain logged.
 Optional --control-pointer enables desktop movement and dwell clicking.
 No images, clipping of numerical model outputs, or refits.
@@ -386,6 +387,9 @@ def wait_for_single_camera(cv2, np, name, size, source, extractor):
 
 
 def run(args):
+    diagnostic = getattr(args, "diagnostic", False)
+    if diagnostic and args.control_pointer:
+        raise ValueError("Diagnostic measurements cannot control the pointer")
     import cv2
     import numpy as np
 
@@ -409,8 +413,13 @@ def run(args):
         "live": "Raw model predictions logged; EMA on single-camera output; no refits or snapping",
         "smoothing": {"kind": "EMA", "alpha": EMA_ALPHA, "reset_on_loss": True},
         "desktop_control": args.control_pointer,
+        "diagnostic_protocol": "five targets repeated after a small position change; hidden predictions"
+        if diagnostic
+        else None,
         "dwell": {"radius_pixels": 30, "seconds": 1.5, "rearm": "leave circle"},
-        "limitations": "Visible feedback; no held-out validation, no success claim; no population evidence",
+        "limitations": "Hidden prediction probe; fixation not independently verified; no success claim"
+        if diagnostic
+        else "Visible feedback; no held-out validation, no success claim; no population evidence",
         "gate": "Camera preview Enter, actual target screen separate Enter, live stage Enter",
         "camera_indices": {"macbook": args.camera_index},
         "source_sha256": {},
@@ -426,11 +435,12 @@ def run(args):
         ROOT / "src/eye_tracker/platform_adapters/pyautogui_pointer.py",
         ROOT / "experiments/vertical_signal_comparison/protocol.py",
         ROOT / "experiments/vertical_signal_comparison/capture.py",
+        ROOT / "validation/gaze_diagnostics.py",
     ]
     metadata["source_sha256"] = {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in paths}
     write_new(folder / "session.json", metadata)
     print(f"NEW LIVE SESSION: {folder}", flush=True)
-    name = "Cagri - Linear SVR live gaze demo"
+    name = "Cagri - SVR live gaze demo"
     sources = {c: OpenCVCameraSource(i) for c, i in metadata["camera_indices"].items()}
     recorded = {c: RecordingSource(source) for c, source in sources.items()}
     rows = []
@@ -515,6 +525,12 @@ def run(args):
                 f"CALIBRATION SAVED: {mapping['calibration_targets']}/25 MacBook targets",
                 flush=True,
             )
+            if diagnostic:
+                live_count = run_diagnostic_probe(
+                    cv2, np, name, size, mapping, recorded, extractors, signals, folder
+                )
+                status = "completed"
+                return 0
             target = [0.5, 0.5]
             target_index = 4
             if args.control_pointer:
@@ -652,6 +668,10 @@ def run(args):
         cv2.destroyAllWindows()
         if rows and not (folder / "calibration.json").exists():
             write_new(folder / "calibration-partial.json", {"rows": rows, "status": status})
+        if diagnostic and (folder / "live.jsonl").is_file():
+            # Preserve the correct partial count when Escape interrupts the probe.
+            with (folder / "live.jsonl").open(encoding="utf-8") as source:
+                live_count = sum(1 for line in source if line.strip())
         write_new(
             folder / "completion.json",
             {
@@ -672,15 +692,114 @@ def run(args):
     return 0 if status == "completed" else 130
 
 
+def run_diagnostic_probe(
+    cv2, np, name, size, mapping, recorded, extractors, signals, folder, clock=time.monotonic
+):
+    """Finite observation-only probe. Calibration/EMA stay fixed; no desktop adapter.
+
+    Target is presented before starting each timer. No prediction feedback or
+    automatic retries; explicit Enter gates separate the two pose conditions.
+    Partial rows survive Escape. Summary is only written after all ten trials.
+    """
+    from validation.gaze_diagnostics import (
+        PROBE_SAMPLE_SECONDS,
+        SETTLING,
+        live_segments,
+        probe_schedule,
+    )
+    from validation.real_calibration import Presentation, Target
+
+    rows = []
+    smoother = EMASmoother(alpha=EMA_ALPHA)
+    start = clock()
+    condition = None
+    prompts = {
+        "baseline": "DOGAL POZISYON: rahat otur, sari hedeflere bak. ENTER: baslat",
+        "after_position_change": "Basini hafifce yeniden konumlandir, rahat otur. ENTER: baslat",
+    }
+
+    def show(presentation, trial, sampling, remaining):
+        canvas = _draw_target(cv2, np, presentation, trial, 5, sampling, remaining, *size)
+        text(cv2, canvas, "TESHIS: sadece sari hedefe bak | Fare ve tiklama KAPALI", size[1] - 55)
+        cv2.imshow(name, canvas)
+        key = cv2.waitKey(1) & 255
+        if key in (27, ord("q")) or cv2.getWindowProperty(name, cv2.WND_PROP_VISIBLE) < 1:
+            raise InterruptedError("Diagnostic probe cancelled")
+
+    with (folder / "live.jsonl").open("x", encoding="utf-8") as destination:
+        for trial in probe_schedule():
+            target = trial["target"]
+            if trial["condition"] != condition:
+                condition = trial["condition"]
+                wait_ready(cv2, np, name, size, target, prompts[condition])
+            presentation = Presentation("diagnostic", Target("probe", *target), 1)
+            show(presentation, trial["trial"], False, SETTLING)
+            began = clock()
+            while clock() - began < SETTLING + PROBE_SAMPLE_SECONDS:
+                _, details = measure_signals(
+                    recorded["macbook"], extractors["macbook"], signals["macbook"]
+                )
+                now = clock()
+                elapsed = now - began
+                if elapsed >= SETTLING + PROBE_SAMPLE_SECONDS:
+                    break
+                raw = predict_single(mapping, details)
+                smoothed = smooth_prediction(raw, smoother)
+                sampling = elapsed >= SETTLING
+                row = clean(
+                    dict(
+                        loop=len(rows) + 1,
+                        seconds=now - start,
+                        target=target,
+                        predictions=raw,
+                        displayed_predictions=smoothed,
+                        desktop_action=None,
+                        signals={"macbook": details},
+                        diagnostic={**trial, "sampling": sampling, "trial_seconds": elapsed},
+                    )
+                )
+                rows.append(row)
+                destination.write(json.dumps(row, allow_nan=False) + "\n")
+                show(
+                    presentation,
+                    trial["trial"],
+                    sampling,
+                    (SETTLING + PROBE_SAMPLE_SECONDS if sampling else SETTLING) - elapsed,
+                )
+            destination.flush()
+    summary = dict(
+        limitations="Instruction-controlled, not verified fixation; pose change is self-directed. "
+        "Second block also differs in time; do not attribute differences solely to head movement. "
+        "No fitting or tuning; blue point hidden. Dispersion is not purely physiological jitter.",
+        settle_seconds=SETTLING,
+        sample_seconds=PROBE_SAMPLE_SECONDS,
+        segments=live_segments(rows, size),
+    )
+    write_new(folder / "diagnostic-summary.json", summary)
+    for segment in summary["segments"]:
+        print(
+            f"DIAGNOSTIC {segment['condition']} {segment['target']}: "
+            f"raw={segment['raw']} smoothed={segment['smoothed']}",
+            flush=True,
+        )
+    return len(rows)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--camera-index", type=int, default=None, help="Override automatic MacBook camera selection"
     )
-    parser.add_argument(
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument(
         "--control-pointer",
         action="store_true",
         help="Enable real pointer movement and 1.5-second dwell left click",
+    )
+    modes.add_argument(
+        "--diagnostic",
+        action="store_true",
+        help="After unchanged calibration, run two five-target blocks with no OS control",
     )
     args = parser.parse_args()
     if args.camera_index is not None and args.camera_index < 0:

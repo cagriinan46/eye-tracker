@@ -2,3 +2,5 @@ pytest
 ruff
 # Experiment-only SVD/affine least squares; also used by Experiment 006.
 numpy
+# Gaze calibration and its hardware-free unit tests.
+scikit-learn==1.9.1

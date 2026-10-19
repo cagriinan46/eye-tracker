@@ -310,3 +310,16 @@ Never claim success for tests or commands that were not actually executed.
 The goal is not to produce the maximum amount of code.
 
 Produce the smallest correct, testable, maintainable change that satisfies the approved issue while preserving the project's architecture, accessibility goals, privacy requirements, and safety constraints.
+
+
+## Team Workflow Update — 2026-10-19
+
+For subsequent work, start each feature on a fresh task branch from synchronized
+`main`. Run checks and open a PR; the human team approves and merges it.
+Do not auto-merge future PRs. The user's explicit auto-merge authorization for
+the SVR restoration is a one-time exception.
+
+Before the next task, synchronize `main` and remove completed local and remote
+task branches. Inspect for unmerged work and open PRs before cleanup; preserve
+unmerged work or obtain explicit disposition. Never delete experiment records
+or virtual environments as part of branch cleanup.

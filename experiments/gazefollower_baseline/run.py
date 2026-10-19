@@ -7,6 +7,7 @@ No desktop actions, automatic recalibration, historical-data reads or image savi
 import argparse
 import hashlib
 import json
+import random
 import subprocess
 import sys
 import time
@@ -56,7 +57,34 @@ def finite_point(point):
     return [float(v) for v in point]
 
 
-def summarize(rows):
+def evaluation_schedule(labels, unseen, repeat=False):
+    plan = [dict(target=list(p), target_set="unseen", target_id=i) for i, p in enumerate(unseen, 1)]
+    if repeat:
+        plan.extend(
+            dict(target=p.tolist(), target_set="repeated", target_id=i)
+            for i, p in enumerate(np.asarray(labels)[:, 0, :], 1)
+        )
+        random.Random(20261019).shuffle(plan)
+    return plan
+
+
+def summarize_evaluation(rows, repeat=False):
+    if not repeat:
+        return summarize(rows)
+    groups = {
+        name: summarize([r for r in rows if r["target_set"] == name], expected_trials=count)
+        for name, count in (("repeated", 13), ("unseen", 6))
+    }
+    return dict(
+        by_target_set=groups,
+        sufficient_data=all(g["sufficient_data"] for g in groups.values()),
+        limitations="Fresh samples at trained locations test repeatability, not unseen-location "
+        "accuracy. Different target geometry and elapsed time can affect the comparison; "
+        "this probe does not establish a cause. No refitting on evaluation samples.",
+    )
+
+
+def summarize(rows, expected_trials=6):
     groups = defaultdict(list)
     for row in rows:
         groups[row["trial"]].append(row)
@@ -89,7 +117,7 @@ def summarize(rows):
                 )
             result[key] = stats
         trials.append(result)
-    enough = len(trials) == 6 and all(t["raw"]["valid"] >= 5 for t in trials)
+    enough = len(trials) == expected_trials and all(t["raw"]["valid"] >= 5 for t in trials)
     return dict(
         trials=trials,
         sufficient_data=enough,
@@ -307,6 +335,7 @@ def run(args):
                 calibration_feedback_hidden=True,
                 evaluation_feedback_hidden=True,
                 fallback_frames_rejected=True,
+                repeat_calibration_targets=args.repeat_calibration_targets,
             ),
         )
         controller.new_session()
@@ -351,12 +380,30 @@ def run(args):
         )
 
         targets = [controller.normalized_point[i - 1] for i in controller._six_vali_idx]
-        wait_enter(pg, lambda: draw(targets[0], "6 HEDEF KONTROLU (~23 saniye) | Hazirsan ENTER"))
+        plan = evaluation_schedule(labels, targets, repeat=args.repeat_calibration_targets)
+        write_new(
+            folder / "evaluation-plan.json",
+            dict(
+                targets=plan,
+                shuffle_seed=20261019 if args.repeat_calibration_targets else None,
+                settle_seconds=0.8,
+                sample_seconds=3.0,
+                refit=False,
+            ),
+        )
+        wait_enter(
+            pg,
+            lambda: draw(
+                plan[0]["target"],
+                f"{len(plan)} HEDEF KONTROLU (~{int(np.ceil(len(plan) * 3.8))} saniye) | Hazirsan ENTER",
+            ),
+        )
         rows = []
         smooth = filter_type()
         with (folder / "evaluation.jsonl").open("x") as stream:
-            for trial, target in enumerate(targets, 1):
-                draw(target, f"KONTROL {trial}/6 | Sadece sari noktaya bak")
+            for trial, item in enumerate(plan, 1):
+                target = np.asarray(item["target"])
+                draw(target, f"KONTROL {trial}/{len(plan)} | Sadece sari noktaya bak")
                 start = time.monotonic()
                 while True:
                     enter_pressed(pg)
@@ -378,6 +425,8 @@ def run(args):
                     if elapsed >= 0.8:
                         row = dict(
                             trial=trial,
+                            target_set=item["target_set"],
+                            target_id=item["target_id"],
                             seconds=elapsed,
                             target_px=(target * size).tolist(),
                             raw_px=raw,
@@ -387,9 +436,17 @@ def run(args):
                         rows.append(row)
                         stream.write(json.dumps(row, allow_nan=False) + "\n")
                         stream.flush()
-        report = summarize(rows)
+        report = summarize_evaluation(rows, repeat=args.repeat_calibration_targets)
         write_new(folder / "report.json", report)
-        print("RESULT: " + json.dumps(report["mean_error_px_equal_target_weight"]), flush=True)
+        metrics = (
+            {
+                name: group["mean_error_px_equal_target_weight"]
+                for name, group in report["by_target_set"].items()
+            }
+            if args.repeat_calibration_targets
+            else report["mean_error_px_equal_target_weight"]
+        )
+        print("RESULT: " + json.dumps(metrics), flush=True)
         status = "completed"
         # A separate optional qualitative view, excluded from accuracy measurements.
         wait_enter(
@@ -436,6 +493,11 @@ def main():
     parser.add_argument("--upstream", type=Path, default=SUPPORT / "upstream")
     parser.add_argument("--face-model", type=Path, default=SUPPORT / "face_landmarker.task")
     parser.add_argument("--camera-index", type=int)
+    parser.add_argument(
+        "--repeat-calibration-targets",
+        action="store_true",
+        help="Evaluate 13 trained locations and 6 unseen locations without refitting",
+    )
     parser.add_argument(
         "--check", action="store_true", help="Synthetic model inference; no camera/window"
     )

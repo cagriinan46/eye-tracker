@@ -86,6 +86,28 @@ selection. Index ordering can change. Display check: 1512×982 drawable/window.
 
 ## Data and interpretation
 
+### Optional trained-location repeatability check
+
+Append `--repeat-calibration-targets` to the launch command for the follow-up probe.
+Calibration is still performed once with the original 13-target protocol. After
+the separate evaluation Enter gate, 13 trained locations and six unseen locations
+are shown in a reproducible mixed order (seed 20261019), approximately 73 seconds
+total. The trained locations come directly from that session's calibration labels.
+All evaluation samples are new; weights remain frozen and blue feedback stays hidden.
+
+`evaluation-plan.json` records the exact order, normalized targets and timing.
+Rows identify `target_set` (`repeated` or `unseen`) and its `target_id`.
+In this mode `report.json` contains separate `by_target_set` summaries, requiring
+all 13 and six respective targets to have sufficient data. The original six-target
+mode and its report layout remain available without the flag.
+
+Poor performance at repeated locations suggests that matching training samples did
+not carry over to subsequent samples. Good repeated-location performance with poor
+unseen-location performance directs attention to spatial generalization. Neither
+outcome proves a cause: target geometry, fixation and time effects can also differ.
+No head movement is requested, no thresholds/models are tuned, and no previous
+session weights or participant records are loaded.
+
 Each session creates a unique `validation/results/cagri-gazefollower-DATE-UUID/`.
 Files use exclusive creation; historical records, Stage B2 and old environments
 are not inputs. Raw images/video are not saved or uploaded. Learned features are

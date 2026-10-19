@@ -94,3 +94,41 @@ def test_enter_gate_requires_new_press_after_screen_is_presented():
     )
     api().wait_enter(pg, lambda: calls.append("draw"))
     assert calls == ["draw", "clear"]
+
+
+def test_repeat_schedule_preserves_training_targets_and_mixes_unseen_targets():
+    trained = [[i / 14, 0.25] for i in range(1, 14)]
+    unseen = [[i / 7, 0.75] for i in range(1, 7)]
+    labels = np.repeat(np.array(trained)[:, None, :], 45, axis=1)
+    plan = api().evaluation_schedule(labels, unseen, repeat=True)
+    assert len(plan) == 19
+    assert sorted(tuple(t["target"]) for t in plan if t["target_set"] == "repeated") == sorted(
+        map(tuple, trained)
+    )
+    assert sorted(tuple(t["target"]) for t in plan if t["target_set"] == "unseen") == sorted(
+        map(tuple, unseen)
+    )
+    assert plan == api().evaluation_schedule(labels, unseen, repeat=True)
+    assert {t["target_set"] for t in plan[:6]} == {"repeated", "unseen"}
+    assert len({(t["target_set"], t["target_id"]) for t in plan}) == 19
+    baseline = api().evaluation_schedule(labels, unseen, repeat=False)
+    assert [t["target"] for t in baseline] == unseen
+
+
+def test_repeat_report_separates_fresh_samples_at_known_and_unseen_locations():
+    rows = []
+    for trial in range(1, 20):
+        group = "repeated" if trial <= 13 else "unseen"
+        point = [3, 4] if group == "repeated" else [30, 40]
+        rows.extend(
+            dict(trial=trial, target_set=group, target_px=[0, 0], raw_px=point, filtered_px=point)
+            for _ in range(5)
+        )
+    result = api().summarize_evaluation(rows, repeat=True)
+    assert result["by_target_set"]["repeated"]["mean_error_px_equal_target_weight"]["raw"] == 5
+    assert result["by_target_set"]["unseen"]["mean_error_px_equal_target_weight"]["raw"] == 50
+    assert result["sufficient_data"]
+    missing = api().summarize_evaluation([r for r in rows if r["trial"] != 1], repeat=True)
+    assert not missing["sufficient_data"]
+    assert not missing["by_target_set"]["repeated"]["sufficient_data"]
+    assert missing["by_target_set"]["unseen"]["sufficient_data"]

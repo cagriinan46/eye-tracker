@@ -1,7 +1,8 @@
 """GazeFollower components, unchanged model/calibration, user-paced local UI.
 
 This is a feasibility probe, not a replacement for the production gaze subsystem.
-No desktop actions, automatic recalibration, historical-data reads or image saving.
+Optional movement-only desktop control after measurement and a separate Enter.
+No clicking, automatic recalibration, historical-data reads or image saving.
 """
 
 import argparse
@@ -55,6 +56,23 @@ def finite_point(point):
     if point is None or np.asarray(point).shape != (2,) or not np.isfinite(point).all():
         return None
     return [float(v) for v in point]
+
+
+class MoveOnlyPointer:
+    """Experiment action adapter; predictions remain untouched and clicks are absent."""
+
+    def __init__(self, backend, size):
+        if tuple(backend.screen_size) != tuple(size):
+            raise ValueError("Calibration and primary desktop display sizes differ")
+        self.backend = backend
+        self.size = tuple(size)
+
+    def update(self, point):
+        self.backend.check_stop()
+        point = finite_point(point)
+        if point is None or not all(0 <= v < limit for v, limit in zip(point, self.size)):
+            return
+        self.backend.move(*(min(limit - 1, round(v)) for v, limit in zip(point, self.size)))
 
 
 def evaluation_schedule(labels, unseen, repeat=False):
@@ -133,6 +151,47 @@ def summarize(rows, expected_trials=6):
     )
 
 
+def draw_quality(pg, screen, font, report, control_pointer=False):
+    """Show recorded errors; this screen neither refits nor certifies accuracy."""
+    size = screen.get_size()
+
+    def label(message, y):
+        screen.blit(font.render(message, True, (245, 245, 245)), (30, y))
+
+    screen.fill((24, 24, 24))
+    label("KALIBRASYON KALITE OZETI | Kucuk deger = hedefe daha yakin", 25)
+    groups = report.get("by_target_set", {"unseen": report})
+    y = 70
+    for name, group in groups.items():
+        mean = group["mean_error_px_equal_target_weight"]["filtered"]
+        title = "Tekrar bakilan hedefler" if name == "repeated" else "Yeni hedefler"
+        label(f"{title}: {f'{mean:.0f} px' if mean is not None else 'YETERSIZ VERI'}", y)
+        y += 30
+        for trial in group["trials"]:
+            x, ty = trial["target_px"]
+            horizontal = "Sol" if x < size[0] / 3 else "Sag" if x > 2 * size[0] / 3 else "Orta"
+            vertical = "ust" if ty < size[1] / 3 else "alt" if ty > 2 * size[1] / 3 else "orta"
+            stats = trial["filtered"]
+            error = stats["mean_error_px"]
+            value = f"{error:.0f} px" if error is not None else "veri yok"
+            label(
+                f"  {horizontal} {vertical}: {value} | gecerli %{100 * stats['availability']:.0f}",
+                y,
+            )
+            y += 27
+    label("Bu olcum otomatik duzeltme veya guvenilir tiklama onayi degildir.", size[1] - 100)
+    action = (
+        "ENTER: imlec hareketi (tiklama KAPALI)"
+        if control_pointer
+        else "ENTER: sari/mavi canli goruntu"
+    )
+    if control_pointer and not report["sufficient_data"]:
+        action = "Yetersiz veri: imlec acilmayacak. ENTER/ESC: kapat"
+    label(action, size[1] - 65)
+    label("ESC: kapat. Model ve kalibrasyon degistirilmedi.", size[1] - 30)
+    pg.display.flip()
+
+
 def read_frame(source):
     ok, frame = source.read()
     if not ok or frame is None:
@@ -140,13 +199,15 @@ def read_frame(source):
     return frame
 
 
-def enter_pressed(pg):
+def enter_pressed(pg, on_desktop=None):
     entered = False
     for event in pg.event.get():
         if event.type == pg.QUIT or (event.type == pg.KEYDOWN and event.key == pg.K_ESCAPE):
             raise InterruptedError("User cancelled")
         if event.type == pg.KEYDOWN and event.key in (pg.K_RETURN, pg.K_KP_ENTER):
             entered = True
+        if on_desktop is not None and event.type == pg.KEYDOWN and event.key == pg.K_TAB:
+            on_desktop()
     return entered
 
 
@@ -203,6 +264,8 @@ def run(args):
         args
     )
     cap = None
+    pointer_backend = None
+    pointer = None
     folder = None
     status = "failed"
     try:
@@ -275,7 +338,10 @@ def run(args):
                 pg.draw.circle(screen, (40, 150, 255), (round(blue[0]), round(blue[1])), 8)
             label(message, size[1] - 75)
             label(
-                "Normal otur; sari noktaya bak. ESC: bitir. Fare ve tiklama kapali.", size[1] - 40
+                "ESC: durdur. Tiklama KAPALI. TAB: masaustu."
+                if pointer is not None
+                else "Normal otur; sari noktaya bak. ESC: bitir. Fare ve tiklama kapali.",
+                size[1] - 40,
             )
             pg.display.flip()
 
@@ -332,6 +398,7 @@ def run(args):
                 ],
                 filter="upstream HeuristicFilter look_ahead=3",
                 os_control=False,
+                pointer_requested_after_evaluation=args.control_pointer,
                 calibration_feedback_hidden=True,
                 evaluation_feedback_hidden=True,
                 fallback_frames_rejected=True,
@@ -448,16 +515,41 @@ def run(args):
         )
         print("RESULT: " + json.dumps(metrics), flush=True)
         status = "completed"
-        # A separate optional qualitative view, excluded from accuracy measurements.
-        wait_enter(
-            pg,
-            lambda: draw((0.5, 0.5), "OLCUM BITTI | ENTER: sari/mavi canli goruntu | ESC: kapat"),
-        )
+
+        wait_enter(pg, lambda: draw_quality(pg, screen, font, report, args.control_pointer))
+        if args.control_pointer:
+            if not report["sufficient_data"]:
+                return 0
+            from eye_tracker.platform_adapters.pyautogui_pointer import PyAutoGUIPointer
+
+            pointer_backend = PyAutoGUIPointer()
+            pointer = MoveOnlyPointer(pointer_backend, size)
+            write_new(
+                folder / "pointer-control.json",
+                dict(
+                    mode="movement_only",
+                    clicks=False,
+                    screen_size=list(size),
+                    started_after_quality_enter=True,
+                ),
+            )
+
+        # The optional live view is excluded from accuracy measurements.
         target_index = 0
         live_targets = [(0.5, 0.5)] + [tuple(p) for p in targets]
         smooth = filter_type()
+        desktop = False
+
+        def show_desktop():
+            nonlocal desktop
+            if pg.display.iconify():
+                desktop = True
+                print("DESKTOP: gaze moves pointer; no clicks. Global ESC stops.", flush=True)
+
         while True:
-            if enter_pressed(pg):
+            if pointer_backend is not None:
+                pointer_backend.check_stop()
+            if enter_pressed(pg, on_desktop=show_desktop if pointer is not None else None):
                 target_index = (target_index + 1) % len(live_targets)
             _, face, gaze, _, _ = observe()
             blue = None
@@ -468,16 +560,21 @@ def run(args):
                     blue = finite_point(smooth.filter_values(point))
             else:
                 smooth = filter_type()
-            draw(
-                live_targets[target_index],
-                "CANLI | ENTER: sonraki hedef | Sonuclar kaydedildi",
-                blue,
-            )
+            if pointer is not None:
+                pointer.update(blue)
+            if not desktop:
+                draw(
+                    live_targets[target_index],
+                    "CANLI | ENTER: sonraki hedef | Sonuclar kaydedildi",
+                    blue,
+                )
     except InterruptedError:
         if status != "completed":
             status = "cancelled"
         return 0
     finally:
+        if pointer_backend is not None:
+            pointer_backend.close()
         if cap is not None:
             cap.release()
         face_model.release()
@@ -493,6 +590,11 @@ def main():
     parser.add_argument("--upstream", type=Path, default=SUPPORT / "upstream")
     parser.add_argument("--face-model", type=Path, default=SUPPORT / "face_landmarker.task")
     parser.add_argument("--camera-index", type=int)
+    parser.add_argument(
+        "--control-pointer",
+        action="store_true",
+        help="After quality results and Enter, move OS pointer without clicking",
+    )
     parser.add_argument(
         "--repeat-calibration-targets",
         action="store_true",

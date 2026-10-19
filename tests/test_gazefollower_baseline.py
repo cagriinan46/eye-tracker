@@ -132,3 +132,39 @@ def test_repeat_report_separates_fresh_samples_at_known_and_unseen_locations():
     assert not missing["sufficient_data"]
     assert not missing["by_target_set"]["repeated"]["sufficient_data"]
     assert missing["by_target_set"]["unseen"]["sufficient_data"]
+
+
+def test_move_only_pointer_never_clicks_and_rejects_invalid_predictions():
+    moves = []
+
+    def unexpected_click():
+        pytest.fail("Movement-only mode must never click")
+
+    backend = SimpleNamespace(
+        screen_size=(1512, 982),
+        check_stop=lambda: None,
+        move=lambda x, y: moves.append((x, y)),
+        click=unexpected_click,
+    )
+    pointer = api().MoveOnlyPointer(backend, (1512, 982))
+    for _ in range(100):
+        pointer.update([756.2, 491.1])
+    assert moves == [(756, 491)] * 100
+    for point in [None, [-1, 100], [1512, 100], [100, 982], [np.nan, 0]]:
+        pointer.update(point)
+    assert len(moves) == 100
+    pointer.update([1511.9, 981.9])
+    assert moves[-1] == (1511, 981)
+
+
+def test_move_only_pointer_rejects_display_mismatch_and_honors_stop_without_tracking():
+    backend = SimpleNamespace(screen_size=(1512, 982))
+    with pytest.raises(ValueError, match="display"):
+        api().MoveOnlyPointer(backend, (3024, 1964))
+
+    def stopped():
+        raise InterruptedError("Escape")
+
+    backend.check_stop = stopped
+    with pytest.raises(InterruptedError):
+        api().MoveOnlyPointer(backend, (1512, 982)).update(None)

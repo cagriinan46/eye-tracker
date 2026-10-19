@@ -1,7 +1,8 @@
 # GazeFollower: MacBook feasibility probe
 
 An isolated, local-only experiment for normal seated gaze accuracy. It does not
-replace the production gaze pipeline, move the OS pointer, or train a large model.
+replace the production gaze pipeline or train a large model. Optional OS pointer
+movement is available only after measurement and a separate Enter; it never clicks.
 No head-movement task is requested. Human accuracy has not yet been established.
 
 ## Method and provenance
@@ -80,11 +81,36 @@ selection. Index ordering can change. Display check: 1512×982 drawable/window.
    after 15 s; the system does not silently fabricate samples.
 3. On the six-target readiness screen press Enter to begin ~23 s of measurement.
    Continue sitting normally and looking at the yellow target. No blue point yet.
-4. Results are saved. Enter optionally opens yellow/blue live visualization; Enter
-   cycles targets there. This view is excluded from accuracy measurements.
+4. Results are saved and displayed as a quality summary: average filtered pixel
+   distance and valid-frame percentage per region. These are measurements, not an
+   automatic pass/fail accuracy threshold. Enter opens yellow/blue live visualization;
+   Enter cycles targets there. This view is excluded from accuracy measurements.
 5. Escape exits at any stage. Exiting after measurement keeps the completed result.
 
 ## Data and interpretation
+
+### Optional movement-only desktop mode
+
+Append `--control-pointer` to the command (the default six-target check takes ~23 s).
+Calibration target appearance, sounds, timing, model and fitting remain unchanged.
+After reviewing the quality summary, Enter enables movement using the filtered
+prediction. There is no dwell detector or click call in this mode. Tab minimizes
+the live window to reveal the desktop; global Escape stops even without window
+focus or usable gaze. The yellow/blue view is available before switching to desktop.
+
+The existing `PyAutoGUIPointer` platform adapter provides native OS execution and
+Escape detection. The experiment action wrapper rejects out-of-bounds/nonfinite
+coordinates and requires the calibrated drawable size to match the primary desktop
+logical size (avoids Retina pixel/point mismatch). Insufficient evaluation data
+prevents pointer activation. Successful data collection does not imply precision
+sufficient for small buttons. Minimize is platform/window-manager dependent.
+
+macOS requires Accessibility permission for the launching application. A permission
+error stops pointer startup; measurements already saved remain available. Only the
+new isolated environment adds PyAutoGUI 0.9.54 and its dependencies. No real OS
+movement is exercised by automated tests. `pointer-control.json` records successful
+activation after the quality-screen Enter; session metadata distinguishes requested
+live control from measurement, during which OS control remains disabled.
 
 ### Optional trained-location repeatability check
 

@@ -151,7 +151,7 @@ def summarize(rows, expected_trials=6):
     )
 
 
-def draw_quality(pg, screen, font, report, control_pointer=False):
+def draw_quality(pg, screen, font, report, control_pointer=False, repair_offer=None):
     """Show recorded errors; this screen neither refits nor certifies accuracy."""
     size = screen.get_size()
 
@@ -175,11 +175,17 @@ def draw_quality(pg, screen, font, report, control_pointer=False):
             error = stats["mean_error_px"]
             value = f"{error:.0f} px" if error is not None else "veri yok"
             label(
-                f"  {horizontal} {vertical}: {value} | gecerli %{100 * stats['availability']:.0f}",
+                f"  Hedef {trial['trial']} | {horizontal} {vertical}: {value} | gecerli %{100 * stats['availability']:.0f}",
                 y,
             )
             y += 27
-    label("Bu olcum otomatik duzeltme veya guvenilir tiklama onayi degildir.", size[1] - 100)
+    label("Bu olcum otomatik duzeltme veya guvenilir tiklama onayi degildir.", size[1] - 130)
+    if repair_offer is not None:
+        trials = ", ".join(str(i) for i in repair_offer["problem_trials"])
+        label(
+            f"R: en kotu hedefler ({trials}) icin {len(repair_offer['training_indices'])} kalibrasyon noktasi yenile",
+            size[1] - 100,
+        )
     action = (
         "ENTER: imlec hareketi (tiklama KAPALI)"
         if control_pointer
@@ -199,7 +205,7 @@ def read_frame(source):
     return frame
 
 
-def enter_pressed(pg, on_desktop=None):
+def enter_pressed(pg, on_desktop=None, on_repair=None):
     entered = False
     for event in pg.event.get():
         if event.type == pg.QUIT or (event.type == pg.KEYDOWN and event.key == pg.K_ESCAPE):
@@ -208,6 +214,9 @@ def enter_pressed(pg, on_desktop=None):
             entered = True
         if on_desktop is not None and event.type == pg.KEYDOWN and event.key == pg.K_TAB:
             on_desktop()
+        if on_repair is not None and event.type == pg.KEYDOWN and event.key == pg.K_r:
+            on_repair()
+            return True
     return entered
 
 
@@ -403,6 +412,7 @@ def run(args):
                 evaluation_feedback_hidden=True,
                 fallback_frames_rejected=True,
                 repeat_calibration_targets=args.repeat_calibration_targets,
+                repair_calibration_enabled=args.repair_calibration,
             ),
         )
         controller.new_session()
@@ -516,7 +526,77 @@ def run(args):
         print("RESULT: " + json.dumps(metrics), flush=True)
         status = "completed"
 
-        wait_enter(pg, lambda: draw_quality(pg, screen, font, report, args.control_pointer))
+        repair_offer = None
+        if args.repair_calibration and report["sufficient_data"]:
+            from experiments.gazefollower_baseline import repair
+
+            repair_offer = repair.propose(report, labels, size)
+        requested_repair = False
+
+        def request_repair():
+            nonlocal requested_repair
+            requested_repair = True
+
+        draw_quality(pg, screen, font, report, args.control_pointer, repair_offer)
+        pg.event.clear()
+        while not enter_pressed(pg, on_repair=request_repair if repair_offer is not None else None):
+            pg.time.wait(20)
+        if requested_repair:
+            calibration, decision = repair.execute(
+                folder=folder,
+                original=calibration,
+                features=features,
+                labels=labels,
+                proposal=repair_offer,
+                targets=targets,
+                size=size,
+                controller_factory=lambda: controller_type(
+                    config.cali_mode,
+                    config.camera_position,
+                    config.screen_size,
+                    physical_screen_size=None,
+                    eye_blink_threshold=config.eye_blink_threshold,
+                ),
+                observe=observe,
+                draw=draw,
+                poll=lambda: enter_pressed(pg),
+                wait_ready=lambda render: wait_enter(pg, render),
+                usable=lambda face, gaze: eligible(face, gaze, config.eye_blink_threshold),
+                write_new=write_new,
+            )
+
+            def draw_decision():
+                screen.fill((24, 24, 24))
+                label(
+                    "ADAY MODEL SECILDI" if decision["accept_candidate"] else "ESKI MODEL KORUNDU",
+                    40,
+                )
+                if "old_mean_px" in decision:
+                    label(
+                        f"Ayni yeni karelerde: eski {decision['old_mean_px']:.0f} px | aday {decision['candidate_mean_px']:.0f} px",
+                        90,
+                    )
+                reasons = {
+                    "paired_improvement": "Sorunlu bolgeler iyilesti; diger bolgeler korundu.",
+                    "guard_regression": "Diger bolgelerde sapma artti.",
+                    "insufficient_overall_improvement": "Toplam iyilesme yeterli degil.",
+                    "insufficient_problem_improvement": "Sorunlu bolgelerde iyilesme yeterli degil.",
+                    "insufficient_paired_data": "Karsilastirma icin yeterli gecerli veri yok.",
+                    "collection_timeout": "Yeniden toplamada yeterli goz verisi alinamadi.",
+                    "candidate_fit_failed": "Yeni model olusturulamadi.",
+                }
+                label(reasons[decision["reason"]], 140)
+                label("Tek tur tamamlandi. Kayitlar korundu; otomatik tekrar yok.", 190)
+                label(
+                    "ENTER: imlec (tiklama kapali)"
+                    if args.control_pointer
+                    else "ENTER: sari/mavi canli",
+                    size[1] - 70,
+                )
+                label("ESC: kapat", size[1] - 35)
+                pg.display.flip()
+
+            wait_enter(pg, draw_decision)
         if args.control_pointer:
             if not report["sufficient_data"]:
                 return 0
@@ -591,6 +671,11 @@ def main():
     parser.add_argument("--face-model", type=Path, default=SUPPORT / "face_landmarker.task")
     parser.add_argument("--camera-index", type=int)
     parser.add_argument(
+        "--repair-calibration",
+        action="store_true",
+        help="Offer one selective repair round after the six-target quality check",
+    )
+    parser.add_argument(
         "--control-pointer",
         action="store_true",
         help="After quality results and Enter, move OS pointer without clicking",
@@ -603,7 +688,12 @@ def main():
     parser.add_argument(
         "--check", action="store_true", help="Synthetic model inference; no camera/window"
     )
-    return run(parser.parse_args())
+    args = parser.parse_args()
+    if args.repair_calibration and args.repeat_calibration_targets:
+        parser.error(
+            "Selective repair uses the six-target check; omit --repeat-calibration-targets"
+        )
+    return run(args)
 
 
 if __name__ == "__main__":

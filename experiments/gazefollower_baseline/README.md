@@ -112,6 +112,44 @@ movement is exercised by automated tests. `pointer-control.json` records success
 activation after the quality-screen Enter; session metadata distinguishes requested
 live control from measurement, during which OS control remains disabled.
 
+### One-round selective calibration repair
+
+Append `--repair-calibration` (optionally with `--control-pointer`). This requires
+the default six-target check and cannot combine with `--repeat-calibration-targets`.
+After a sufficiently sampled quality check, **R** selects the two highest-error
+validation locations (filtered mean error) and recollects their nearest original
+calibration locations by pixel distance. Coincident selections are deduplicated:
+one or two calibration locations are recollected. **Enter** skips repair and keeps
+the original model. There is no claimed absolute good/bad threshold.
+
+Recollection starts after a separate Enter on its target screen. It uses the same
+upstream 1.5 s settling, 45 accepted frames and 0.5 s completion wait, with a 15 s
+timeout per target. All other training samples stay unchanged in a copied dataset.
+A separate Ridge instance fits once. Original weights/data are never overwritten.
+Initial validation samples do not enter fitting. A timeout retains the original.
+
+A further Enter starts a fresh ~23 s six-target comparison. Old and candidate models
+predict the **same new frames**, without prediction feedback. Selection uses raw,
+unclipped mean pixel distance, equally weighted across targets. Initial filtered
+quality scores are not the baseline for this paired comparison. Fixed initial policy:
+
+- At least 20 valid pairs and 80% paired availability on every target.
+- At least 10% reduction overall and on **each** selected problem target.
+- No other target may worsen by more than 10 px.
+- Failure of any condition keeps the original model; only one repair round exists.
+
+These are engineering selection rules, not statistically validated thresholds or
+a guarantee of accuracy. The comparison selects a model, so its winning score is
+not an independent final accuracy estimate. No silent offset correction, global
+hyperparameter changes, clicks, or repeated optimization are introduced.
+
+The result screen identifies which model will be used and reports old/candidate
+raw errors on the paired comparison. Enter then starts the selected model's live
+view/movement; Escape exits. Fresh session subdirectory `repair-1/` stores the
+proposal/policy/code hash, completed replacement samples, candidate dataset/weights,
+fit diagnostics, comparison plan/rows and `decision.json`. Initial `report.json`
+remains the original quality report, including if repair fails or is cancelled.
+
 ### Optional trained-location repeatability check
 
 Append `--repeat-calibration-targets` to the launch command for the follow-up probe.

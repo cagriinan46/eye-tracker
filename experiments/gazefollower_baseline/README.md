@@ -112,6 +112,40 @@ movement is exercised by automated tests. `pointer-control.json` records success
 activation after the quality-screen Enter; session metadata distinguishes requested
 live control from measurement, during which OS control remains disabled.
 
+### Local live diagnostics
+
+The yellow/blue view and desktop mode now automatically write `live.jsonl` in the
+new session directory. No additional calibration, targets or Enter gates are added.
+Each row links one frame's host monotonic capture time, live mode, eligibility/
+prediction status, raw and filtered pixel estimates, inference duration, active
+model selection and pointer outcome. Estimates remain unclipped. `command_px` is
+the rounded/clamped coordinate passed to a successfully returned backend move call;
+it is **not** an OS cursor readback or proof that the cursor reached that position.
+On a backend exception, the outcome is `backend_error`/`interrupted` with no
+confirmed command coordinate; a failing call might still have had an OS effect.
+Visual-only, invalid and offscreen cases explicitly record why no command was sent.
+
+`live-trace.json` identifies the original or accepted candidate weights by path and
+SHA256 and records the trace policy. `live-trace-summary.json` records logging
+status, row/byte counts, skipped rows and live exit reason. These are separate from
+`completion.json`, whose `completed` status describes the earlier evaluation.
+No images, landmarks or feature vectors are added to the live trace. The files
+remain local participant data under ignored `validation/results/`; do not upload.
+Live data has no independently verified fixation and is not used to calculate
+accuracy, select models, or refit calibration.
+
+Writes use exclusive creation, buffered append and a flush about once per second
+while frames arrive, plus a close flush on normal exit/Escape. There is no per-frame
+terminal output or retained in-memory history. The JSONL file is capped at 32 MiB:
+at the cap a single stderr warning announces that recording stops while live
+control continues; the preserved prefix is never rotated or overwritten.
+Write/flush/close failures propagate and stop live mode through normal resource
+cleanup, with a visible error and a failed summary if storage still permits it.
+Counts describe writes accepted by the buffer, not durable storage guarantees;
+abrupt termination/storage failure can lose buffered rows or leave a partial final
+line and no summary. Disk I/O is synchronous; this change does not claim a measured
+camera FPS or real-world latency improvement.
+
 ### One-round selective calibration repair
 
 Append `--repair-calibration` (optionally with `--control-pointer`). This requires

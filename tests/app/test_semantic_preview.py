@@ -241,3 +241,64 @@ def test_context_mismatch_discards_snapshot_before_next_blocked_scan():
     finally:
         release.set()
         assert feed.close(1)
+
+
+@pytest.mark.parametrize("outcome", ["ok", "failed", "context", "closed"])
+def test_early_refresh_retains_only_unexpired_values_and_clears_on_failure(outcome):
+    provider = Provider()
+    refreshing, release, next_scan = Event(), Event(), Event()
+    now = [1.0]
+    scans = [0]
+
+    @contextmanager
+    def session():
+        scans[0] += 1
+        if scans[0] > 1:
+            next_scan.set()
+            assert provider.release.wait(2)
+        provider.snapshot = snap(now[0])
+        yield provider
+
+    def refresh():
+        refreshing.set()
+        assert release.wait(2)
+        if outcome == "failed":
+            return replace(snap(now[0]), status="incomplete", targets=())
+        return replace(
+            snap(now[0]),
+            snapshot_id="new",
+            context_id=("other" if outcome == "context" else "window"),
+        )
+
+    provider.session = session
+    provider.refresh = refresh
+    feed = PreviewFeed(provider, clock=lambda: now[0], check_seconds=0.001)
+    feed.start()
+    try:
+        wait_until(lambda: feed.latest() is not None)
+        now[0] = 1.21
+        assert refreshing.wait(1)
+        old = feed.latest()
+        assert old.snapshot.captured_at == 1
+        assert old.checked_at == 1.21
+        assert feed.status == "refreshing"
+        # Context expires independently, even before snapshot expiry.
+        preview = SemanticPreview(CONFIG, max_context_age=0.1)
+        assert tick(preview, 1.32, old).status == "unavailable_context"
+        now[0] = 1.41
+        assert feed.latest() is None
+        assert old.checked_at == 1.21
+        if outcome == "closed":
+            assert not feed.close(0)
+        release.set()
+        if outcome == "ok":
+            wait_until(lambda: feed.latest() is not None)
+            assert feed.latest().snapshot.snapshot_id == "new"
+        elif outcome != "closed":
+            assert next_scan.wait(1)
+            assert feed.latest() is None
+    finally:
+        release.set()
+        provider.release.set()
+        assert feed.close(1)
+    assert feed.latest() is None and feed.status == "closed"

@@ -59,16 +59,16 @@ class MacOSAccessibility:
             self.backend if self.backend is not None else AXBackend(self.limits.message_timeout)
         )
         with backend as native:
-            snapshot = MacOSAccessibility(
+            scanner = MacOSAccessibility(
                 backend=nullcontext(native), limits=self.limits, clock=self.clock
-            ).snapshot()
-            session = _DiscoverySession(native, snapshot)
+            )
+            session = _DiscoverySession(native, scanner, self.clock)
             try:
                 yield session
             finally:
                 session.close()
 
-    def snapshot(self):
+    def snapshot(self, *, _identity=None):
         start = self.clock()
         identity = uuid4().hex
         context = screen = None
@@ -142,7 +142,14 @@ class MacOSAccessibility:
                                     raise AXReadError("cyclic hit-test ancestry")
                                 if native.same(hit, node):
                                     targets.append(
-                                        UITarget(str(seen_count), role, visible, True, "press")
+                                        UITarget(
+                                            str(seen_count),
+                                            role,
+                                            visible,
+                                            True,
+                                            "press",
+                                            _identity(node, role, visible) if _identity else None,
+                                        )
                                     )
                                     break
                                 parents.append(hit)
@@ -171,23 +178,87 @@ class MacOSAccessibility:
 
 
 class _DiscoverySession:
-    def __init__(self, native, snapshot):
-        self.snapshot = snapshot
+    """At most four scans / two seconds of native references and identity evidence."""
+
+    def __init__(self, native, scanner, clock):
         self._native = native
+        self._scanner = scanner
+        self._clock = clock
+        self._started = clock()
+        self._scans = 0
+        self._previous = {}
+        self.snapshot = None
+        self.refresh()
 
     def close(self):
         self._native = None
+        self._previous.clear()
+
+    def _alive(self):
+        now = self._clock()
+        if self._native is not None and isfinite(now) and 0 <= now - self._started < 2:
+            return True
+        self.close()
+        return False
+
+    def refresh(self):
+        if not self._alive() or self._scans >= 4:
+            self.close()
+            return None
+        if self.snapshot is not None and self.current_context() is None:
+            return None
+        native = self._native
+        current = {}
+        identity_hash = getattr(native, "identity_hash", lambda node: 0)
+
+        def identity(node, role, rect):
+            # Only enabled, hit-tested press targets reach this callback.
+            bucket = identity_hash(node)
+            token = (
+                next(
+                    (
+                        token
+                        for old, old_role, old_rect, token in self._previous.get(bucket, ())
+                        if native.same(node, old) and role == old_role and rect == old_rect
+                    ),
+                    None,
+                )
+                or uuid4().hex
+            )
+            current.setdefault(bucket, []).append((node, role, rect, token))
+            return token
+
+        self._scans += 1
+        previous = self.snapshot
+        result = self._scanner.snapshot(_identity=identity)
+        self.snapshot = result
+        if (
+            result.status != "ok"
+            or not self._alive()
+            or (
+                previous is not None
+                and (previous.context_id != result.context_id or previous.screen != result.screen)
+            )
+            or self.current_context() is None
+        ):
+            self.close()
+            if result.status == "ok":
+                return None
+        else:
+            self._previous = current
+        return result
 
     def current_context(self):
-        native = self._native
-        if native is None or self.snapshot.status != "ok":
+        if not self._alive() or self.snapshot is None or self.snapshot.status != "ok":
             return None
+        native = self._native
         try:
             if (
                 native.trusted()
                 and native.context() == self.snapshot.context_id
                 and native.screen() == self.snapshot.screen
                 and native.context() == self.snapshot.context_id
+                and self._alive()
             ):
                 return self.snapshot.context_id
         except AXReadError:

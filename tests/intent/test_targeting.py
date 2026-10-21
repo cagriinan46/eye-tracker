@@ -228,3 +228,63 @@ def test_delivery_gap_alone_restarts_evidence():
     acquire(resolver)
     result = resolver.update(GazePoint(125, 110, 1.13), snapshot(), now=1.25, context_id="window")
     assert result.status == "pending" and result.target is None
+
+
+def test_verified_identity_preserves_evidence_across_complete_refresh():
+    resolver = TargetResolver(CONFIG)
+    target = replace(BUTTON, continuity_id="lease/control")
+    original = snapshot(target)
+    assert acquire(resolver, original).target == target
+    refreshed_target = replace(target, target_id="new-local-id")
+    refreshed = replace(original, snapshot_id="next", captured_at=1.1, targets=(refreshed_target,))
+    assert update(resolver, 1.13, refreshed).target == refreshed_target
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"continuity_id": "replacement"},
+        {"rect": TargetRect(101, 100, 20, 20)},
+        {"role": "link"},
+        {"continuity_id": None},
+    ],
+)
+def test_continuity_requires_same_identity_and_properties(changes):
+    resolver = TargetResolver(CONFIG)
+    target = replace(BUTTON, continuity_id="lease/control")
+    acquire(resolver, snapshot(target))
+    refreshed = replace(snapshot(replace(target, **changes)), snapshot_id="next", captured_at=1.1)
+    assert update(resolver, 1.13, refreshed).status == "pending"
+
+
+def test_continuity_does_not_override_competition_or_time_regression():
+    target = replace(BUTTON, continuity_id="lease/control")
+    resolver = TargetResolver(CONFIG)
+    acquire(resolver, snapshot(target))
+    rival = replace(BUTTON, target_id="rival")
+    refreshed = replace(snapshot(target, rival), snapshot_id="next", captured_at=1.1)
+    assert update(resolver, 1.13, refreshed).status == "ambiguous"
+    resolver.reset()
+    acquire(resolver, snapshot(target))
+    older = replace(snapshot(target), snapshot_id="older", captured_at=0.99)
+    assert update(resolver, 1.13, older).status == "invalid_time"
+
+
+def test_four_scan_synthetic_stream_reduces_reacquisition_without_changing_gaze():
+    from dataclasses import replace
+
+    counts = {}
+    for token in (None, "verified-native-control"):
+        resolver = TargetResolver(CONFIG)
+        candidates = 0
+        for index in range(32):
+            time = 1 + index * 0.025
+            scan = index // 8
+            target = replace(BUTTON, target_id=str(scan), continuity_id=token)
+            current = replace(snapshot(target), snapshot_id=str(scan), captured_at=1 + scan * 0.2)
+            decision = update(resolver, time, current)
+            candidates += decision.status == "candidate"
+        counts[token] = candidates
+    assert counts["verified-native-control"] > counts[None]
+    # The initial acquisition remains mandatory with verified identity as well.
+    assert counts["verified-native-control"] < 32

@@ -303,3 +303,103 @@ def test_default_scan_covers_measured_thousand_node_ui():
     backend.tree[groups[-1]].append("button")
     result = MacOSAccessibility(backend=backend, clock=lambda: 1).snapshot()
     assert result.status == "ok" and len(result.targets) == 1
+
+
+def test_session_refresh_preserves_native_identity_but_not_position_only():
+    backend = Backend()
+    backend.identity_hash = lambda node: 0  # Collisions never prove identity.
+    with MacOSAccessibility(backend=backend).session() as session:
+        first = session.snapshot.targets[0]
+        assert first.continuity_id
+        first_snapshot_id = session.snapshot.snapshot_id
+        second = session.refresh()
+        assert second.snapshot_id != first_snapshot_id
+        assert second.targets[0].continuity_id == first.continuity_id
+        backend.tree["window"] = ["replacement"]
+        backend.info["replacement"] = backend.info["button"]
+        backend.hit = "replacement"
+        third = session.refresh()
+        assert third.targets[0].rect == first.rect
+        assert third.targets[0].continuity_id != first.continuity_id
+
+
+def test_session_does_not_bridge_target_disappearance():
+    backend = Backend()
+    with MacOSAccessibility(backend=backend).session() as session:
+        token = session.snapshot.targets[0].continuity_id
+        backend.tree["window"] = []
+        assert session.refresh().targets == ()
+        backend.tree["window"] = ["button"]
+        assert session.refresh().targets[0].continuity_id != token
+
+
+def test_refresh_failure_invalidates_session_and_tokens():
+    backend = Backend()
+    with MacOSAccessibility(backend=backend).session() as session:
+        backend.truncated = True
+        assert session.refresh().status == "incomplete"
+        backend.truncated = False
+        assert session.current_context() is None
+        assert session.refresh() is None
+
+
+def test_native_session_scan_and_time_bounds():
+    backend = Backend()
+    now = [1]
+    with MacOSAccessibility(backend=backend, clock=lambda: now[0]).session() as session:
+        for _ in range(3):
+            assert session.refresh().status == "ok"
+        assert session.refresh() is None
+        assert session.current_context() is None
+    with MacOSAccessibility(backend=Backend(), clock=lambda: now[0]).session() as session:
+        now[0] = 3.01
+        assert session.current_context() is None
+        assert session.refresh() is None
+
+
+def test_one_shot_does_not_claim_cross_snapshot_identity():
+    assert collect(Backend()).targets[0].continuity_id is None
+
+
+@pytest.mark.parametrize(
+    "change", ["geometry", "role", "disabled", "occluded", "context", "screen"]
+)
+def test_session_refresh_requires_unchanged_visible_control_and_context(change):
+    backend = Backend()
+    with MacOSAccessibility(backend=backend).session() as session:
+        first = session.snapshot.targets[0].continuity_id
+        role, rect, enabled, actions = backend.info["button"]
+        if change == "geometry":
+            rect = TargetRect(21, 20, 40, 40)
+        elif change == "role":
+            role = "AXCheckBox"
+        elif change == "disabled":
+            enabled = False
+        elif change == "occluded":
+            backend.hit = None
+        elif change == "context":
+            backend.changed = True
+        elif change == "screen":
+            backend.screen = lambda: TargetRect(0, 0, 800, 600)
+        backend.info["button"] = role, rect, enabled, actions
+        result = session.refresh()
+        if change in {"context", "screen"}:
+            assert result is None and session.current_context() is None
+        elif change in {"disabled", "occluded"}:
+            assert result.targets == ()
+        else:
+            assert result.targets[0].continuity_id != first
+
+
+def test_native_alias_across_scans_keeps_identity_and_exit_invalidates():
+    backend = Backend()
+    backend.identity_hash = lambda node: 0
+    backend.same = lambda a, b: a == b or {a, b} == {"button", "alias"}
+    with MacOSAccessibility(backend=backend).session() as session:
+        token = session.snapshot.targets[0].continuity_id
+        backend.tree["window"] = ["alias"]
+        backend.info["alias"] = backend.info["button"]
+        backend.hit = "alias"
+        assert session.refresh().targets[0].continuity_id == token
+    assert backend.closed
+    assert session.refresh() is None

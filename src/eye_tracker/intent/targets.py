@@ -49,8 +49,13 @@ class UITarget:
     rect: TargetRect
     enabled: bool
     category: str
+    continuity_id: str | None = None
 
     def __post_init__(self):
+        if self.continuity_id is not None and (
+            not isinstance(self.continuity_id, str) or not self.continuity_id
+        ):
+            raise ValueError("continuity identity must be a nonempty string or None")
         if not self.target_id or not self.role or not self.category:
             raise ValueError("target identity, role and category are required")
         if not isinstance(self.rect, TargetRect) or type(self.enabled) is not bool:
@@ -89,3 +94,6 @@ class UISnapshot:
             raise ValueError("complete snapshot requires context and screen")
         if len({t.target_id for t in self.targets}) != len(self.targets):
             raise ValueError("duplicate target identities")
+        tokens = [t.continuity_id for t in self.targets if t.continuity_id is not None]
+        if len(set(tokens)) != len(tokens):
+            raise ValueError("duplicate continuity identities")

@@ -1,6 +1,7 @@
 """Bounded one-shot discovery. Not a camera-loop service or an action adapter."""
 
 from collections import deque
+from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
 from math import isfinite
 from time import monotonic
@@ -46,6 +47,26 @@ class MacOSAccessibility:
         self.backend = backend
         self.limits = limits or DiscoveryLimits()
         self.clock = clock
+
+    @contextmanager
+    def session(self):
+        """Thread-confined, ephemeral native references for context revalidation.
+
+        Consumers receive only immutable values; never share this session across
+        threads or retain it after exit. Existing one-shot snapshot() is unchanged.
+        """
+        backend = (
+            self.backend if self.backend is not None else AXBackend(self.limits.message_timeout)
+        )
+        with backend as native:
+            snapshot = MacOSAccessibility(
+                backend=nullcontext(native), limits=self.limits, clock=self.clock
+            ).snapshot()
+            session = _DiscoverySession(native, snapshot)
+            try:
+                yield session
+            finally:
+                session.close()
 
     def snapshot(self):
         start = self.clock()
@@ -141,3 +162,29 @@ class MacOSAccessibility:
             return result("unavailable")
         except AXReadError:
             return result("incomplete")
+
+
+class _DiscoverySession:
+    def __init__(self, native, snapshot):
+        self.snapshot = snapshot
+        self._native = native
+
+    def close(self):
+        self._native = None
+
+    def current_context(self):
+        native = self._native
+        if native is None or self.snapshot.status != "ok":
+            return None
+        try:
+            if (
+                native.trusted()
+                and native.context() == self.snapshot.context_id
+                and native.screen() == self.snapshot.screen
+                and native.context() == self.snapshot.context_id
+            ):
+                return self.snapshot.context_id
+        except AXReadError:
+            pass
+        self.close()
+        return None

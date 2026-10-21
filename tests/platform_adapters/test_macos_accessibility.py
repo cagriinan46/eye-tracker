@@ -203,3 +203,42 @@ def test_default_scan_completes_large_tree_before_offering_target():
     result = MacOSAccessibility(backend=backend, clock=lambda: 1).snapshot()
     assert result.status == "ok"
     assert len(result.targets) == 1
+
+
+def test_session_retains_context_until_exit_then_rejects_use():
+    backend = Backend()
+    provider = MacOSAccessibility(backend=backend)
+    with provider.session() as session:
+        assert session.snapshot.status == "ok"
+        assert not backend.closed
+        assert session.current_context() == session.snapshot.context_id
+    assert backend.closed
+    assert session.current_context() is None
+
+
+@pytest.mark.parametrize("change", ["window", "screen", "permission"])
+def test_session_invalidates_permanently_on_context_change(change):
+    backend = Backend()
+    with MacOSAccessibility(backend=backend).session() as session:
+        original_screen = backend.screen
+        if change == "window":
+            backend.changed = True
+        elif change == "screen":
+            backend.screen = lambda: TargetRect(0, 0, 2000, 800)
+        else:
+            backend.permission = False
+        assert session.current_context() is None
+        backend.changed = False
+        backend.screen = original_screen
+        backend.permission = True
+        assert session.current_context() is None
+    assert backend.closed
+
+
+def test_failed_discovery_session_never_offers_context():
+    backend = Backend()
+    backend.truncated = True
+    with MacOSAccessibility(backend=backend).session() as session:
+        assert session.snapshot.status == "incomplete"
+        assert session.current_context() is None
+    assert backend.closed

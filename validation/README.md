@@ -59,6 +59,12 @@ multiple displays are not supported. `ok` means this scoped traversal completed;
 it does not assert that all visible UI is represented. A snapshot's identities are
 local to that snapshot, not persistent labels for later gaze tracking.
 
+If Chrome toolbar controls are found but web controls are not, see the
+[camera-free Chrome capability diagnostic](chrome-accessibility.md). A controlled
+browser launched with full renderer accessibility exposed the expected web-control
+actions without relaxing production selection checks. This is an opt-in test setup,
+not automatic support for existing Chrome sessions or all websites.
+
 Targets require enabled state, valid window/screen-clipped geometry and native
 hit-testing at their proposed center. A hit on a descendant needs bounded ancestry
 verification. This proves the center at the instant of the read, not visibility of

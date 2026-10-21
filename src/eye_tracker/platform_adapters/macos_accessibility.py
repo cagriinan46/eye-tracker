@@ -103,8 +103,10 @@ class MacOSAccessibility:
                             parents = []
                             for _ in range(self.limits.max_depth):
                                 budget()
-                                if hit is None or any(native.same(hit, old) for old in parents):
+                                if hit is None:
                                     break
+                                if any(native.same(hit, old) for old in parents):
+                                    raise AXReadError("cyclic hit-test ancestry")
                                 if native.same(hit, node):
                                     targets.append(
                                         UITarget(str(len(seen)), role, visible, True, "press")
@@ -112,6 +114,9 @@ class MacOSAccessibility:
                                     break
                                 parents.append(hit)
                                 hit = native.parent(hit)
+                            else:
+                                if hit is not None:
+                                    raise AXReadError("hit-test ancestry cap")
                     budget()
                     children, truncated = native.children(node, self.limits.max_children)
                     if truncated or (children and depth >= self.limits.max_depth):

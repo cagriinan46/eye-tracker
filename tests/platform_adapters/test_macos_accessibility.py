@@ -163,3 +163,15 @@ def test_rect_is_clipped_to_window():
 def test_invalid_limits(kwargs):
     with pytest.raises(ValueError):
         DiscoveryLimits(**kwargs)
+
+
+@pytest.mark.parametrize("cycle", [False, True])
+def test_unresolved_competitor_discards_previously_verified_target(cycle):
+    backend = Backend()
+    backend.tree["window"] = ["button", "second"]
+    backend.info["second"] = ("AXButton", TargetRect(70, 20, 40, 40), True, ("AXPress",))
+    backend.hit_test = lambda x, y: "button" if x < 60 else "label"
+    backend.parents = {"label": "parent", "parent": "label" if cycle else "second"}
+    result = collect(backend, max_depth=2)
+    assert result.status == "incomplete"
+    assert result.targets == ()

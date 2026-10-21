@@ -48,3 +48,26 @@ def test_native_owned_references_release_in_reverse_order():
     backend.__exit__(None, None, None)
     assert released == [33, 22, 11]
     assert backend.owned == []
+
+
+def test_context_uses_frontmost_pid_and_detects_window_changes():
+    backend = AXBackend()
+    backend._frontmost_pid = lambda: 42
+    backend.create_application = lambda pid: ("app", pid)
+    backend._own = lambda p: p
+    backend._element = lambda p: p
+    backend.same = lambda a, b: a == b
+    backend._attr = lambda node, name: (
+        "window-one" if name == "AXFocusedWindow" else pytest.fail("unexpected attribute")
+    )
+    first = backend.context()
+    assert first is not None
+    assert backend.context() == first
+    backend._attr = lambda node, name: "window-two"
+    assert backend.context() != first
+
+
+def test_no_foreground_application_has_no_context():
+    backend = AXBackend()
+    backend._frontmost_pid = lambda: None
+    assert backend.context() is None

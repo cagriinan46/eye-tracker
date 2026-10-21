@@ -2,6 +2,7 @@
 
 import ctypes as C
 import sys
+from uuid import uuid4
 
 from eye_tracker.intent.targets import TargetRect
 
@@ -34,6 +35,7 @@ class AXBackend:
         self.owned = []
         self.keys = {}
         self.initial_context = None
+        self.context_id = uuid4().hex
 
     def __enter__(self):
         if sys.platform != "darwin":
@@ -87,6 +89,7 @@ class AXBackend:
         self.boolean = bind(cf, "CFBooleanGetValue", [p], C.c_bool)
         self.trusted = bind(ax, "AXIsProcessTrusted", [], C.c_bool)
         self.create_system = bind(ax, "AXUIElementCreateSystemWide", [], p)
+        self.create_application = bind(ax, "AXUIElementCreateApplication", [C.c_int], p)
         self.copy_attr = bind(ax, "AXUIElementCopyAttributeValue", [p, p, C.POINTER(p)], error)
         self.count_attr = bind(
             ax, "AXUIElementGetAttributeValueCount", [p, p, C.POINTER(index)], error
@@ -161,10 +164,21 @@ class AXBackend:
             raise AXReadError("array exceeds bounded request")
         return tuple(self.array_item(p, n) for n in range(size))
 
+    def _frontmost_pid(self):
+        # Cocoa is already supplied by the desktop dependency stack. Keep it
+        # optional/lazy so pure contracts and fake tests work on every OS.
+        try:
+            from AppKit import NSWorkspace
+        except ImportError as error:
+            raise AXUnavailable("desktop Cocoa bridge unavailable") from error
+        app = NSWorkspace.sharedWorkspace().frontmostApplication()
+        return int(app.processIdentifier()) if app is not None else None
+
     def context(self):
-        app = self._element(self._attr(self.system, "AXFocusedApplication"))
-        if app is None:
+        pid = self._frontmost_pid()
+        if pid is None:
             return None
+        app = self._own(self.create_application(pid))
         window = self._element(self._attr(app, "AXFocusedWindow"))
         if window is None:
             return None
@@ -172,7 +186,7 @@ class AXBackend:
             self.initial_context = app, window
             self.app, self.window = app, window
         a, w = self.initial_context
-        return "foreground" if self.same(app, a) and self.same(window, w) else "changed"
+        return self.context_id if self.same(app, a) and self.same(window, w) else None
 
     def roots(self):
         menu = self._element(self._attr(self.app, "AXMenuBar"))

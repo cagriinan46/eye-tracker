@@ -621,9 +621,12 @@ Do not create a generic `ai/` module merely because AI may be used.
 
 ---
 
-## 20. Future Semantic Interaction
+## 20. Phase 2 Semantic Interaction
 
-Semantic gaze / UI-aware target correction is an approved future direction but is not part of the initial implementation.
+Semantic gaze / UI-aware target correction is an approved Phase 2 investigation
+following the user-approved 2026-10-21 roadmap update. It follows the measured
+coordinate-only baseline and precedes gesture/intent expansion. The intended scope
+is accessible desktop applications, not a browser-only integration.
 
 It may eventually introduce a component responsible for:
 
@@ -632,9 +635,13 @@ It may eventually introduce a component responsible for:
 * combining approximate gaze with UI context,
 * estimating the most probable intended target.
 
-Its exact architectural placement remains TBD until the baseline gaze system has been evaluated.
+Its exact persistent architectural placement still requires human review. The
+[proposed first-slice design](superpowers/specs/2026-10-21-semantic-gaze-design.md)
+records the read-only feasibility findings and a proposed platform/intent boundary;
+that proposal is not an accepted architectural decision.
 
-Do not add implementation-specific modules for it yet.
+Read-only feasibility probes may inform this decision. Do not add persistent
+implementation-specific modules until the architectural proposal is reviewed.
 
 ---
 

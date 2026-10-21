@@ -6,6 +6,16 @@ This roadmap describes the major engineering phases of the 28-week graduation pr
 
 The roadmap remains intentionally high-level. Detailed implementation work will be represented later as GitHub Issues.
 
+## Approved Sequence Update — 2026-10-21
+
+Semantic / UI-Aware Gaze moves from Phase 7 to Phase 2. Former Phases 2–6
+move to 3–7; Phases 0–1 and 8–11 retain their order. This is a user-approved
+priority change, not a claim that the preceding phases are complete.
+
+Before semantic development, the working source was preserved at
+`checkpoint/pre-semantic-2026-10-21` (`3be40615f3c4119e45ce7470edc2768449bf586f`).
+See [exact recovery commands and local-state limits](recovery/pre-semantic-2026-10-21.md).
+
 ## Overall Academic Timeline
 
 * Graduation Project I: 14 weeks
@@ -108,7 +118,46 @@ A user can complete a defined cursor-targeting experiment using gaze input, and 
 
 ---
 
-## Phase 2 — Gesture and Intent Interaction
+## Phase 2 — Semantic / UI-Aware Gaze
+
+**Primary term:** Graduation Project I (bounded first version); later expansion in Project II
+
+### Goal
+
+Investigate whether approximate gaze can be combined with accessible UI information to improve target selection.
+
+### Possible Capabilities
+
+* identify accessible UI elements near an estimated gaze point,
+* identify actionable targets,
+* rank probable intended targets,
+* snap or correct gaze selection toward an intended interface element.
+
+The user approved moving this phase before gesture/intent interaction on 2026-10-21.
+The scope is accessible desktop UI across applications, not a browser-specific feature.
+The first version should resolve and display a probable target without activating it;
+gestures and confirmation remain the responsibility of Phase 3.
+
+Begin with bounded, read-only macOS accessibility feasibility checks. Preserve the
+coordinate-only baseline, record unavailable/ambiguous targets explicitly, and compare
+correct target selection, wrong-target selection, abstention, stability and latency.
+Reading an accessibility element does not prove that it is visible or selectable.
+Unsupported/custom-drawn UI must not be advertised as covered.
+
+The exact persistent architecture remains subject to human review. See the
+[proposed first-slice design](superpowers/specs/2026-10-21-semantic-gaze-design.md).
+This bounded investigation must not displace the required first-term text-input and
+safe hardware prototype; broad semantic coverage can continue later.
+
+### Exit Criteria
+
+The semantic approach can be experimentally compared against baseline coordinate-only gaze targeting.
+
+If it does not provide meaningful value, it should not be retained solely for feature count.
+
+---
+
+## Phase 3 — Gesture and Intent Interaction
 
 **Primary term:** Graduation Project I
 
@@ -134,7 +183,7 @@ A user can perform core pointer actions using gaze plus at least one intentional
 
 ---
 
-## Phase 3 — Adaptive Interaction and User Profiles
+## Phase 4 — Adaptive Interaction and User Profiles
 
 **Primary term:** Graduation Project I
 
@@ -166,7 +215,7 @@ gaze + head gesture or dwell
 
 ---
 
-## Phase 4 — Accessible Text Input
+## Phase 5 — Accessible Text Input
 
 **Primary term:** Graduation Project I
 
@@ -189,7 +238,7 @@ A user can enter a defined Turkish text sample without using a physical keyboard
 
 ---
 
-## Phase 5 — Assistive Hardware Integration
+## Phase 6 — Assistive Hardware Integration
 
 **Primary term:** Graduation Project I
 
@@ -232,7 +281,7 @@ Graduation Project I should end with a working system, not only documentation or
 
 ---
 
-## Phase 6 — Accuracy, Reliability, and Robustness
+## Phase 7 — Accuracy, Reliability, and Robustness
 
 **Primary term:** Graduation Project II
 
@@ -256,31 +305,6 @@ Exact optimization methods should be chosen based on measured bottlenecks rather
 ### Exit Criteria
 
 The improved system demonstrates measurable improvement against the Graduation Project I baseline in selected metrics.
-
----
-
-## Phase 7 — Semantic / UI-Aware Gaze
-
-**Primary term:** Graduation Project II
-
-### Goal
-
-Investigate whether approximate gaze can be combined with accessible UI information to improve target selection.
-
-### Possible Capabilities
-
-* identify accessible UI elements near an estimated gaze point,
-* identify actionable targets,
-* rank probable intended targets,
-* snap or correct gaze selection toward an intended interface element.
-
-The exact implementation is intentionally TBD.
-
-### Exit Criteria
-
-The semantic approach can be experimentally compared against baseline coordinate-only gaze targeting.
-
-If it does not provide meaningful value, it should not be retained solely for feature count.
 
 ---
 

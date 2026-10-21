@@ -70,9 +70,96 @@ class MoveOnlyPointer:
     def update(self, point):
         self.backend.check_stop()
         point = finite_point(point)
-        if point is None or not all(0 <= v < limit for v, limit in zip(point, self.size)):
-            return
-        self.backend.move(*(min(limit - 1, round(v)) for v, limit in zip(point, self.size)))
+        if point is None:
+            return dict(command_px=None, movement_status="invalid_prediction")
+        if not all(0 <= v < limit for v, limit in zip(point, self.size)):
+            return dict(command_px=None, movement_status="offscreen")
+        command = [min(limit - 1, round(v)) for v, limit in zip(point, self.size)]
+        self.backend.move(*command)
+        return dict(command_px=command, movement_status="sent")
+
+
+def live_view(
+    *,
+    pg,
+    folder,
+    calibration,
+    controller,
+    filter_type,
+    threshold,
+    observe,
+    draw,
+    targets,
+    pointer,
+    pointer_backend,
+    model_info,
+):
+    """Existing live flow with same-frame diagnostics, excluded from accuracy scores."""
+    from experiments.gazefollower_baseline.live_trace import LiveTrace
+
+    target_index = 0
+    live_targets = [(0.5, 0.5)] + [tuple(p) for p in targets]
+    smooth = filter_type()
+    desktop = False
+
+    def show_desktop():
+        nonlocal desktop
+        if pg.display.iconify():
+            desktop = True
+            print("DESKTOP: gaze moves pointer; no clicks. Global ESC stops.", flush=True)
+
+    with LiveTrace(folder, model_info) as trace:
+        while True:
+            if pointer_backend is not None:
+                pointer_backend.check_stop()
+            if enter_pressed(pg, on_desktop=show_desktop if pointer is not None else None):
+                target_index = (target_index + 1) % len(live_targets)
+            _, face, gaze, inference_ms, captured_at = observe()
+            raw = blue = None
+            validity = "ineligible"
+            if eligible(face, gaze, threshold):
+                validity = "prediction_invalid"
+                ok, normalized = calibration.predict(gaze.features, gaze.raw_gaze_coordinates)
+                raw = finite_point(controller.convert_to_pixel(normalized)) if ok else None
+                if raw is not None:
+                    blue = finite_point(smooth.filter_values(raw))
+                    validity = "valid" if blue is not None else "filter_invalid"
+            else:
+                smooth = filter_type()
+            row = dict(
+                captured_monotonic_s=captured_at,
+                mode="desktop" if desktop else "yellow_blue",
+                active_model=model_info["selection"],
+                validity=validity,
+                face_detected=bool(face.status),
+                raw_px=raw,
+                filtered_px=blue,
+                inference_ms=inference_ms,
+                command_px=None,
+                movement_status="disabled",
+                movement_error=None,
+            )
+            move_started = time.monotonic()
+            try:
+                if pointer is not None:
+                    row.update(pointer.update(blue))
+            except Exception as exc:
+                row.update(
+                    movement_status="interrupted"
+                    if isinstance(exc, InterruptedError)
+                    else "backend_error",
+                    movement_error=type(exc).__name__,
+                )
+                raise
+            finally:
+                row["movement_ms"] = (time.monotonic() - move_started) * 1000
+                trace.record(row)
+            if not desktop:
+                draw(
+                    live_targets[target_index],
+                    "CANLI | ENTER: sonraki hedef | Sonuclar kaydedildi",
+                    blue,
+                )
 
 
 def evaluation_schedule(labels, unseen, repeat=False):
@@ -532,6 +619,7 @@ def run(args):
 
             repair_offer = repair.propose(report, labels, size)
         requested_repair = False
+        active_model = "original"
 
         def request_repair():
             nonlocal requested_repair
@@ -564,6 +652,8 @@ def run(args):
                 usable=lambda face, gaze: eligible(face, gaze, config.eye_blink_threshold),
                 write_new=write_new,
             )
+            if decision["accept_candidate"]:
+                active_model = "candidate"
 
             def draw_decision():
                 screen.fill((24, 24, 24))
@@ -614,40 +704,27 @@ def run(args):
                 ),
             )
 
-        # The optional live view is excluded from accuracy measurements.
-        target_index = 0
-        live_targets = [(0.5, 0.5)] + [tuple(p) for p in targets]
-        smooth = filter_type()
-        desktop = False
-
-        def show_desktop():
-            nonlocal desktop
-            if pg.display.iconify():
-                desktop = True
-                print("DESKTOP: gaze moves pointer; no clicks. Global ESC stops.", flush=True)
-
-        while True:
-            if pointer_backend is not None:
-                pointer_backend.check_stop()
-            if enter_pressed(pg, on_desktop=show_desktop if pointer is not None else None):
-                target_index = (target_index + 1) % len(live_targets)
-            _, face, gaze, _, _ = observe()
-            blue = None
-            if eligible(face, gaze, config.eye_blink_threshold):
-                ok, normalized = calibration.predict(gaze.features, gaze.raw_gaze_coordinates)
-                point = finite_point(controller.convert_to_pixel(normalized)) if ok else None
-                if point is not None:
-                    blue = finite_point(smooth.filter_values(point))
-            else:
-                smooth = filter_type()
-            if pointer is not None:
-                pointer.update(blue)
-            if not desktop:
-                draw(
-                    live_targets[target_index],
-                    "CANLI | ENTER: sonraki hedef | Sonuclar kaydedildi",
-                    blue,
-                )
+        weights_file = (
+            "repair-1/candidate-weights.npy" if active_model == "candidate" else "ridge_weights.npy"
+        )
+        live_view(
+            pg=pg,
+            folder=folder,
+            calibration=calibration,
+            controller=controller,
+            filter_type=filter_type,
+            threshold=config.eye_blink_threshold,
+            observe=observe,
+            draw=draw,
+            targets=targets,
+            pointer=pointer,
+            pointer_backend=pointer_backend,
+            model_info=dict(
+                selection=active_model,
+                weights_file=weights_file,
+                weights_sha256=hashlib.sha256((folder / weights_file).read_bytes()).hexdigest(),
+            ),
+        )
     except InterruptedError:
         if status != "completed":
             status = "cancelled"

@@ -29,3 +29,50 @@ The JSON report includes camera index/resolution, target-window image dimensions
 Experiment 006 used an **experimental** blink/near-closure gate. The production Vision/Gaze path has no validated blink filter or blendshape signal in its public contracts, so this harness **does not apply that gate**. Missing frames, missing face, and invalid features are not filled in; unavailable estimates are counted. Comparisons with Experiment 006 must mention this difference. The harness also reports total reads and no-face observations including settling, unlike Experiment 006's sampling-frame count.
 
 No raw camera images or video are saved or uploaded. An optional local JSON contains derived target/prediction metrics, which may still be sensitive and must not be committed. One person/session cannot establish general accuracy, accessibility usability, production readiness, cross-session calibration persistence, or multi-user validity. Record Çağrı's result in the PR, then Fatih's independent run separately before merge; do not average the users together.
+
+## Read-only semantic target discovery
+
+From the repository root, using the existing desktop-enabled Python environment:
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src:. \
+  ~/.virtualenvs/eye-tracker-gazefollower-20261019/bin/python \
+  -m validation.semantic_targets
+```
+
+This performs one bounded scan of the **currently foreground application's focused
+window** and its menu bar. It does not switch applications, open the camera, request
+permissions, move the pointer, change focus, or activate any control. macOS access
+uses ApplicationServices/CoreFoundation and the Cocoa bridge already installed by
+this project's desktop stack; missing Cocoa or accessibility access yields an
+unavailable result, without downloading/installing anything.
+
+The JSON contains status, target/role counts, elapsed time and limits. It omits UI
+text, URLs, values, coordinates, application/window identifiers and native handles.
+Exit 0 means the scan completed (possibly zero targets); exit 2 means unavailable,
+incomplete, changed context or unsupported coordinates. No output file is created.
+
+Initial scope: one active display; pressable buttons, checkboxes, radio buttons,
+popup buttons and links exposed in the foreground window's AX tree. Closed menu
+subtrees are skipped. Menu items, custom-drawn controls, text editing, dragging and
+multiple displays are not supported. `ok` means this scoped traversal completed;
+it does not assert that all visible UI is represented. A snapshot's identities are
+local to that snapshot, not persistent labels for later gaze tracking.
+
+Targets require enabled state, valid window/screen-clipped geometry and native
+hit-testing at their proposed center. A hit on a descendant needs bounded ancestry
+verification. This proves the center at the instant of the read, not visibility of
+the full rectangle or future validity. Snapshots do not authorize actions.
+
+Default limits: 512 nodes, depth 20, 128 children per node, a cooperative 0.5-second
+scan budget and 50 ms IPC timeouts. Truncation/errors discard **all** candidate
+results; increasing coverage requires measured follow-up work, not treating a
+partial tree as complete. A native call sequence can exceed the cooperative budget;
+this command is not a realtime camera-loop service. Complex applications may
+consistently return `incomplete` at these limits.
+
+Portable contracts and fake-backend failure tests run without macOS. Native smoke
+checks are opt-in. Discovery is only the first semantic slice: target ranking,
+background refresh, live highlights, snapping and user accuracy evaluation remain
+separate work. Existing live traces have no intended-target labels and cannot prove
+semantic selection improvement.

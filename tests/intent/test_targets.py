@@ -58,3 +58,16 @@ def test_snapshot_requires_known_status_finite_time_and_complete_context():
             UISnapshot("s", time, context, screen, (), status)
     with pytest.raises(TypeError):
         UISnapshot("s", 1, "c", rect, [], "ok")
+
+
+def test_continuity_tokens_are_optional_nonempty_and_unique():
+    from dataclasses import replace
+
+    rect = TargetRect(0, 0, 100, 100)
+    target = UITarget("a", "button", rect, True, "press", "verified")
+    for value in ("", 1, False):
+        with pytest.raises(ValueError):
+            replace(target, continuity_id=value)
+    with pytest.raises(ValueError, match="duplicate continuity"):
+        UISnapshot("s", 1, "c", rect, (target, replace(target, target_id="b")), "ok")
+    assert replace(target, continuity_id=None).continuity_id is None

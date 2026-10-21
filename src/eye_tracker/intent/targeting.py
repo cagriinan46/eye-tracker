@@ -1,7 +1,7 @@
 """Pure, non-activating target selection in the snapshot's logical coordinates.
 
 Times must use one monotonic clock. Callers supply current context independently
-of the snapshot. No identity or temporal evidence survives snapshot replacement.
+of the snapshot. Only explicit provider-verified continuity can bridge snapshot replacement.
 """
 
 from dataclasses import dataclass, fields
@@ -110,11 +110,7 @@ def select_target(
 
 
 class TargetResolver:
-    """Consecutive separated evidence, scoped to an unchanged immutable snapshot.
-
-    New snapshots restart acquisition even if target IDs/geometry look identical:
-    discovery identities are snapshot-local. A future tracker needs its own design.
-    """
+    """Separated evidence; optional native-verified tokens bridge complete scans."""
 
     def __init__(self, config: TargetingConfig):
         self.config = config
@@ -125,6 +121,7 @@ class TargetResolver:
         self._started_at = None
         self._last_sample = None
         self._last_update = None
+        self._last_snapshot_time = None
 
     def update(
         self,
@@ -139,7 +136,9 @@ class TargetResolver:
             self.reset()
             return failure
         if self._last_sample is not None and (
-            gaze.captured_at <= self._last_sample or now <= self._last_update
+            gaze.captured_at <= self._last_sample
+            or now <= self._last_update
+            or snapshot.captured_at < self._last_snapshot_time
         ):
             self.reset()
             return TargetDecision("invalid_time")
@@ -147,7 +146,19 @@ class TargetResolver:
             self.reset()
             return TargetDecision("ambiguous")
         target = ranked[0][1]
-        key = (snapshot, target.target_id, context_id)
+        key = (
+            (
+                target.continuity_id,
+                context_id,
+                snapshot.screen,
+                target.role,
+                target.rect,
+                target.enabled,
+                target.category,
+            )
+            if target.continuity_id is not None
+            else (snapshot, target.target_id, context_id)
+        )
         if (
             key != self._key
             or gaze.captured_at - self._last_sample > self.config.max_sample_gap
@@ -157,6 +168,7 @@ class TargetResolver:
         self._key = key
         self._last_sample = gaze.captured_at
         self._last_update = now
+        self._last_snapshot_time = snapshot.captured_at
         if gaze.captured_at - self._started_at < self.config.stable_seconds:
             return TargetDecision("pending")
         return TargetDecision("candidate", target)

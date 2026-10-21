@@ -107,7 +107,28 @@ class PreviewFeed:
                         ):
                             self._publish(None, "unavailable")
                             break
-                        self._publish(CheckedSnapshot(snapshot, started, context), "ready")
+                        checked = CheckedSnapshot(snapshot, started, context)
+                        self._publish(checked, "ready")
+                        refresh = getattr(session, "refresh", None)
+                        if (
+                            refresh is not None
+                            and finished - snapshot.captured_at >= self.refresh_seconds / 2
+                        ):
+                            # Retain immutable old values, never renew either timestamp
+                            # while native traversal is blocked.
+                            self._publish(checked, "refreshing")
+                            previous = snapshot
+                            snapshot = refresh()
+                            if (
+                                snapshot is None
+                                or snapshot.status != "ok"
+                                or snapshot.context_id != previous.context_id
+                                or snapshot.screen != previous.screen
+                                or snapshot.captured_at < previous.captured_at
+                            ):
+                                self._publish(None, "unavailable")
+                                break
+                            continue
                         if self._stop.wait(self.check_seconds):
                             break
                 self._publish(None, "scanning")

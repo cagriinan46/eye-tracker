@@ -114,10 +114,12 @@ seconds, snapshot age 0.5 seconds and gaze age 0.05 seconds. These are developme
 settings, not user-tuned defaults or calibrated probabilities. Age/radius bounds
 are inclusive; duplicate or reversed sample/update timestamps reset evidence.
 
-Evidence never crosses snapshot replacement, even if IDs and rectangles look
-identical. IDs are snapshot-local. Frequent snapshot refresh may therefore prevent
-acquisition; live refresh cadence and stable cross-snapshot identity require later
-validation/design. This module is not yet connected to the gaze runtime or overlay.
+Target IDs remain snapshot-local. Without an explicit provider-verified continuity
+ID, replacement always restarts acquisition. Optional opaque continuity IDs allow
+evidence to survive a complete refresh only with the same context, screen, role,
+rectangle, enabled state and interaction category. Competition, stale/invalid inputs,
+time reversal and excessive sample/delivery gaps still reset evidence. A token is
+neither an activation capability nor a label for intended-target accuracy.
 
 The JSON report compares unique coordinate containment, nearest eligible target,
 and the conservative temporal resolver on independently labeled synthetic traces:
@@ -131,17 +133,25 @@ accuracy, application coverage or live performance.
 ## Background feed for future semantic preview
 
 `MacOSAccessibility.session()` keeps native references in a short-lived,
-thread-confined context solely to recheck the focused application/window, display
-geometry and permission. Session exit releases all references. A failed check
+thread-confined context to recheck focus/display/permission and refresh discovery.
+Each session permits at most four complete scan attempts (including its initial
+scan) and two seconds of validity. Native equality and unchanged visible target
+properties in consecutive complete scans preserve an opaque continuity ID; removal,
+replacement or changed properties break continuity. Hash collisions never prove
+identity. Session exit releases all references. A failed check
 permanently invalidates that session. No native handles enter snapshots or files.
 One-shot `snapshot()` remains unchanged.
 
 `app.semantic_preview.PreviewFeed` is explicitly started and keeps only one
 immutable `CheckedSnapshot`. Native discovery/rechecks run on one worker; `latest()`
-never waits for native work. Defaults refresh after at most 0.4 seconds from snapshot
-capture and recheck context every 0.05 seconds after the previous check. Check time
+never waits for native work. Snapshots expire after 0.4 seconds from capture; providers
+supporting refresh start the next scan after half that interval, following a context
+check. Context is rechecked every 0.05 seconds after the previous check. Check time
 is recorded **before** the native call, so delayed calls cannot claim fresh context.
-Old values are cleared before each scan, on failures and on shutdown. `status`
+During an in-session scan, `refreshing` retains the previous immutable checked
+snapshot, without extending either timestamp. The coordinator independently rejects
+expired context. Failed refresh, changed context, exhausted session and shutdown
+clear publication. Providers without refresh retain the one-shot behavior. `status`
 exposes a terminal `failed` state if the worker raises unexpectedly.
 
 `close(timeout=0.1)` immediately suppresses publication and returns whether the
@@ -155,7 +165,8 @@ geometry and a configurable maximum age for context verification. It clears reso
 evidence on opt-out, coordinate mismatch or stale/unavailable context. This is
 bounded freshness, not instantaneous observation: window changes can occur between
 checks, and same-window target geometry is only refreshed on the next scan. Short
-snapshot lifetimes still reset temporal acquisition as documented above.
+sessions still reset temporal acquisition at their boundaries. A scan slower than
+the existing freshness bounds still causes abstention; continuity does not hide it.
 
 This is a tested feed/coordinator prerequisite. It is **not yet wired into the gaze
 runtime and does not draw an overlay**, move focus/pointer or activate targets. Native

@@ -144,8 +144,10 @@ correct target selection, wrong-target selection, abstention, stability and late
 Reading an accessibility element does not prove that it is visible or selectable.
 Unsupported/custom-drawn UI must not be advertised as covered.
 
-The exact persistent architecture remains subject to human review. See the
-[proposed first-slice design](superpowers/specs/2026-10-21-semantic-gaze-design.md).
+The user-approved platform/intent boundary is recorded in
+[ADR-005](decisions/ADR-005-semantic-target-resolution.md). See the
+[approved first-slice design](superpowers/specs/2026-10-21-semantic-gaze-design.md)
+and the [first implementation plan](superpowers/plans/2026-10-21-semantic-discovery.md).
 This bounded investigation must not displace the required first-term text-input and
 safe hardware prototype; broad semantic coverage can continue later.
 

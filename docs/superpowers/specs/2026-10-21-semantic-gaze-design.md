@@ -1,11 +1,13 @@
-# Desktop-wide semantic gaze: proposed first slice
+# Desktop-wide semantic gaze: approved first-slice design
 
-Status: **Proposed — awaiting human architectural review.**
+Status: **Design approved by the user on 2026-10-21.** Implementation plan review
+is separate; this status is not a claim that implementation or validation is complete.
 
 Related preparation issue: [#98](https://github.com/cagriinan46/eye-tracker/issues/98).
 The user approved the Phase 2 priority and desktop-wide goal on 2026-10-21.
-This document proposes the persistent architecture; it does not accept an ADR or
-claim implementation approval for that architecture.
+The user subsequently approved the platform-discovery / intent-resolution boundary
+and confirmed macOS-first implementation with a shared Windows-portable core.
+The accepted placement is recorded in [ADR-005](../../decisions/ADR-005-semantic-target-resolution.md).
 
 ## Intent and scope
 
@@ -35,7 +37,7 @@ or no-target result. Free pointing and later gestures/text entry still have role
    but introduces extra inference, privacy and validation work. Excluded from this
    first slice; no new dependency or model is justified yet.
 
-## Proposed architecture for review
+## Approved architecture
 
 Follow ADR-003. OS accessibility inspection belongs to a read-only platform
 adapter. Target ranking belongs to `intent` as contextual target resolution; it
@@ -53,15 +55,14 @@ macOS accessibility adapter -> UI snapshot ------|
 later: target candidate + intentional confirmation -> intent -> actions -> platform
 ```
 
-Proposed ownership: shared target/snapshot value contracts in `intent`, pure resolver
+Ownership: shared target/snapshot value contracts in `intent`, pure resolver
 in `intent/targeting.py`, OS discovery in `platform_adapters/macos_accessibility.py`.
 The application supplies snapshots; intent never imports an OS framework. The
 platform adapter can return the shared values without depending on the resolver.
 No new generic AI subsystem, and no OS action inside gaze or gesture modules.
 
-This placement resolves the open question in architecture section 20 only after
-human review. Then update architecture and record the accepted decision before
-implementing the persistent modules.
+This placement resolves the open question in architecture section 20 through
+the user's approval recorded in ADR-005.
 
 ## Read-only discovery contract
 
@@ -178,9 +179,9 @@ existing access. Reliable visible-target discovery remains an implementation tas
 - [Apple AXUIElement APIs](https://developer.apple.com/documentation/applicationservices/axuielement_h)
   and [messaging timeout](https://developer.apple.com/documentation/applicationservices/1459345-axuielementsetmessagingtimeout).
 
-## Proposed implementation sequence after design review
+## Implementation sequence
 
-1. Record the approved placement and open a bounded adapter/contracts issue.
+1. Record the approved placement and plan a bounded adapter/contracts issue.
 2. Implement and test read-only visible-target discovery and unavailable states.
 3. Implement the pure resolver and synthetic comparison harness.
 4. Add opt-in preview, then benchmark native coverage and latency.

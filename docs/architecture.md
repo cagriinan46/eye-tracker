@@ -635,13 +635,15 @@ It may eventually introduce a component responsible for:
 * combining approximate gaze with UI context,
 * estimating the most probable intended target.
 
-Its exact persistent architectural placement still requires human review. The
-[proposed first-slice design](superpowers/specs/2026-10-21-semantic-gaze-design.md)
-records the read-only feasibility findings and a proposed platform/intent boundary;
-that proposal is not an accepted architectural decision.
+The user approved the persistent placement in
+[ADR-005](decisions/ADR-005-semantic-target-resolution.md): read-only UI discovery
+belongs to platform adapters; shared contracts and pure target resolution belong
+to intent. The app supplies snapshots, so intent never calls OS APIs. A candidate
+does not trigger activation. See the
+[approved first-slice design](superpowers/specs/2026-10-21-semantic-gaze-design.md).
 
-Read-only feasibility probes may inform this decision. Do not add persistent
-implementation-specific modules until the architectural proposal is reviewed.
+Implement macOS discovery first while keeping core logic portable to Windows.
+Specific algorithms, native coverage and performance remain experimental.
 
 ---
 

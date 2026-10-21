@@ -84,7 +84,45 @@ or latency in other applications. Initial Cocoa loading also consumes the scan
 budget, so a cold run can be incomplete even when a subsequent scan completes.
 
 Portable contracts and fake-backend failure tests run without macOS. Native smoke
-checks are opt-in. Discovery is only the first semantic slice: target ranking,
-background refresh, live highlights, snapping and user accuracy evaluation remain
+checks are opt-in. Pure target resolution is described below; background refresh,
+live highlights, snapping and user accuracy evaluation remain
 separate work. Existing live traces have no intended-target labels and cannot prove
 semantic selection improvement.
+
+## Pure semantic resolution (synthetic development only)
+
+Run without a camera or native UI access:
+
+```sh
+PYTHONPATH=src:. python -m validation.semantic_resolution
+```
+
+`intent/targeting.py` consumes immutable UI snapshots and logical gaze points.
+Callers must supply the current application/window context independently and use
+one monotonic clock for snapshot capture, gaze capture and `now`. It returns a
+candidate or an explicit abstention, never an action or a modified gaze sample.
+A candidate requires bounded rectangle distance, separation from the runner-up,
+and consecutive evidence. Nested/overlapping competitors abstain. Invalid or stale
+inputs clear evidence immediately. Disabled/non-press targets and targets whose
+centers are outside the snapshot screen cannot be selected. Discovery is still
+responsible for visibility verification; the pure resolver cannot prove visibility.
+
+All six configuration values are mandatory. The harness uses radius 50 logical
+units, separation 10 units, stability 0.1 seconds, maximum sample/update gap 0.08
+seconds, snapshot age 0.5 seconds and gaze age 0.05 seconds. These are development
+settings, not user-tuned defaults or calibrated probabilities. Age/radius bounds
+are inclusive; duplicate or reversed sample/update timestamps reset evidence.
+
+Evidence never crosses snapshot replacement, even if IDs and rectangles look
+identical. IDs are snapshot-local. Frequent snapshot refresh may therefore prevent
+acquisition; live refresh cadence and stable cross-snapshot identity require later
+validation/design. This module is not yet connected to the gaze runtime or overlay.
+
+The JSON report compares unique coordinate containment, nearest eligible target,
+and the conservative temporal resolver on independently labeled synthetic traces:
+isolated offset, dense boundary, nested overlap and tracking loss. It reports
+correct/wrong/abstention counts, switches between emitted target identities
+(including across intervening abstentions), and time to first correct candidate
+(null if none). Each sample counts once. No activations occur. These hand-authored
+scenarios exercise expected tradeoffs; they do not establish improved human
+accuracy, application coverage or live performance.

@@ -126,3 +126,37 @@ correct/wrong/abstention counts, switches between emitted target identities
 (null if none). Each sample counts once. No activations occur. These hand-authored
 scenarios exercise expected tradeoffs; they do not establish improved human
 accuracy, application coverage or live performance.
+
+## Background feed for future semantic preview
+
+`MacOSAccessibility.session()` keeps native references in a short-lived,
+thread-confined context solely to recheck the focused application/window, display
+geometry and permission. Session exit releases all references. A failed check
+permanently invalidates that session. No native handles enter snapshots or files.
+One-shot `snapshot()` remains unchanged.
+
+`app.semantic_preview.PreviewFeed` is explicitly started and keeps only one
+immutable `CheckedSnapshot`. Native discovery/rechecks run on one worker; `latest()`
+never waits for native work. Defaults refresh after at most 0.4 seconds from snapshot
+capture and recheck context every 0.05 seconds after the previous check. Check time
+is recorded **before** the native call, so delayed calls cannot claim fresh context.
+Old values are cleared before each scan, on failures and on shutdown. `status`
+exposes a terminal `failed` state if the worker raises unexpectedly.
+
+`close(timeout=0.1)` immediately suppresses publication and returns whether the
+worker actually stopped within the join bound. A native call may outlast cooperative
+IPC budgets; the daemon worker can then remain alive until it returns. Do not create
+replacement workers repeatedly while an old one is blocked. The session releases
+its references when that worker unwinds.
+
+`SemanticPreview` defaults to disabled and requires explicit matching logical screen
+geometry and a configurable maximum age for context verification. It clears resolver
+evidence on opt-out, coordinate mismatch or stale/unavailable context. This is
+bounded freshness, not instantaneous observation: window changes can occur between
+checks, and same-window target geometry is only refreshed on the next scan. Short
+snapshot lifetimes still reset temporal acquisition as documented above.
+
+This is a tested feed/coordinator prerequisite. It is **not yet wired into the gaze
+runtime and does not draw an overlay**, move focus/pointer or activate targets. Native
+coverage, preview visibility, coordinate mapping and inference-loop impact still
+require their own integration validation before an authorized human session.

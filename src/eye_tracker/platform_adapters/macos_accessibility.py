@@ -20,7 +20,7 @@ from eye_tracker.platform_adapters._macos_ax import (
 
 @dataclass(frozen=True, slots=True)
 class DiscoveryLimits:
-    max_nodes: int = 1024
+    max_nodes: int = 2048
     max_depth: int = 64
     max_children: int = 128
     seconds: float = 0.5
@@ -95,15 +95,21 @@ class MacOSAccessibility:
                 queue = deque((root, 0, screen) for root in native.roots())
                 if not queue:
                     return result("unavailable")
-                seen, targets = [], []
+                seen, targets = {}, []
+                seen_count = 0
+                # CFHash only narrows equality comparisons; collisions must not
+                # hide competitors. Backends without hashing retain full equality.
+                identity_hash = getattr(native, "identity_hash", lambda node: 0)
                 while queue:
                     budget()
                     node, depth, clip = queue.popleft()
-                    if any(native.same(node, old) for old in seen):
+                    bucket = seen.setdefault(identity_hash(node), [])
+                    if any(native.same(node, old) for old in bucket):
                         continue
-                    if len(seen) >= self.limits.max_nodes:
+                    if seen_count >= self.limits.max_nodes:
                         raise AXReadError("node cap")
-                    seen.append(node)
+                    bucket.append(node)
+                    seen_count += 1
                     try:
                         role, rect, enabled, actions = native.describe(node)
                     except AXEmptyTarget as empty:
@@ -136,7 +142,7 @@ class MacOSAccessibility:
                                     raise AXReadError("cyclic hit-test ancestry")
                                 if native.same(hit, node):
                                     targets.append(
-                                        UITarget(str(len(seen)), role, visible, True, "press")
+                                        UITarget(str(seen_count), role, visible, True, "press")
                                     )
                                     break
                                 parents.append(hit)

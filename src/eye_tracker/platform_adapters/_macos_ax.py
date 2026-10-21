@@ -83,6 +83,7 @@ class AXBackend:
         self.release = bind(cf, "CFRelease", [p], None)
         self.retain = bind(cf, "CFRetain", [p], p)
         self.same = bind(cf, "CFEqual", [p, p], C.c_bool)
+        self.identity_hash = bind(cf, "CFHash", [p], C.c_ulong)
         self.type_id = bind(cf, "CFGetTypeID", [p], C.c_ulong)
         self.array_type = bind(cf, "CFArrayGetTypeID", [], C.c_ulong)()
         self.string_type = bind(cf, "CFStringGetTypeID", [], C.c_ulong)()

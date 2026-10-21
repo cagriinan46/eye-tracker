@@ -70,15 +70,16 @@ zero-area window/menu-bar root valid, and negative, nonfinite or overflowing
 geometry still invalidates the scan. The shared target rectangle contract continues
 to require positive area.
 
-Default limits: 1024 nodes, depth 64, 128 children per node, a cooperative 0.5-second
+Default limits: 2048 nodes, depth 64, 128 children per node, a cooperative 0.5-second
 scan budget and 50 ms IPC timeouts. Truncation/errors discard **all** candidate
 results; increasing coverage requires measured follow-up work, not treating a
 partial tree as complete. A native call sequence can exceed the cooperative budget;
 this command is not a realtime camera-loop service. Complex applications may
 consistently return `incomplete` at these limits.
 
-The node/depth defaults were increased after a native development probe required
-561 nodes and more than 20 wrapper levels. Time and child-list budgets remain
+The depth default was increased after a native development probe required
+561 nodes and more than 20 wrapper levels. The node default was later raised to
+2048 after a measured 1335-node foreground UI exceeded the previous 1024-node cap. Time and child-list budgets remain
 unchanged. This is a measured starting configuration, not a guarantee of coverage
 or latency in other applications. Initial Cocoa loading also consumes the scan
 budget, so a cold run can be incomplete even when a subsequent scan completes.
@@ -160,3 +161,33 @@ This is a tested feed/coordinator prerequisite. It is **not yet wired into the g
 runtime and does not draw an overlay**, move focus/pointer or activate targets. Native
 coverage, preview visibility, coordinate mapping and inference-loop impact still
 require their own integration validation before an authorized human session.
+
+
+### Traversal cost measurement — 2026-10-21
+
+Visited-node lookup uses native CFHash buckets, with CFEqual inside each bucket.
+Hashes are never persisted or used as target identity. Apple documents that equal
+objects have equal hashes, but equal hashes do not imply equal objects:
+[CFHash reference](https://developer.apple.com/documentation/corefoundation/cfhash(_:)).
+Backends without a hash function retain the original full equality comparisons.
+All traversal limits and collision cases remain fail-closed.
+
+Before this change, a successful 955-node native scan made 586909 equality calls.
+After hashing, a 1335-node scan made about 900 calls and returned 24 targets with
+an explicitly expanded 2048-node limit, within the unchanged 0.5-second budget.
+Observed duration was 285 ms with initial loading; a later 4096-cap probe of the
+same node count took 113 ms. These were sequential probes of a changing UI, not
+a controlled latency benchmark. The 2048-node setting is now the default; depth,
+child-list, time and IPC limits remain unchanged. Native read errors and larger
+UI trees may still cause abstention.
+
+The deterministic 621-node regression required 192510 equality comparisons before
+the change; hashing distinct nodes avoids those all-pairs comparisons. Separate
+collision, alias, cycle and cap tests protect correctness. Native hashes can
+collide, so this does not guarantee linear worst-case work.
+
+After the change, a three-second read-only background-feed probe observed 57 polls
+with available snapshots (124 status polls total); shutdown returned success. The
+prior probe in this session had no available polls. Foreground content was not
+controlled or frozen, so these observations establish feasibility, not an availability
+rate benchmark or a causal latency comparison. No camera or UI actions were used.

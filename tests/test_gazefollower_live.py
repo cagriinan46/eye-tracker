@@ -237,3 +237,45 @@ def test_live_stops_on_log_failure_before_another_move(tmp_path, monkeypatch, ca
     summary = json.loads((tmp_path / "live-trace-summary.json").read_text())
     assert summary["status"] == "failed"
     assert summary["live_exit"] == "error"
+
+
+def test_semantic_preview_tab_and_tracking_loss_without_pointer(tmp_path, monkeypatch):
+    args, moves, drawn, state = live_fixture(tmp_path, monkeypatch, enabled=False)
+    events = []
+    preview = SimpleNamespace(
+        activate=lambda: events.append("activate"),
+        check_stop=lambda: None,
+        update=lambda point, captured_at, desktop: (
+            events.append((point, desktop)) or {"semantic_status": "synthetic"}
+        ),
+        close=lambda: events.append("close"),
+    )
+    with pytest.raises(InterruptedError):
+        run.live_view(**args, preview=preview)
+    assert moves == []
+    assert "activate" in events
+    assert (None, True) in events
+    assert events[-1] == "close"
+    assert len(drawn) == 1
+
+
+def test_semantic_preview_rejects_pointer_mode_before_any_frame(tmp_path, monkeypatch):
+    args, moves, drawn, state = live_fixture(tmp_path, monkeypatch)
+    with pytest.raises(ValueError, match="pointer"):
+        run.live_view(**args, preview=object())
+    assert state["frame"] == 0 and moves == []
+
+
+def test_cli_rejects_preview_and_pointer_together(monkeypatch):
+    monkeypatch.setattr(run.sys, "argv", ["run", "--semantic-preview", "--control-pointer"])
+    with pytest.raises(SystemExit) as exc:
+        run.main()
+    assert exc.value.code == 2
+
+
+def test_cli_rejects_preview_on_windows_before_loading_models(monkeypatch):
+    monkeypatch.setattr(run.sys, "argv", ["run", "--semantic-preview"])
+    monkeypatch.setattr(run.sys, "platform", "win32")
+    with pytest.raises(SystemExit) as exc:
+        run.main()
+    assert exc.value.code == 2

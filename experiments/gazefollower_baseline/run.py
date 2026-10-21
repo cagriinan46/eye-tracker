@@ -13,6 +13,7 @@ import subprocess
 import sys
 import time
 from collections import defaultdict
+from contextlib import closing, nullcontext
 from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
@@ -93,10 +94,13 @@ def live_view(
     pointer,
     pointer_backend,
     model_info,
+    preview=None,
 ):
     """Existing live flow with same-frame diagnostics, excluded from accuracy scores."""
     from experiments.gazefollower_baseline.live_trace import LiveTrace
 
+    if preview is not None and (pointer is not None or pointer_backend is not None):
+        raise ValueError("semantic preview cannot be combined with pointer control")
     target_index = 0
     live_targets = [(0.5, 0.5)] + [tuple(p) for p in targets]
     smooth = filter_type()
@@ -106,13 +110,24 @@ def live_view(
         nonlocal desktop
         if pg.display.iconify():
             desktop = True
-            print("DESKTOP: gaze moves pointer; no clicks. Global ESC stops.", flush=True)
+            if preview is not None:
+                preview.activate()
+                print("DESKTOP: semantic target outline only; global ESC stops.", flush=True)
+            else:
+                print("DESKTOP: gaze moves pointer; no clicks. Global ESC stops.", flush=True)
 
-    with LiveTrace(folder, model_info) as trace:
+    with (
+        closing(preview) if preview is not None else nullcontext(),
+        LiveTrace(folder, model_info) as trace,
+    ):
         while True:
             if pointer_backend is not None:
                 pointer_backend.check_stop()
-            if enter_pressed(pg, on_desktop=show_desktop if pointer is not None else None):
+            if preview is not None:
+                preview.check_stop()
+            if enter_pressed(
+                pg, on_desktop=show_desktop if pointer is not None or preview is not None else None
+            ):
                 target_index = (target_index + 1) % len(live_targets)
             _, face, gaze, inference_ms, captured_at = observe()
             raw = blue = None
@@ -139,6 +154,8 @@ def live_view(
                 movement_status="disabled",
                 movement_error=None,
             )
+            if preview is not None:
+                row.update(preview.update(blue, captured_at, desktop=desktop))
             move_started = time.monotonic()
             try:
                 if pointer is not None:
@@ -362,6 +379,7 @@ def run(args):
     cap = None
     pointer_backend = None
     pointer = None
+    semantic_preview = None
     folder = None
     status = "failed"
     try:
@@ -434,7 +452,9 @@ def run(args):
                 pg.draw.circle(screen, (40, 150, 255), (round(blue[0]), round(blue[1])), 8)
             label(message, size[1] - 75)
             label(
-                "ESC: durdur. Tiklama KAPALI. TAB: masaustu."
+                "TAB: semantic hedef cercevesi. ESC: bitir. Fare ve tiklama kapali."
+                if getattr(args, "semantic_preview", False)
+                else "ESC: durdur. Tiklama KAPALI. TAB: masaustu."
                 if pointer is not None
                 else "Normal otur; sari noktaya bak. ESC: bitir. Fare ve tiklama kapali.",
                 size[1] - 40,
@@ -704,6 +724,13 @@ def run(args):
                 ),
             )
 
+        if getattr(args, "semantic_preview", False):
+            if args.control_pointer:
+                raise ValueError("semantic preview cannot be combined with pointer control")
+            from eye_tracker.app.live_semantic_preview import create_macos_preview
+
+            semantic_preview = create_macos_preview(size)
+
         weights_file = (
             "repair-1/candidate-weights.npy" if active_model == "candidate" else "ridge_weights.npy"
         )
@@ -719,6 +746,7 @@ def run(args):
             targets=targets,
             pointer=pointer,
             pointer_backend=pointer_backend,
+            preview=semantic_preview,
             model_info=dict(
                 selection=active_model,
                 weights_file=weights_file,
@@ -730,6 +758,8 @@ def run(args):
             status = "cancelled"
         return 0
     finally:
+        if semantic_preview is not None:
+            semantic_preview.close()
         if pointer_backend is not None:
             pointer_backend.close()
         if cap is not None:
@@ -752,10 +782,16 @@ def main():
         action="store_true",
         help="Offer one selective repair round after the six-target quality check",
     )
-    parser.add_argument(
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument(
         "--control-pointer",
         action="store_true",
         help="After quality results and Enter, move OS pointer without clicking",
+    )
+    modes.add_argument(
+        "--semantic-preview",
+        action="store_true",
+        help="Opt-in macOS target outline after quality review and Tab; no pointer actions",
     )
     parser.add_argument(
         "--repeat-calibration-targets",
@@ -766,6 +802,8 @@ def main():
         "--check", action="store_true", help="Synthetic model inference; no camera/window"
     )
     args = parser.parse_args()
+    if args.semantic_preview and sys.platform != "darwin":
+        parser.error("Native semantic preview currently supports macOS only")
     if args.repair_calibration and args.repeat_calibration_targets:
         parser.error(
             "Selective repair uses the six-target check; omit --repeat-calibration-targets"

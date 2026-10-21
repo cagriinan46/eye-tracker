@@ -228,3 +228,55 @@ does not establish across-session reliability or statistically controlled superi
 to the old SVR logs. Evaluate stationary accuracy first, then decide whether to
 integrate this estimator or stop this approach; do not tune on these six targets
 and reuse their error as an unbiased result.
+
+### Optional semantic target outline (macOS, experimental)
+
+Append `--semantic-preview` instead of `--control-pointer`. Both options together
+are rejected before loading models. Calibration and quality review stay unchanged;
+after Enter into live view, **Tab** minimizes the experiment window and starts the
+read-only target feed plus the outline helper. Until Tab neither worker starts.
+The green outline marks a conservative candidate; it does not click, move the
+pointer, type, scroll or change keyboard focus. Global Escape in the helper stops
+preview even if inference stalls; the parent exits when its current frame returns.
+
+The outline is a nonactivating, non-key/non-main, mouse-transparent AppKit panel,
+excluded from the accessibility hierarchy. Its own process receives only the
+latest rectangle and a monotonic expiration; no image, UI label or native handle
+crosses that boundary. It hides expired geometry independently of the camera loop
+and exits on parent loss. Normal shutdown requests exit, then terminates this owned
+helper if it has not stopped within 0.3 seconds. Display changes or anything other
+than exactly matching single-display logical coordinates suppress the outline.
+Multi-monitor, arbitrary scaling and fullscreen Spaces coverage are not claimed.
+
+Development thresholds: attraction 50 logical points, runner-up gap 10 points,
+stability 0.1 s, sample gap 0.2 s, snapshot age 0.5 s, gaze age 0.2 s and independently
+checked context age 0.15 s. Each outline expires no later than 0.12 s after its
+update and no later than the inputs' freshness deadlines. The helper checks these deadlines
+approximately every 16 ms; OS scheduling/native drawing is not a hard realtime
+guarantee. Short inference/scan
+windows may cause flicker or abstention. Thresholds are not calibrated for a user.
+Raw/filtered gaze remain separate; the existing live trace adds only semantic
+status and feed status, not target rectangles, UI titles or predicted labels.
+
+Automated tests use fake rendering/native interfaces. A subsequent camera-free
+native smoke check displayed a synthetic 160×80 outline at (100,100). WindowServer
+reported those exact bounds while it was visible. Across 15 observations, the
+frontmost application, focused AX window and AX hit at the outline center stayed
+unchanged. After updates stopped, no helper window remained onscreen after 0.3 s;
+the helper exited on close. This checks one location/context, not all applications,
+Spaces or pixel-level rendering quality. No images or camera frames were captured.
+
+That native check exposed double-release warnings from manually draining a
+PyObjC-managed autorelease pool. The helper now uses
+[objc.autorelease_pool](https://pyobjc.readthedocs.io/en/latest/api/module-objc.html#objc.autorelease_pool);
+repeat smoke runs produced no such warnings. Regression coverage checks one pool
+entry/exit per helper iteration.
+
+Real gaze-loop impact, global Escape during a stalled frame and human targeting
+accuracy still need validation. The option remains experimental. Before an
+authorized human comparison, record coverage, wrong targets, abstentions and
+latency. Windows needs its own renderer; feed/resolver/coordinator remain portable.
+
+Native behavior references: Apple [nonactivating panel style](https://developer.apple.com/documentation/appkit/nswindow/stylemask-swift.struct),
+[orderFrontRegardless](https://developer.apple.com/documentation/appkit/nswindow/orderfrontregardless()),
+and [accessibilityElement](https://developer.apple.com/documentation/appkit/nsaccessibilityprotocol/accessibilityelement).

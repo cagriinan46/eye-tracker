@@ -2,6 +2,7 @@
 
 import ctypes as C
 import sys
+from math import isfinite
 from uuid import uuid4
 
 from eye_tracker.intent.targets import TargetRect
@@ -11,6 +12,14 @@ SUPPORTED_ROLES = frozenset({"AXButton", "AXCheckBox", "AXRadioButton", "AXPopUp
 
 class AXReadError(RuntimeError):
     pass
+
+
+class AXEmptyTarget(AXReadError):
+    """Known zero-area control; exclude only this target, not its descendants."""
+
+    def __init__(self, role):
+        super().__init__("zero-area target")
+        self.role = role
 
 
 class AXUnavailable(AXReadError):
@@ -250,6 +259,20 @@ class AXBackend:
         if role in SUPPORTED_ROLES or role in {"AXWindow", "AXMenuBar"}:
             position, size = self._pair(node, "AXPosition", 1), self._pair(node, "AXSize", 2)
             if position is not None and size is not None:
+                if (
+                    role in SUPPORTED_ROLES
+                    and all(
+                        isfinite(v)
+                        for v in (
+                            *position,
+                            *size,
+                            position[0] + size[0],
+                            position[1] + size[1],
+                        )
+                    )
+                    and min(size) == 0
+                ):
+                    raise AXEmptyTarget(role)
                 try:
                     rect = TargetRect(*position, *size)
                 except ValueError as error:

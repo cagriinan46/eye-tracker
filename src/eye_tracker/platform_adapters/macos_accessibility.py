@@ -10,6 +10,7 @@ from eye_tracker.intent.targets import TargetRect, UISnapshot, UITarget
 from eye_tracker.platform_adapters._macos_ax import (
     SUPPORTED_ROLES,
     AXBackend,
+    AXEmptyTarget,
     AXReadError,
     AXUnavailable,
     UnsupportedCoordinates,
@@ -82,7 +83,12 @@ class MacOSAccessibility:
                     if len(seen) >= self.limits.max_nodes:
                         raise AXReadError("node cap")
                     seen.append(node)
-                    role, rect, enabled, actions = native.describe(node)
+                    try:
+                        role, rect, enabled, actions = native.describe(node)
+                    except AXEmptyTarget as empty:
+                        # A zero-area control cannot be a target. Its children
+                        # can still have valid geometry, so keep traversing them.
+                        role, rect, enabled, actions = empty.role, None, None, ()
                     # Menus need a separate open-menu lifecycle; never descend into
                     # application menu contents merely because AX advertises them.
                     if role == "AXMenu":

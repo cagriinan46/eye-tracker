@@ -64,6 +64,12 @@ hit-testing at their proposed center. A hit on a descendant needs bounded ancest
 verification. This proves the center at the instant of the read, not visibility of
 the full rectangle or future validity. Snapshots do not authorize actions.
 
+A supported control with finite, nonnegative geometry but zero width or height is
+excluded as a target; its descendants are still inspected. This does not make a
+zero-area window/menu-bar root valid, and negative, nonfinite or overflowing
+geometry still invalidates the scan. The shared target rectangle contract continues
+to require positive area.
+
 Default limits: 512 nodes, depth 20, 128 children per node, a cooperative 0.5-second
 scan budget and 50 ms IPC timeouts. Truncation/errors discard **all** candidate
 results; increasing coverage requires measured follow-up work, not treating a

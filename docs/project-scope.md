@@ -128,7 +128,9 @@ Machine learning should only be introduced where it provides a measurable improv
 
 ## 7. Semantic and Context-Aware Interaction
 
-A later stage of the project may improve gaze-based target selection using information about the graphical user interface.
+Phase 2 investigates improving gaze-based target selection using information about
+the graphical user interface, following the user-approved roadmap update of
+2026-10-21. This applies across accessible desktop applications, not only browsers.
 
 Instead of treating gaze solely as an exact screen coordinate, the system may use nearby accessible interface elements to infer the intended target.
 

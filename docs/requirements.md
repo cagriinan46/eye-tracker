@@ -116,21 +116,27 @@ The user shall be able to repeat the calibration procedure when necessary.
 
 The system shall support collecting measurements required to evaluate the reliability of supported user interactions.
 
-### Graduation Project II and Advanced Capabilities
+### Phase 2 — Early Semantic Gaze Investigation
 
-The requirements in this section are later-stage capabilities and are not part of the minimum core system.
+FR-018 and FR-019 move into a bounded first-term investigation under the
+user-approved 2026-10-21 roadmap update. Broad application coverage remains a later
+expansion; this does not remove gesture, text-entry or hardware requirements.
 
 #### FR-018 — Nearby accessible UI-element inspection
 
-**Stage:** Graduation Project II
+**Stage:** Graduation Project I — Phase 2 investigation; later expansion in Project II
 
 The system shall eventually be able to inspect accessible UI elements near an approximate gaze position.
 
 #### FR-019 — Probable intended-target correction
 
-**Stage:** Graduation Project II
+**Stage:** Graduation Project I — Phase 2 investigation; later expansion in Project II
 
 The system shall eventually support correcting or snapping an approximate gaze position toward a probable intended UI target.
+
+### Graduation Project II and Advanced Capabilities
+
+The following requirements remain later-stage capabilities.
 
 #### FR-020 — Interaction personalization
 

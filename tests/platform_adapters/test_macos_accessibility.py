@@ -242,3 +242,64 @@ def test_failed_discovery_session_never_offers_context():
         assert session.snapshot.status == "incomplete"
         assert session.current_context() is None
     assert backend.closed
+
+
+def test_hashed_visited_lookup_avoids_quadratic_equality_work():
+    backend = Backend()
+    groups = [f"group-{n}" for n in range(20)]
+    backend.tree["window"] = groups
+    for group in groups:
+        backend.info[group] = ("AXGroup", None, None, ())
+        backend.tree[group] = [f"{group}-{n}" for n in range(30)]
+        for leaf in backend.tree[group]:
+            backend.info[leaf] = ("AXStaticText", None, None, ())
+    calls = []
+    backend.identity_hash = hash
+    backend.same = lambda a, b: calls.append((a, b)) or a == b
+    result = MacOSAccessibility(backend=backend, clock=lambda: 1).snapshot()
+    assert result.status == "ok"
+    assert len(calls) < 1000
+
+
+def test_hash_collision_keeps_distinct_targets_and_cycle_terminates():
+    backend = Backend()
+    backend.identity_hash = lambda node: 0
+    backend.tree["window"] = ["button", "other", "window"]
+    backend.info["other"] = ("AXButton", TargetRect(100, 20, 40, 40), True, ("AXPress",))
+    backend.hit_test = lambda x, y: "other" if x > 80 else "button"
+    result = collect(backend)
+    assert result.status == "ok"
+    assert len(result.targets) == 2
+    assert len({t.target_id for t in result.targets}) == 2
+
+
+def test_equal_aliases_deduplicate_by_native_equality_not_python_identity():
+    backend = Backend()
+    backend.tree["window"] = ["button", "alias"]
+    backend.identity_hash = lambda node: 1 if node in {"button", "alias"} else 0
+    backend.same = lambda a, b: a == b or {a, b} == {"button", "alias"}
+    # No describe data for alias: equality must suppress traversal of it.
+    result = collect(backend)
+    assert result.status == "ok" and len(result.targets) == 1
+
+
+def test_colliding_hashes_do_not_bypass_node_cap():
+    backend = Backend()
+    backend.identity_hash = lambda node: 0
+    result = collect(backend, max_nodes=1)
+    assert result.status == "incomplete" and result.targets == ()
+
+
+def test_default_scan_covers_measured_thousand_node_ui():
+    backend = Backend()
+    backend.identity_hash = hash
+    groups = [f"group-{n}" for n in range(34)]
+    backend.tree["window"] = groups
+    for group in groups:
+        backend.info[group] = ("AXGroup", None, None, ())
+        backend.tree[group] = [f"{group}-{n}" for n in range(38)]
+        for leaf in backend.tree[group]:
+            backend.info[leaf] = ("AXStaticText", None, None, ())
+    backend.tree[groups[-1]].append("button")
+    result = MacOSAccessibility(backend=backend, clock=lambda: 1).snapshot()
+    assert result.status == "ok" and len(result.targets) == 1

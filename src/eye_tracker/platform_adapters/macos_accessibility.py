@@ -19,8 +19,8 @@ from eye_tracker.platform_adapters._macos_ax import (
 
 @dataclass(frozen=True, slots=True)
 class DiscoveryLimits:
-    max_nodes: int = 512
-    max_depth: int = 20
+    max_nodes: int = 1024
+    max_depth: int = 64
     max_children: int = 128
     seconds: float = 0.5
     message_timeout: float = 0.05

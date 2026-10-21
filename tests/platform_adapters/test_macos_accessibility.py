@@ -175,3 +175,31 @@ def test_unresolved_competitor_discards_previously_verified_target(cycle):
     result = collect(backend, max_depth=2)
     assert result.status == "incomplete"
     assert result.targets == ()
+
+
+def test_default_scan_reaches_control_through_deep_ui_wrappers():
+    backend = Backend()
+    nodes = [f"group-{n}" for n in range(30)]
+    backend.tree["window"] = [nodes[0]]
+    for index, node in enumerate(nodes):
+        backend.info[node] = ("AXGroup", None, None, ())
+        backend.tree[node] = [nodes[index + 1]] if index + 1 < len(nodes) else ["button"]
+    result = MacOSAccessibility(backend=backend, clock=lambda: 1).snapshot()
+    assert result.status == "ok"
+    assert len(result.targets) == 1
+
+
+def test_default_scan_completes_large_tree_before_offering_target():
+    backend = Backend()
+    groups = [f"group-{n}" for n in range(19)]
+    backend.tree["window"] = groups
+    for group in groups:
+        backend.info[group] = ("AXGroup", None, None, ())
+        leaves = [f"{group}-leaf-{n}" for n in range(30)]
+        backend.tree[group] = leaves
+        for leaf in leaves:
+            backend.info[leaf] = ("AXStaticText", None, None, ())
+    backend.tree[groups[-1]].append("button")
+    result = MacOSAccessibility(backend=backend, clock=lambda: 1).snapshot()
+    assert result.status == "ok"
+    assert len(result.targets) == 1

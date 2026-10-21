@@ -70,12 +70,18 @@ zero-area window/menu-bar root valid, and negative, nonfinite or overflowing
 geometry still invalidates the scan. The shared target rectangle contract continues
 to require positive area.
 
-Default limits: 512 nodes, depth 20, 128 children per node, a cooperative 0.5-second
+Default limits: 1024 nodes, depth 64, 128 children per node, a cooperative 0.5-second
 scan budget and 50 ms IPC timeouts. Truncation/errors discard **all** candidate
 results; increasing coverage requires measured follow-up work, not treating a
 partial tree as complete. A native call sequence can exceed the cooperative budget;
 this command is not a realtime camera-loop service. Complex applications may
 consistently return `incomplete` at these limits.
+
+The node/depth defaults were increased after a native development probe required
+561 nodes and more than 20 wrapper levels. Time and child-list budgets remain
+unchanged. This is a measured starting configuration, not a guarantee of coverage
+or latency in other applications. Initial Cocoa loading also consumes the scan
+budget, so a cold run can be incomplete even when a subsequent scan completes.
 
 Portable contracts and fake-backend failure tests run without macOS. Native smoke
 checks are opt-in. Discovery is only the first semantic slice: target ranking,

@@ -36,4 +36,14 @@ Interfaces: injected `LiveSemanticPreview(feed, outline, screen, ...)` exposes a
 
 ## Execution record
 
-Implemented inline under approved continuation. Pure renderer/coordinator modules and live integration tests were observed failing before implementation, then passed. Independent review found no important issues. Its failed-process-start cleanup observation was reproduced by a failing test and corrected with successful-start tracking. Helper-loop expiry was tested with fake AppKit/Quartz and an unchanged mailbox, not a native window. Full native visual/focus/AX hit-test validation remains explicitly unrun; no human or camera session was launched. Separate helper process was chosen to keep outline expiry independent of blocking camera inference; OS scheduling still prevents a hard realtime guarantee.
+Implemented inline under approved continuation. Pure renderer/coordinator modules and live integration tests were observed failing before implementation, then passed. Independent review found no important issues. Its failed-process-start cleanup observation was reproduced by a failing test and corrected with successful-start tracking. Helper-loop expiry was tested with fake AppKit/Quartz and an unchanged mailbox, not a native window. At initial implementation native validation was unrun; the subsequent smoke results are recorded below. No human gaze or camera session was launched. Separate helper process was chosen to keep outline expiry independent of blocking camera inference; OS scheduling still prevents a hard realtime guarantee.
+
+
+### Native smoke follow-up
+
+A camera-free synthetic outline smoke check verified WindowServer bounds, unchanged
+frontmost application/focused AX window and unchanged center hit-test in one context;
+expiry and helper shutdown succeeded. It exposed PyObjC double-release warnings from
+manual pool draining. Replaced that with objc.autorelease_pool, verified RED/GREEN
+fake-loop pool lifecycle coverage and repeated native smoke without the warnings.
+Pixel rendering quality and human gaze accuracy remain unmeasured.

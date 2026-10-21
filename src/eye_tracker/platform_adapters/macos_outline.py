@@ -79,6 +79,7 @@ def _serve(size, mailbox, stop, status, parent_pid):
     panel = None
     try:
         import AppKit as api
+        import objc
         import Quartz
         from Foundation import NSDate, NSDefaultRunLoopMode
 
@@ -90,8 +91,7 @@ def _serve(size, mailbox, stop, status, parent_pid):
         panel, view = _make_panel(api)
         status.value = 1
         while not stop.is_set() and os.getppid() == parent_pid:
-            pool = api.NSAutoreleasePool.alloc().init()
-            try:
+            with objc.autorelease_pool():
                 if Quartz.CGEventSourceKeyState(Quartz.kCGEventSourceStateCombinedSessionState, 53):
                     status.value = 2
                     break
@@ -120,8 +120,6 @@ def _serve(size, mailbox, stop, status, parent_pid):
                     if event is None:
                         break
                     app.sendEvent_(event)
-            finally:
-                pool.drain()
             stop.wait(0.016)
     except Exception:
         status.value = -1

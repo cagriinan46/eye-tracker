@@ -258,14 +258,24 @@ windows may cause flicker or abstention. Thresholds are not calibrated for a use
 Raw/filtered gaze remain separate; the existing live trace adds only semantic
 status and feed status, not target rectangles, UI titles or predicted labels.
 
-Automated tests use fake rendering/native interfaces. **Native visual placement,
-focus preservation, accessibility hit-testing with the overlay visible, and real
-inference-loop performance have not yet been validated.** No camera or native GUI
-session was launched during implementation. Before an authorized human comparison,
-validate those properties with a read-only preview smoke session and then record
-coverage, wrong targets, abstentions and targeting latency. The flag is opt-in and
-is not a claim of human targeting improvement. Windows needs its own renderer;
-the feed/resolver/coordinator remain platform-independent.
+Automated tests use fake rendering/native interfaces. A subsequent camera-free
+native smoke check displayed a synthetic 160×80 outline at (100,100). WindowServer
+reported those exact bounds while it was visible. Across 15 observations, the
+frontmost application, focused AX window and AX hit at the outline center stayed
+unchanged. After updates stopped, no helper window remained onscreen after 0.3 s;
+the helper exited on close. This checks one location/context, not all applications,
+Spaces or pixel-level rendering quality. No images or camera frames were captured.
+
+That native check exposed double-release warnings from manually draining a
+PyObjC-managed autorelease pool. The helper now uses
+[objc.autorelease_pool](https://pyobjc.readthedocs.io/en/latest/api/module-objc.html#objc.autorelease_pool);
+repeat smoke runs produced no such warnings. Regression coverage checks one pool
+entry/exit per helper iteration.
+
+Real gaze-loop impact, global Escape during a stalled frame and human targeting
+accuracy still need validation. The option remains experimental. Before an
+authorized human comparison, record coverage, wrong targets, abstentions and
+latency. Windows needs its own renderer; feed/resolver/coordinator remain portable.
 
 Native behavior references: Apple [nonactivating panel style](https://developer.apple.com/documentation/appkit/nswindow/stylemask-swift.struct),
 [orderFrontRegardless](https://developer.apple.com/documentation/appkit/nswindow/orderfrontregardless()),

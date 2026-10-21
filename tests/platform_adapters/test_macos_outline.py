@@ -128,12 +128,23 @@ def test_helper_hides_expired_outline_without_parent_updates(monkeypatch):
         setActivationPolicy_=lambda _: True,
         nextEventMatchingMask_untilDate_inMode_dequeue_=lambda *a: None,
     )
-    pool = SimpleNamespace(drain=lambda: None)
+    from contextlib import contextmanager
+
+    pools = []
+
+    @contextmanager
+    def autorelease_pool():
+        pools.append("enter")
+        try:
+            yield
+        finally:
+            pools.append("exit")
+
+    monkeypatch.setitem(sys.modules, "objc", SimpleNamespace(autorelease_pool=autorelease_pool))
     api = SimpleNamespace(
         NSApplication=SimpleNamespace(sharedApplication=lambda: app),
         NSApplicationActivationPolicyAccessory=1,
         NSEventMaskAny=1,
-        NSAutoreleasePool=SimpleNamespace(alloc=lambda: SimpleNamespace(init=lambda: pool)),
     )
     monkeypatch.setitem(sys.modules, "AppKit", api)
     monkeypatch.setitem(
@@ -161,6 +172,7 @@ def test_helper_hides_expired_outline_without_parent_updates(monkeypatch):
     module._serve((500, 400), mailbox, stop, status, os.getppid())
     assert status.value == 1
     assert calls == ["show", "hide", "hide", "close"]
+    assert pools == ["enter", "exit", "enter", "exit"]
 
 
 def test_failed_process_start_can_close_without_joining_unstarted_process():

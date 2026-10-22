@@ -26,6 +26,10 @@ class AXReadError(RuntimeError):
     pass
 
 
+class AXMessagingError(AXReadError):
+    """Native messaging could not complete; not an invalid element reference."""
+
+
 class AXEmptyTarget(AXReadError):
     """Known zero-area control; exclude only this target, not its descendants."""
 
@@ -154,6 +158,8 @@ class AXBackend:
         p = self._own(output.value) if output.value else None
         if optional and code in {-25205, -25212}:
             return None
+        if code == -25204:
+            raise AXMessagingError(f"native read failed: {code}")
         if code or p is None:
             raise AXReadError(f"native read failed: {code}")
         return p
@@ -201,8 +207,20 @@ class AXBackend:
         if pid is None:
             return None
         app = self._own(self.create_application(pid))
-        window = self._element(self._attr(app, "AXFocusedWindow"))
-        if window is None:
+        try:
+            window = self._element(self._attr(app, "AXFocusedWindow"))
+        except AXMessagingError:
+            # Newly foreground apps may not answer their first window read.
+            # Retry only before a context exists, once, with the same IPC timeout.
+            # Established sessions must invalidate immediately on a failed check.
+            if self.initial_context is not None:
+                raise
+            if self._frontmost_pid() != pid or not self.trusted():
+                return None
+            window = self._element(self._attr(app, "AXFocusedWindow"))
+            if not self.trusted():
+                return None
+        if window is None or self._frontmost_pid() != pid:
             return None
         if self.initial_context is None:
             self.initial_context = app, window

@@ -436,3 +436,48 @@ def test_unknown_enabled_never_bypasses_existing_discovery_guards(failure):
         result.status
         == {"truncated": "incomplete", "context": "context_changed", "offscreen": "ok"}[failure]
     )
+
+
+@pytest.mark.parametrize("persistent_failure", [False, True])
+def test_short_lived_children_are_read_before_enumerating_later_subtrees(persistent_failure):
+    """Model a valid child invalidated when another cell's children are requested."""
+    from eye_tracker.platform_adapters._macos_ax import AXReadError
+
+    class TransientChildren(Backend):
+        expired = False
+
+        def children(self, node, limit):
+            if node == "later_cell":
+                self.expired = True
+            return super().children(node, limit)
+
+        def describe(self, node):
+            if (node == "temporary_label" and self.expired) or (
+                node == "late_button" and persistent_failure
+            ):
+                raise AXReadError("native read failed: -25202")
+            return super().describe(node)
+
+        def hit_test(self, x, y):
+            return "button" if x < 100 else "late_button"
+
+    backend = TransientChildren()
+    backend.tree.update(
+        window=["early_cell", "later_cell"],
+        early_cell=["temporary_label", "button"],
+        later_cell=["late_button"],
+    )
+    backend.info.update(
+        early_cell=("AXCell", None, None, ()),
+        later_cell=("AXCell", None, None, ()),
+        temporary_label=("AXStaticText", None, None, ()),
+        late_button=("AXButton", TargetRect(120, 20, 40, 40), True, ("AXPress",)),
+    )
+    result = collect(backend)
+    if persistent_failure:
+        assert result.status == "incomplete"
+        assert result.targets == ()  # Never publish the earlier target on partial traversal.
+    else:
+        assert result.status == "ok"
+        assert {target.rect.center for target in result.targets} == {(40, 40), (140, 40)}
+    assert backend.closed

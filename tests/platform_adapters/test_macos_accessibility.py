@@ -481,3 +481,68 @@ def test_short_lived_children_are_read_before_enumerating_later_subtrees(persist
         assert result.status == "ok"
         assert {target.rect.center for target in result.targets} == {(40, 40), (140, 40)}
     assert backend.closed
+
+
+@pytest.mark.parametrize("role", ["AXMenuButton", "AXTextField"])
+@pytest.mark.parametrize(
+    "state,status,count,category",
+    [
+        ("enabled", "ok", 1, "press"),
+        ("unknown_enabled", "ok", 1, "preview_only"),
+        ("disabled", "ok", 0, None),
+        ("confirm_only", "ok", 0, None),
+        ("menu_only", "ok", 0, None),
+        ("occluded", "ok", 0, None),
+        ("offscreen", "ok", 0, None),
+        ("missing_geometry", "incomplete", 0, None),
+        ("closed_menu", "ok", 0, None),
+    ],
+)
+def test_shared_press_controls_preserve_discovery_guards(role, state, status, count, category):
+    backend = Backend()
+    _, rect, enabled, actions = backend.info["button"]
+    if state == "unknown_enabled":
+        enabled = None
+    elif state == "disabled":
+        enabled = False
+    elif state == "confirm_only":
+        actions = ("AXConfirm",)
+    elif state == "menu_only":
+        actions = ("AXShowMenu",)
+    elif state == "occluded":
+        backend.hit = "other"
+    elif state == "offscreen":
+        rect = TargetRect(900, 900, 40, 40)
+    elif state == "missing_geometry":
+        rect = None
+    elif state == "closed_menu":
+        backend.tree["window"] = ["menu"]
+        backend.tree["menu"] = ["button"]
+        backend.info["menu"] = ("AXMenu", None, None, ())
+    backend.info["button"] = role, rect, enabled, actions
+    result = collect(backend)
+    assert result.status == status
+    assert len(result.targets) == count
+    if count:
+        target = result.targets[0]
+        assert (target.role, target.enabled, target.category) == (role, enabled, category)
+
+
+@pytest.mark.parametrize("role", ["AXMenuButton", "AXTextField"])
+def test_new_control_competes_with_nested_button_in_shared_resolver(role):
+    from eye_tracker.intent.targeting import GazePoint, TargetingConfig, TargetResolver
+
+    backend = Backend()
+    backend.tree.update(window=["control"], control=["button"])
+    backend.info["control"] = (role, TargetRect(10, 10, 100, 60), True, ("AXPress",))
+    backend.parents["button"] = "control"
+    snapshot = collect(backend)
+    assert snapshot.status == "ok" and len(snapshot.targets) == 2
+    resolver = TargetResolver(TargetingConfig(50, 10, 0.1, 0.08, 0.5, 0.05))
+    result = resolver.update(
+        GazePoint(40, 40, snapshot.captured_at),
+        snapshot,
+        now=snapshot.captured_at,
+        context_id="context",
+    )
+    assert result.status == "ambiguous" and result.target is None

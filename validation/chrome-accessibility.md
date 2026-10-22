@@ -84,3 +84,53 @@ Apple defines [AXUIElementCopyActionNames](https://developer.apple.com/documenta
 as the list of actions an element supports. The earlier API-migration hypothesis
 came from [Chromium's Cocoa adapter](https://raw.githubusercontent.com/chromium/chromium/main/ui/accessibility/platform/ax_platform_node_cocoa.mm);
 source inspection alone is not proof of the installed browser's feature state.
+
+## Checked fixture launcher
+
+The bounded launcher combines disposable-profile preparation and foreground
+readiness checks. From the repository root, with the prepared experiment Python:
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src:. \
+  ~/.virtualenvs/eye-tracker-gazefollower-20261019/bin/python \
+  -m validation.chrome_fixture
+```
+
+This explicitly opens and foregrounds a new Chrome process with the documented
+`--force-renderer-accessibility` flag. It never sends a runtime accessibility-mode
+setter to an existing browser. It closes its owned browser after the check and
+restores the previously foreground application only if an owned test process
+still had focus at cleanup; a deliberate user focus change is preserved. Disposable profiles and a new
+`validation/results/chrome-readiness-*/report.json` are preserved.
+
+The default is camera-free. Add `--preview` only for an authorized, ready human
+session. That starts the existing GazeFollower semantic preview after readiness;
+calibration, quality review, Enter and Tab remain unchanged. Escape ends preview.
+Closing the launcher terminates only its owned gaze/browser processes. It does
+not remove profiles, guarantee descendant-process teardown or modify the normal
+Chrome session. This launcher is currently macOS-only; the shared resolver is
+unchanged.
+
+Readiness requires three consecutive complete scans with the same role/geometry
+set for the five enabled page controls. Toolbar controls do not count. Incomplete
+scans, missing controls and changed geometry reset the streak; context changes,
+permission failure and unsupported display coordinates stop the check. At most
+20 attempts and 12 seconds of cooperative discovery are allowed, with 0.5-second
+spacing. Startup activation has a separate bounded wait. Native calls can exceed
+cooperative IPC budgets; no replacement workers are spawned. Late scans cannot
+report readiness. A failed check never starts the camera and exits nonzero.
+
+Reports contain scan status, elapsed time, streak and available attribute-read
+errors, not UI text or rectangles. Native errors outside attribute reads may only
+appear as `incomplete`. A ready result describes that fixture at that instant,
+not arbitrary sites or guaranteed coverage after calibration. Existing runtime
+freshness/context checks still suppress invalid outlines. Issue #116 remains
+open: this is a controlled test preparation path, not a normal-session fix or a
+resolution of the intermittent native startup error.
+
+Camera-free validation on 2026-10-22: the first launcher run encountered three
+`AXRole` reads failing with `-25204`, then three matching complete scans and
+readiness at 2.81 seconds. A second run after the lifecycle review also reached
+readiness. Both reports recorded `camera_started: false` and owned-browser exit.
+These observations validate recovery from a transient read failure in the test
+launcher, not the root cause of Chrome's native failure or human gaze accuracy.

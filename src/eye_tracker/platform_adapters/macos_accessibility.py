@@ -92,7 +92,7 @@ class MacOSAccessibility:
                 if context is None:
                     return result("unavailable")
                 screen = native.screen()
-                queue = deque((root, 0, screen) for root in native.roots())
+                queue = deque((root, 0, screen) for root in reversed(native.roots()))
                 if not queue:
                     return result("unavailable")
                 seen, targets = {}, []
@@ -102,7 +102,10 @@ class MacOSAccessibility:
                 identity_hash = getattr(native, "identity_hash", lambda node: 0)
                 while queue:
                     budget()
-                    node, depth, clip = queue.popleft()
+                    # Consume each subtree promptly: native child references can
+                    # expire while other subtrees are being enumerated. All nodes
+                    # and completeness checks still apply; no failed node is skipped.
+                    node, depth, clip = queue.pop()
                     bucket = seen.setdefault(identity_hash(node), [])
                     if any(native.same(node, old) for old in bucket):
                         continue
@@ -165,7 +168,7 @@ class MacOSAccessibility:
                         raise AXReadError("child or depth cap")
                     if len(queue) + len(children) > self.limits.max_nodes:
                         raise AXReadError("queue cap")
-                    queue.extend((child, depth + 1, clip) for child in children)
+                    queue.extend((child, depth + 1, clip) for child in reversed(children))
                 budget()
                 if native.context() != context:
                     return result("context_changed")

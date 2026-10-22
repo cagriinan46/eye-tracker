@@ -122,3 +122,39 @@ Existing logs establish a generalization concern, not whether the user, glasses,
 camera or pretrained representation caused it. No new human run or camera
 comparison is claimed by this document. Semantic feed availability is a separate
 remaining issue and must not be attributed to gaze estimation.
+
+## Offline model replay (issue #131)
+
+Once a diagnostic reference session is completed, run without a camera:
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src:. \
+  ~/.virtualenvs/eye-tracker-gazefollower-20261019/bin/python \
+  -m validation.gaze_model_replay validation/results/SESSION_DIRECTORY
+```
+
+The analyzer accepts one explicitly named, completed, nonsymlink session directly
+under `validation/results`. It never scans historical sessions. It fits the three
+predeclared ridge settings using `calibration.npz` only, then joins each evaluation
+attempt to its diagnostic sample by exact capture timestamp and trial. It checks
+distinct bounded plan locations/IDs, repeated locations against their calibration
+identities, unseen/calibration separation, and baseline reproduction against saved weights and recorded raw
+predictions (0.001 pixel tolerance). Missing, duplicate or mismatched pairs reject
+the report instead of silently changing the evaluated sample set.
+
+Rejected attempts remain in availability and 30-pixel hit-rate denominators. Reports
+contain per-trial raw/unclipped error, p95, bias and centered dispersion, and separate
+summaries for trained-location repeats and unseen locations. Each group needs its
+expected number of trials and at least five usable samples per trial to report an
+overall mean. No filter is replayed and no combined trained/unseen mean is used.
+
+Input hashes are rechecked after analysis; a new UUID report directory is created
+only after validation. No weights or input data are overwritten, no camera/UI is
+opened, and no winning model is automatically selected or installed. This compares
+three regularization settings of the same mapping family, not three distinct gaze
+estimation architectures. A model comparison used for development still needs a
+fresh independent validation before adopting a change.
+
+The earlier session audited above cannot be replayed: it predates the diagnostic
+feature records. Tool verification uses synthetic data only until the user is ready
+for a new capture. Human tests remain paused at the user's explicit request.

@@ -57,7 +57,7 @@ class TargetDecision:
             raise ValueError("abstentions cannot carry a target")
 
 
-def _rank(gaze, snapshot, *, now, context_id, config):
+def _rank(gaze, snapshot, *, now, context_id, config, preview_only=False):
     if not isfinite(now) or now < 0:
         return TargetDecision("invalid_time"), []
     if snapshot.status != "ok" or not context_id or context_id != snapshot.context_id:
@@ -72,12 +72,16 @@ def _rank(gaze, snapshot, *, now, context_id, config):
         or snapshot.screen.distance_to(gaze.x, gaze.y) != 0
     ):
         return TargetDecision("invalid_gaze"), []
+    if not preview_only and any(t.category == "preview_only" for t in snapshot.targets):
+        return TargetDecision("unavailable_context"), []
     ranked = sorted(
         (
             (target.rect.distance_to(gaze.x, gaze.y), target)
             for target in snapshot.targets
-            if target.enabled
-            and target.category == "press"
+            if (
+                (target.enabled is True and target.category == "press")
+                or (preview_only and target.enabled is None and target.category == "preview_only")
+            )
             and snapshot.screen.distance_to(*target.rect.center) == 0
         ),
         key=lambda item: item[0],
@@ -112,7 +116,10 @@ def select_target(
 class TargetResolver:
     """Separated evidence; optional native-verified tokens bridge complete scans."""
 
-    def __init__(self, config: TargetingConfig):
+    def __init__(self, config: TargetingConfig, *, preview_only: bool = False):
+        if type(preview_only) is not bool:
+            raise TypeError("preview_only must be boolean")
+        self.preview_only = preview_only
         self.config = config
         self.reset()
 
@@ -131,7 +138,14 @@ class TargetResolver:
         now: float,
         context_id: str | None,
     ) -> TargetDecision:
-        failure, ranked = _rank(gaze, snapshot, now=now, context_id=context_id, config=self.config)
+        failure, ranked = _rank(
+            gaze,
+            snapshot,
+            now=now,
+            context_id=context_id,
+            config=self.config,
+            preview_only=self.preview_only,
+        )
         if failure:
             self.reset()
             return failure

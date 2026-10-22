@@ -135,10 +135,10 @@ def test_cycles_terminate_and_closed_menus_are_skipped():
     assert collect(backend).targets == ()
 
 
-def test_missing_required_state_is_incomplete():
+def test_missing_required_geometry_is_incomplete():
     backend = Backend()
     role, rect, _, actions = backend.info["button"]
-    backend.info["button"] = role, rect, None, actions
+    backend.info["button"] = role, None, True, actions
     assert collect(backend).status == "incomplete"
 
 
@@ -403,3 +403,36 @@ def test_native_alias_across_scans_keeps_identity_and_exit_invalidates():
         assert session.refresh().targets[0].continuity_id == token
     assert backend.closed
     assert session.refresh() is None
+
+
+def test_unknown_enabled_is_preserved_only_after_visibility_verification():
+    backend = Backend()
+    role, rect, _, actions = backend.info["button"]
+    backend.info["button"] = role, rect, None, actions
+    result = collect(backend)
+    assert result.status == "ok"
+    assert result.targets[0].enabled is None
+    assert result.targets[0].category == "preview_only"
+    backend.hit = "other"
+    assert collect(backend).targets == ()
+    backend.info["button"] = role, None, None, actions
+    assert collect(backend).status == "incomplete"
+
+
+@pytest.mark.parametrize("failure", ["truncated", "context", "offscreen"])
+def test_unknown_enabled_never_bypasses_existing_discovery_guards(failure):
+    backend = Backend()
+    role, rect, _, actions = backend.info["button"]
+    if failure == "offscreen":
+        rect = TargetRect(900, 900, 40, 40)
+    backend.info["button"] = role, rect, None, actions
+    if failure == "truncated":
+        backend.truncated = True
+    if failure == "context":
+        backend.changed = True
+    result = collect(backend)
+    assert result.targets == ()
+    assert (
+        result.status
+        == {"truncated": "incomplete", "context": "context_changed", "offscreen": "ok"}[failure]
+    )

@@ -131,3 +131,14 @@ def test_empty_root_geometry_does_not_prove_complete_coverage(role):
     result = MacOSAccessibility(backend=backend).snapshot()
     assert result.status == "incomplete"
     assert result.targets == ()
+
+
+@pytest.mark.parametrize("role", ["AXMenuButton", "AXTextField"])
+def test_shared_press_controls_read_native_geometry_state_and_capability(role):
+    native = geometry_backend((40.0, 30.0), role=role)
+    native._attr = lambda node, name: {"AXRole": role, "AXEnabled": None}[name]
+    native._timeout = lambda node: None
+    native.copy_actions = lambda node, output: 0
+    native._out = lambda code, output, optional: ("AXPress",)
+    native._array = lambda value, cap: value
+    assert native.describe("control") == (role, TargetRect(10, 20, 40, 30), None, ("AXPress",))

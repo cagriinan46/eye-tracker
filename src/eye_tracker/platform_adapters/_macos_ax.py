@@ -7,7 +7,19 @@ from uuid import uuid4
 
 from eye_tracker.intent.targets import TargetRect
 
-SUPPORTED_ROLES = frozenset({"AXButton", "AXCheckBox", "AXRadioButton", "AXPopUpButton", "AXLink"})
+# Roles only nominate controls; discovery still requires AXPress and visibility.
+# Menu-opening buttons do not enable traversal of AXMenu contents.
+SUPPORTED_ROLES = frozenset(
+    {
+        "AXButton",
+        "AXCheckBox",
+        "AXRadioButton",
+        "AXPopUpButton",
+        "AXLink",
+        "AXMenuButton",
+        "AXTextField",
+    }
+)
 
 
 class AXReadError(RuntimeError):

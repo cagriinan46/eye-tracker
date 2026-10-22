@@ -280,3 +280,14 @@ latency. Windows needs its own renderer; feed/resolver/coordinator remain portab
 Native behavior references: Apple [nonactivating panel style](https://developer.apple.com/documentation/appkit/nswindow/stylemask-swift.struct),
 [orderFrontRegardless](https://developer.apple.com/documentation/appkit/nswindow/orderfrontregardless()),
 and [accessibilityElement](https://developer.apple.com/documentation/appkit/nsaccessibilityprotocol/accessibilityelement).
+
+### Optional numerical gaze diagnostics
+
+For a user-authorized cause investigation, append `--diagnostic-features`.
+This saves eligible model features and scalar eye-image/face-geometry proxies to
+an exclusive, bounded local sidecar during calibration/evaluation only. No camera
+images or full landmarks are saved. These numerical participant records remain
+Git-ignored. Evaluation timestamps join the sidecar exactly; ordinary model fitting
+and predictions are unchanged. Recording adds overhead and is off by default.
+See [the controlled protocol](../../validation/gaze-cause-investigation.md) for
+interpretation, privacy and the comparisons that still require follow-up tooling.

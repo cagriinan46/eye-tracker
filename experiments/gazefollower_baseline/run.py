@@ -380,6 +380,9 @@ def run(args):
     pointer_backend = None
     pointer = None
     semantic_preview = None
+    diagnostic_recorder = None
+    diagnostic_phase = "calibration"
+    diagnostic_trial = None
     folder = None
     status = "failed"
     try:
@@ -470,7 +473,22 @@ def run(args):
             face = face_model.detect(time.time_ns(), bgr)
             rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
             gaze = gaze_model.detect(rgb, face)
-            return rgb, face, gaze, (time.monotonic() - t0) * 1000, captured_at
+            inference_ms = (time.monotonic() - t0) * 1000
+            if diagnostic_recorder is not None:
+                from experiments.gazefollower_baseline.diagnostics import diagnostic_row
+
+                diagnostic_recorder.write(
+                    diagnostic_row(
+                        rgb,
+                        face,
+                        gaze,
+                        usable=eligible(face, gaze, config.eye_blink_threshold),
+                        captured_at=captured_at,
+                        phase=diagnostic_phase,
+                        trial=diagnostic_trial,
+                    )
+                )
+            return rgb, face, gaze, inference_ms, captured_at
 
         # Preview is live but unrecorded. Enter only advances to a second ready gate.
         print("PREVIEW: adjust placement, then ENTER", flush=True)
@@ -520,8 +538,13 @@ def run(args):
                 fallback_frames_rejected=True,
                 repeat_calibration_targets=args.repeat_calibration_targets,
                 repair_calibration_enabled=args.repair_calibration,
+                diagnostic_features_enabled=getattr(args, "diagnostic_features", False),
             ),
         )
+        if getattr(args, "diagnostic_features", False):
+            from experiments.gazefollower_baseline.diagnostics import DiagnosticRecorder
+
+            diagnostic_recorder = DiagnosticRecorder(folder / "diagnostic-frames.jsonl")
         controller.new_session()
         previous_index = -1
         target_started = time.monotonic()
@@ -541,6 +564,7 @@ def run(args):
             if time.monotonic() - target_started > 15:
                 raise RuntimeError("Calibration target timed out: insufficient usable eye frames")
             enter_pressed(pg)
+            diagnostic_trial = controller._current_index
             _, face, gaze, _, _ = observe()
             if not eligible(face, gaze, config.eye_blink_threshold):
                 gaze.status = False
@@ -584,8 +608,10 @@ def run(args):
         )
         rows = []
         smooth = filter_type()
+        diagnostic_phase = "evaluation"
         with (folder / "evaluation.jsonl").open("x") as stream:
             for trial, item in enumerate(plan, 1):
+                diagnostic_trial = trial
                 target = np.asarray(item["target"])
                 draw(target, f"KONTROL {trial}/{len(plan)} | Sadece sari noktaya bak")
                 start = time.monotonic()
@@ -608,6 +634,7 @@ def run(args):
                         smooth = filter_type()
                     if elapsed >= 0.8:
                         row = dict(
+                            captured_monotonic_s=captured_at,
                             trial=trial,
                             target_set=item["target_set"],
                             target_id=item["target_id"],
@@ -620,6 +647,9 @@ def run(args):
                         rows.append(row)
                         stream.write(json.dumps(row, allow_nan=False) + "\n")
                         stream.flush()
+        if diagnostic_recorder is not None:
+            diagnostic_recorder.close()
+            diagnostic_recorder = None
         report = summarize_evaluation(rows, repeat=args.repeat_calibration_targets)
         write_new(folder / "report.json", report)
         metrics = (
@@ -758,18 +788,22 @@ def run(args):
             status = "cancelled"
         return 0
     finally:
-        if semantic_preview is not None:
-            semantic_preview.close()
-        if pointer_backend is not None:
-            pointer_backend.close()
-        if cap is not None:
-            cap.release()
-        face_model.release()
-        gaze_model.release()
-        pg.quit()
-        if folder is not None:
-            write_new(folder / "completion.json", dict(status=status))
-            print(f"SESSION {status}: {folder}", flush=True)
+        try:
+            if diagnostic_recorder is not None:
+                diagnostic_recorder.close()
+        finally:
+            if semantic_preview is not None:
+                semantic_preview.close()
+            if pointer_backend is not None:
+                pointer_backend.close()
+            if cap is not None:
+                cap.release()
+            face_model.release()
+            gaze_model.release()
+            pg.quit()
+            if folder is not None:
+                write_new(folder / "completion.json", dict(status=status))
+                print(f"SESSION {status}: {folder}", flush=True)
 
 
 def main():
@@ -777,6 +811,11 @@ def main():
     parser.add_argument("--upstream", type=Path, default=SUPPORT / "upstream")
     parser.add_argument("--face-model", type=Path, default=SUPPORT / "face_landmarker.task")
     parser.add_argument("--camera-index", type=int)
+    parser.add_argument(
+        "--diagnostic-features",
+        action="store_true",
+        help="Save local numerical calibration/evaluation features and eye-image proxies; no images",
+    )
     parser.add_argument(
         "--repair-calibration",
         action="store_true",

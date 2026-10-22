@@ -65,8 +65,14 @@ browser launched with full renderer accessibility exposed the expected web-contr
 actions without relaxing production selection checks. This is an opt-in test setup,
 not automatic support for existing Chrome sessions or all websites.
 
-Targets require enabled state, valid window/screen-clipped geometry and native
-hit-testing at their proposed center. A hit on a descendant needs bounded ancestry
+Targets require valid window/screen-clipped geometry and native hit-testing at
+their proposed center. Known-disabled controls are excluded. Under the approved
+2026-10-22 ADR-005 amendment, an otherwise verified supported press control with
+unknown enabled state is retained as `enabled=None`, category `preview_only`.
+The CLI target/role counts include these preview-only candidates; `ok` does not
+mean the strict resolver will accept the snapshot. Only `SemanticPreview` opts
+in; default resolution and stateless baselines abstain when a preview-only target
+is present. Highlighting does not authorize activation. A hit on a descendant needs bounded ancestry
 verification. This proves the center at the instant of the read, not visibility of
 the full rectangle or future validity. Snapshots do not authorize actions.
 

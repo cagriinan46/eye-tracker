@@ -145,7 +145,7 @@ class SemanticPreview:
     def __init__(self, config: TargetingConfig, *, max_context_age: float):
         _positive(max_context_age)
         self.max_context_age = max_context_age
-        self._resolver = TargetResolver(config)
+        self._resolver = TargetResolver(config, preview_only=True)
 
     def reset(self):
         self._resolver.reset()

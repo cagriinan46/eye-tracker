@@ -43,3 +43,25 @@ Native budgets, supported-role coverage and performance will be measured through
 bounded implementation tasks.
 
 See the [approved design](../superpowers/specs/2026-10-21-semantic-gaze-design.md).
+
+## Preview-only enabled-state amendment — 2026-10-22
+
+Approved by the user after distinguishing visual candidate highlighting from future
+activation. Known-enabled supported press controls remain candidates; known-disabled
+controls remain excluded. A supported `AXPress` control with unknown enabled state
+may be a **preview-only** candidate after the same geometry, clipping, center-hit,
+complete traversal, context and freshness checks. Missing geometry, invalid native
+references, IPC failures and traversal limits still invalidate the whole scan.
+
+Unknown enabled state is preserved as `None`, with category `preview_only`; it is
+never converted to `True`. Only the semantic preview coordinator opts into ranking
+these controls. Strict/default resolution and stateless comparison baselines abstain
+when such a candidate exists, rather than silently removing a possible competitor.
+Preview uses the existing ambiguity and temporal-stability rules; enabled/category
+changes reset evidence even when native identity is continuous.
+
+A complete discovery snapshot can therefore contain verified preview candidates
+whose enabled state is unknown. It is not an activation authorization. This amendment
+does not approve dwell, clicking, pointer snapping or inferring whether an unknown
+control will respond to activation. Future activation needs its own explicit policy.
+The earlier local uncertainty-region veto proposal was not adopted.

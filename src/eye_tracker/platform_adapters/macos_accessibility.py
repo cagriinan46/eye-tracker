@@ -127,9 +127,11 @@ class MacOSAccessibility:
                         if clip is None:
                             continue
                     if role in SUPPORTED_ROLES and "AXPress" in actions:
-                        if enabled is None or (enabled and rect is None):
+                        if enabled is not False and rect is None:
                             raise AXReadError("missing target geometry or enabled state")
-                        visible = _intersection(clip, rect) if enabled and rect else None
+                        visible = (
+                            _intersection(clip, rect) if enabled is not False and rect else None
+                        )
                         if visible:
                             budget()
                             hit = native.hit_test(*visible.center)
@@ -146,8 +148,8 @@ class MacOSAccessibility:
                                             str(seen_count),
                                             role,
                                             visible,
-                                            True,
-                                            "press",
+                                            enabled,
+                                            "preview_only" if enabled is None else "press",
                                             _identity(node, role, visible) if _identity else None,
                                         )
                                     )
@@ -212,7 +214,8 @@ class _DiscoverySession:
         identity_hash = getattr(native, "identity_hash", lambda node: 0)
 
         def identity(node, role, rect):
-            # Only enabled, hit-tested press targets reach this callback.
+            # Only hit-tested press/preview-only targets reach this callback.
+            # Resolver keys also include enabled/category, so state changes reset evidence.
             bucket = identity_hash(node)
             token = (
                 next(

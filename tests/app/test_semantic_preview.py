@@ -302,3 +302,14 @@ def test_early_refresh_retains_only_unexpired_values_and_clears_on_failure(outco
         provider.release.set()
         assert feed.close(1)
     assert feed.latest() is None and feed.status == "closed"
+
+
+def test_preview_coordinator_explicitly_accepts_unknown_enabled():
+    unknown = replace(TARGET, enabled=None, category="preview_only")
+    value = replace(snap(), targets=(unknown,))
+    preview = SemanticPreview(CONFIG, max_context_age=0.1)
+    for t in (1, 1.06):
+        assert tick(preview, t, CheckedSnapshot(value, t, "window")).status == "pending"
+    result = tick(preview, 1.12, CheckedSnapshot(value, 1.12, "window"))
+    assert result.target == unknown
+    assert result.target.enabled is None

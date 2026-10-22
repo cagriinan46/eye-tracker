@@ -288,3 +288,54 @@ def test_four_scan_synthetic_stream_reduces_reacquisition_without_changing_gaze(
     assert counts["verified-native-control"] > counts[None]
     # The initial acquisition remains mandatory with verified identity as well.
     assert counts["verified-native-control"] < 32
+
+
+def test_unknown_enabled_is_preview_only_and_competes():
+    unknown = replace(BUTTON, enabled=None, category="preview_only")
+    snap = snapshot(unknown)
+    assert update(TargetResolver(CONFIG), 1, snap).status == "unavailable_context"
+    assert (
+        select_target(
+            GazePoint(110, 110, 1),
+            snap,
+            now=1,
+            context_id="window",
+            config=CONFIG,
+            method="nearest",
+        ).target
+        is None
+    )
+    assert acquire(TargetResolver(CONFIG, preview_only=True), snap).target == unknown
+    neighbor = replace(BUTTON, target_id="b", rect=TargetRect(130, 100, 20, 20))
+    assert (
+        update(TargetResolver(CONFIG, preview_only=True), 1, snapshot(unknown, neighbor)).status
+        == "ambiguous"
+    )
+
+
+def test_enabled_transition_resets_preview_stability_even_with_continuity():
+    known = replace(BUTTON, continuity_id="same")
+    resolver = TargetResolver(CONFIG, preview_only=True)
+    assert acquire(resolver, snapshot(known)).target == known
+    unknown = replace(known, enabled=None, category="preview_only")
+    assert update(resolver, 1.13, snapshot(unknown)).status == "pending"
+    assert update(resolver, 1.14, snapshot(replace(known, enabled=False))).target is None
+
+
+@pytest.mark.parametrize("method", ["nearest", "coordinate"])
+def test_strict_baselines_do_not_ignore_unknown_competitor(method):
+    unknown = replace(BUTTON, target_id="unknown", enabled=None, category="preview_only")
+    snap = snapshot(BUTTON, unknown)
+    assert update(TargetResolver(CONFIG), 1, snap).status == "unavailable_context"
+    result = select_target(
+        GazePoint(110, 110, 1), snap, now=1, context_id="window", config=CONFIG, method=method
+    )
+    assert result.target is None
+
+
+def test_unknown_to_known_transition_restarts_preview_evidence():
+    unknown = replace(BUTTON, enabled=None, category="preview_only", continuity_id="same")
+    resolver = TargetResolver(CONFIG, preview_only=True)
+    assert acquire(resolver, snapshot(unknown)).target == unknown
+    known = replace(unknown, enabled=True, category="press")
+    assert update(resolver, 1.13, snapshot(known)).status == "pending"

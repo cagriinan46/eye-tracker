@@ -71,3 +71,17 @@ def test_continuity_tokens_are_optional_nonempty_and_unique():
     with pytest.raises(ValueError, match="duplicate continuity"):
         UISnapshot("s", 1, "c", rect, (target, replace(target, target_id="b")), "ok")
     assert replace(target, continuity_id=None).continuity_id is None
+
+
+def test_unknown_enabled_requires_explicit_preview_only_category():
+    rect = TargetRect(0, 0, 10, 10)
+    target = UITarget("a", "AXButton", rect, None, "preview_only")
+    assert target.enabled is None
+    for enabled, category in [
+        (None, "press"),
+        (True, "preview_only"),
+        (False, "preview_only"),
+        (1, "press"),
+    ]:
+        with pytest.raises(TypeError):
+            UITarget("a", "AXButton", rect, enabled, category)

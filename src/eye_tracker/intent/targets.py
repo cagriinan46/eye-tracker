@@ -47,7 +47,7 @@ class UITarget:
     target_id: str
     role: str
     rect: TargetRect
-    enabled: bool
+    enabled: bool | None
     category: str
     continuity_id: str | None = None
 
@@ -58,8 +58,11 @@ class UITarget:
             raise ValueError("continuity identity must be a nonempty string or None")
         if not self.target_id or not self.role or not self.category:
             raise ValueError("target identity, role and category are required")
-        if not isinstance(self.rect, TargetRect) or type(self.enabled) is not bool:
-            raise TypeError("target requires a rectangle and boolean enabled state")
+        valid_state = (
+            self.enabled is None if self.category == "preview_only" else type(self.enabled) is bool
+        )
+        if not isinstance(self.rect, TargetRect) or not valid_state:
+            raise TypeError("unknown enabled state requires the preview_only category")
 
 
 @dataclass(frozen=True, slots=True)

@@ -142,3 +142,132 @@ def test_shared_press_controls_read_native_geometry_state_and_capability(role):
     native._out = lambda code, output, optional: ("AXPress",)
     native._array = lambda value, cap: value
     assert native.describe("control") == (role, TargetRect(10, 20, 40, 30), None, ("AXPress",))
+
+
+def context_backend():
+    native = AXBackend()
+    native._frontmost_pid = lambda: 42
+    native.trusted = lambda: True
+    native.create_application = lambda pid: ("app", pid)
+    native._own = lambda value: value
+    native._element = lambda value: value
+    native.same = lambda a, b: a == b
+    return native
+
+
+def test_initial_window_messaging_failure_recovers_once():
+    from eye_tracker.platform_adapters._macos_ax import AXMessagingError
+
+    native = context_backend()
+    reads = iter([AXMessagingError("busy"), "window"])
+
+    def read(node, name):
+        value = next(reads)
+        if isinstance(value, Exception):
+            raise value
+        return value
+
+    native._attr = read
+    assert native.context() == native.context_id
+    assert native.initial_context == (("app", 42), "window")
+
+
+@pytest.mark.parametrize("change", ["pid", "permission", "persistent", "established", "invalid"])
+def test_initial_window_recovery_stops_on_changed_or_unrecoverable_state(change):
+    from eye_tracker.platform_adapters._macos_ax import AXMessagingError
+
+    native = context_backend()
+    calls = []
+    if change == "established":
+        native.initial_context = (("app", 42), "old-window")
+
+    def read(node, name):
+        calls.append(name)
+        if change == "pid":
+            native._frontmost_pid = lambda: 43
+        if change == "permission":
+            native.trusted = lambda: False
+        if change == "invalid":
+            raise AXReadError("invalid reference")
+        raise AXMessagingError("busy")
+
+    native._attr = read
+    if change in {"pid", "permission"}:
+        assert native.context() is None
+    else:
+        with pytest.raises(AXReadError):
+            native.context()
+    assert len(calls) == (2 if change == "persistent" else 1)
+    if change != "established":
+        assert native.initial_context is None
+
+
+def test_foreground_change_during_successful_window_read_is_not_adopted():
+    native = context_backend()
+
+    def read(node, name):
+        native._frontmost_pid = lambda: 43
+        return "window"
+
+    native._attr = read
+    assert native.context() is None
+    assert native.initial_context is None
+
+
+def test_native_messaging_error_is_classified_without_retrying_other_reads():
+    import ctypes as C
+
+    from eye_tracker.platform_adapters._macos_ax import AXMessagingError
+
+    native = AXBackend()
+    with pytest.raises(AXMessagingError):
+        native._out(-25204, C.c_void_p())
+    with pytest.raises(AXReadError) as caught:
+        native._out(-25202, C.c_void_p())
+    assert not isinstance(caught.value, AXMessagingError)
+
+
+@pytest.mark.parametrize("change", ["pid", "permission"])
+def test_state_change_during_successful_retry_does_not_establish_context(change):
+    from eye_tracker.platform_adapters._macos_ax import AXMessagingError
+
+    native = context_backend()
+    calls = []
+
+    def read(node, name):
+        calls.append(name)
+        if len(calls) == 1:
+            raise AXMessagingError("busy")
+        if change == "pid":
+            native._frontmost_pid = lambda: 43
+        else:
+            native.trusted = lambda: False
+        return "window"
+
+    native._attr = read
+    assert native.context() is None
+    assert native.initial_context is None
+    assert len(calls) == 2
+
+
+def test_initial_window_retry_does_not_reset_snapshot_time_budget():
+    from eye_tracker.platform_adapters._macos_ax import AXMessagingError
+
+    native = context_backend()
+    now = [1.0]
+    calls = []
+
+    def read(node, name):
+        calls.append(name)
+        if len(calls) == 1:
+            raise AXMessagingError("busy")
+        now[0] = 1.6
+        return "window"
+
+    native._attr = read
+    backend = Backend()
+    backend.context = native.context
+    result = MacOSAccessibility(backend=backend, clock=lambda: now[0]).snapshot()
+    assert result.status == "incomplete" and result.targets == ()
+    assert result.captured_at == 1.0
+    assert backend.closed

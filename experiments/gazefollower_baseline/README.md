@@ -291,3 +291,33 @@ Git-ignored. Evaluation timestamps join the sidecar exactly; ordinary model fitt
 and predictions are unchanged. Recording adds overhead and is off by default.
 See [the controlled protocol](../../validation/gaze-cause-investigation.md) for
 interpretation, privacy and the comparisons that still require follow-up tooling.
+
+### Optional three-pass calibration (issue #133)
+
+`--revisit-calibration` visits each of the same 13 locations three times, with
+15 eligible frames per visit (45 per location, unchanged total training budget).
+Pass order is the original order, then rotations by four and eight locations.
+The center warm-up discards 45 eligible frames. Each visit retains a 1.5-second
+settling period and 0.5-second completion wait, with a 15-second timeout. At healthy
+capture rates this takes roughly two minutes; low usable frame rates take longer.
+Escape cancels through the existing cleanup. There is no deliberate head task.
+
+The flag is opt-in: default upstream collection, MGazeNet, ridge alpha 0.1,
+filtering and held-out evaluation remain unchanged. It cannot combine with
+`--repair-calibration`. For a future authorized measurement, combine it with
+`--diagnostic-features --repeat-calibration-targets`. No human accuracy improvement
+has been demonstrated, and no camera run is part of implementation verification.
+
+`session.json` identifies the protocol. `calibration-plan.json` stores visit order
+and timing. `calibration-samples.jsonl` stores accepted training sample timestamps,
+visit/pass, target ID and zero-based per-target sample index (warm-up excluded).
+The unchanged `calibration.npz` shape is 13×45×258, grouped by original target ID,
+with each target's samples in visit order; offline model replay remains compatible.
+Diagnostic calibration trial IDs still identify the target (zero for warm-up);
+join accepted timestamps to the sample sidecar to distinguish visits and exclude
+settling frames. All participant records remain local and ignored.
+
+Compare fresh held-out results, especially regional regressions, before adopting
+this protocol. More target transitions and longer elapsed time are confounds;
+equal sample counts alone do not establish why accuracy changes. A session cannot
+serve simultaneously as a development comparison and untouched final validation.

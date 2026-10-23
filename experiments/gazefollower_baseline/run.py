@@ -510,7 +510,18 @@ def run(args):
             pg.display.flip()
             if enter_pressed(pg):
                 break
-        wait_enter(pg, lambda: draw((0.5, 0.5), "13 NOKTA KALIBRASYON | Hazirsan tekrar ENTER"))
+        wait_enter(
+            pg,
+            lambda: draw(
+                (0.5, 0.5),
+                (
+                    "3 TUR x 13 NOKTA (~2 dakika)"
+                    if getattr(args, "revisit_calibration", False)
+                    else "13 NOKTA KALIBRASYON"
+                )
+                + " | Hazirsan tekrar ENTER",
+            ),
+        )
         folder = new_session(ROOT / "validation/results")
         print(f"SESSION: {folder}", flush=True)
         model_path = args.upstream / "gazefollower/res/model_weights/base.mnn"
@@ -522,7 +533,12 @@ def run(args):
                 face_model_sha256=hashlib.sha256(args.face_model.read_bytes()).hexdigest(),
                 runner_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
                 model="public MGazeNet, trained on 7M images; not paper's 32M model",
-                calibration="upstream 13 targets, 45 accepted frames/target, Ridge alpha=0.1",
+                calibration="13 targets, 45 accepted frames/target, Ridge alpha=0.1",
+                calibration_protocol=(
+                    "three-pass-15"
+                    if getattr(args, "revisit_calibration", False)
+                    else "upstream-single-pass-45"
+                ),
                 screen_size=list(size),
                 input_size=[640, 480],
                 camera_index=index,
@@ -545,32 +561,83 @@ def run(args):
             from experiments.gazefollower_baseline.diagnostics import DiagnosticRecorder
 
             diagnostic_recorder = DiagnosticRecorder(folder / "diagnostic-frames.jsonl")
-        controller.new_session()
-        previous_index = -1
-        target_started = time.monotonic()
-        while controller.calibrating:
-            if controller._current_index > config.cali_mode.value:
-                controller.calibrating = False
-                break
-            controller.update_position()
-            if controller._current_index != previous_index:
-                previous_index = controller._current_index
-                target_started = time.monotonic()
-                draw(
-                    (controller.x, controller.y),
-                    f"KALIBRASYON {previous_index}/13 | Sari noktayi takip et",
+        if getattr(args, "revisit_calibration", False):
+            from experiments.gazefollower_baseline.revisits import collect_revisits, revisit_plan
+
+            points = [controller.normalized_point[i - 1] for i in controller._thirteen_cali_idx[1:]]
+            visits = revisit_plan(points)
+            write_new(
+                folder / "calibration-plan.json",
+                dict(
+                    protocol="three-pass-15",
+                    collector_sha256=hashlib.sha256(
+                        Path(__file__).with_name("revisits.py").read_bytes()
+                    ).hexdigest(),
+                    visits=visits,
+                    settle_seconds=1.5,
+                    post_collect_seconds=0.5,
+                    timeout_seconds=15,
+                ),
+            )
+
+            def begin_visit(visit):
+                nonlocal diagnostic_trial
+                diagnostic_trial = visit["target_id"] or 0
+                message = (
+                    "ISINMA"
+                    if visit["target_id"] is None
+                    else f"TUR {visit['pass']}/3 | NOKTA {visit['target_id']}/13"
                 )
-                controller._each_point_onset_time = time.time()
-            if time.monotonic() - target_started > 15:
-                raise RuntimeError("Calibration target timed out: insufficient usable eye frames")
-            enter_pressed(pg)
-            diagnostic_trial = controller._current_index
-            _, face, gaze, _, _ = observe()
-            if not eligible(face, gaze, config.eye_blink_threshold):
-                gaze.status = False
-            controller.add_cali_feature(gaze, face)
-        features = np.asarray(controller.feature_vectors, dtype=np.float32)
-        labels = np.asarray(controller.label_vectors, dtype=np.float32)
+                draw(visit["target"], message + " | Sari noktayi takip et")
+
+            def observe_visit():
+                _, face, gaze, _, captured_at = observe()
+                vector = gaze.features if eligible(face, gaze, config.eye_blink_threshold) else None
+                return vector, captured_at
+
+            with (folder / "calibration-samples.jsonl").open("x") as sample_stream:
+
+                def record_sample(row):
+                    sample_stream.write(json.dumps(row, allow_nan=False) + "\n")
+                    sample_stream.flush()
+
+                features, labels = collect_revisits(
+                    visits,
+                    begin=begin_visit,
+                    observe=observe_visit,
+                    poll=lambda: enter_pressed(pg),
+                    clock=time.monotonic,
+                    record=record_sample,
+                )
+        else:
+            controller.new_session()
+            previous_index = -1
+            target_started = time.monotonic()
+            while controller.calibrating:
+                if controller._current_index > config.cali_mode.value:
+                    controller.calibrating = False
+                    break
+                controller.update_position()
+                if controller._current_index != previous_index:
+                    previous_index = controller._current_index
+                    target_started = time.monotonic()
+                    draw(
+                        (controller.x, controller.y),
+                        f"KALIBRASYON {previous_index}/13 | Sari noktayi takip et",
+                    )
+                    controller._each_point_onset_time = time.time()
+                if time.monotonic() - target_started > 15:
+                    raise RuntimeError(
+                        "Calibration target timed out: insufficient usable eye frames"
+                    )
+                enter_pressed(pg)
+                diagnostic_trial = controller._current_index
+                _, face, gaze, _, _ = observe()
+                if not eligible(face, gaze, config.eye_blink_threshold):
+                    gaze.status = False
+                controller.add_cali_feature(gaze, face)
+            features = np.asarray(controller.feature_vectors, dtype=np.float32)
+            labels = np.asarray(controller.label_vectors, dtype=np.float32)
         if features.shape != (13, 45, 258) or labels.shape != (13, 45, 2):
             raise RuntimeError(f"Incomplete calibration: {features.shape}, {labels.shape}")
         with (folder / "calibration.npz").open("xb") as stream:
@@ -817,6 +884,11 @@ def main():
         help="Save local numerical calibration/evaluation features and eye-image proxies; no images",
     )
     parser.add_argument(
+        "--revisit-calibration",
+        action="store_true",
+        help="Opt-in three visits per calibration location, 15 samples each; longer calibration",
+    )
+    parser.add_argument(
         "--repair-calibration",
         action="store_true",
         help="Offer one selective repair round after the six-target quality check",
@@ -843,6 +915,8 @@ def main():
     args = parser.parse_args()
     if args.semantic_preview and sys.platform != "darwin":
         parser.error("Native semantic preview currently supports macOS only")
+    if args.repair_calibration and args.revisit_calibration:
+        parser.error("Revisited calibration cannot combine with selective repair")
     if args.repair_calibration and args.repeat_calibration_targets:
         parser.error(
             "Selective repair uses the six-target check; omit --repeat-calibration-targets"

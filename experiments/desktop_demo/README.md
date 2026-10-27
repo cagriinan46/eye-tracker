@@ -67,6 +67,14 @@ python -m pytest tests/desktop_demo -q
 ruff check experiments/desktop_demo src/eye_tracker/intent/region_dwell.py tests/desktop_demo
 ```
 
-Native macOS window/bridge startup is smoke-tested without opening the camera.
+Native macOS checks cover cold bridge startup, persistent error dismissal,
+calibration cancellation, home navigation and pause/resume using synthetic state
+(no participant accuracy claim). The actual camera was also opened, stopped,
+reopened and closed through the native UI; the worker released its resources
+before process exit. Camera frames were not saved. Windows remains unverified.
+
+The camera button supports cancel/stop/restart. Stopping the camera invalidates
+the eye setup; returning home while it stays open preserves the setup. Errors
+remain visible until dismissed or a user action succeeds.
 A real participant session is still required to establish this UI's selection
 accuracy. Existing calibration experiments do not validate the new UI geometry.

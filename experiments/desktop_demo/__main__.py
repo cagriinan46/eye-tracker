@@ -41,7 +41,7 @@ def main():
         zoomable=False,
         text_select=False,
     )
-    window.events.closed += api.close
+    window.events.closing += api.close
     window.events.moved += lambda *args: pause_for_window_move(api, *args)
     try:
         webview.start(gui="edgechromium" if sys.platform == "win32" else None, debug=False)

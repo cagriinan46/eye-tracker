@@ -109,3 +109,120 @@ def test_finished_measurements_stay_completed_after_later_window_error(tmp_path)
     api._session.fail("window moved after completion")
     api.close()
     assert json.loads((api._folder / "session.json").read_text())["status"] == "completed"
+
+
+def test_stop_camera_clears_preview_and_can_return_home(tmp_path):
+    api = DesktopAPI(output=tmp_path)
+    api._camera = "ready"
+    api._preview = "private-image"
+    assert api.command("stop_camera")["ok"]
+    assert api.snapshot()["preview"] is None
+    assert not api.snapshot()["tracking"]
+    assert api._stop.is_set()
+    api.close()
+
+
+def test_home_preserves_calibration_but_requires_new_trial_on_return(tmp_path):
+    api = DesktopAPI(output=tmp_path)
+    api._camera = "ready"
+    api._session.phase = "ready"
+    api._session.calibrated = True
+    api._session.start_demo()
+    api._begin_record()
+    assert api.command("home")["ok"]
+    assert api.snapshot()["phase"] == "preparation"
+    assert api.snapshot()["can_demo"]
+    assert api.command("demo")["ok"]
+    assert not api._session.trials
+    api.close()
+
+
+def test_close_always_waits_for_worker_even_when_another_close_started(tmp_path):
+    api = DesktopAPI(output=tmp_path)
+    calls = []
+
+    class Worker:
+        def join(self, timeout):
+            calls.append(timeout)
+
+    api._worker = Worker()
+    api._closed = True
+    api.close()
+    assert calls
+
+
+def test_camera_worker_releases_before_restart(monkeypatch, tmp_path):
+    import sys
+    import threading
+    import time
+    from types import SimpleNamespace
+
+    opened, released = threading.Event(), threading.Event()
+    instances = []
+
+    class Model:
+        def __init__(self, index):
+            instances.append(self)
+            opened.set()
+
+        def metadata(self):
+            return {}
+
+        def read(self, preview=False):
+            time.sleep(0.005)
+            return time.monotonic(), None, None, "memory-only-preview"
+
+        def close(self):
+            released.set()
+
+    monkeypatch.setitem(
+        sys.modules, "experiments.desktop_demo.model", SimpleNamespace(CameraModel=Model)
+    )
+    api = DesktopAPI(output=tmp_path)
+    try:
+        for _ in range(2):
+            opened.clear()
+            released.clear()
+            assert api.command("camera")["ok"]
+            assert opened.wait(2)
+            assert api.command("stop_camera")["ok"]
+            api._worker.join(2)
+            assert released.is_set()
+            assert not api._worker.is_alive()
+            assert api.snapshot()["camera"] == "off"
+            assert api.snapshot()["preview"] is None
+        assert len(instances) == 2
+    finally:
+        api.close()
+
+
+def test_camera_stop_survives_report_write_failure(monkeypatch, tmp_path):
+    api = DesktopAPI(output=tmp_path)
+    api._camera = "ready"
+    api._preview = "memory-only"
+    api._session.calibrated = True
+
+    def fail_save(status):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(api, "_save", fail_save)
+    assert not api.command("stop_camera")["ok"]
+    assert api._stop.is_set()
+    assert api._preview is None
+    assert not api.snapshot()["can_demo"]
+    api.close()
+
+
+def test_camera_retry_requires_fresh_calibration(monkeypatch, tmp_path):
+    import threading
+
+    api = DesktopAPI(output=tmp_path)
+    api._session.calibrated = True
+    api._session.geometry = [1280, 772, 0, 0, 1]
+    api._session.fail("camera disconnected")
+    monkeypatch.setattr(threading.Thread, "start", lambda self: None)
+    assert api.command("camera")["ok"]
+    assert not api.snapshot()["can_demo"]
+    assert api._session.geometry is None
+    api._worker = None
+    api.close()

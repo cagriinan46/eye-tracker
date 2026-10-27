@@ -52,6 +52,7 @@ def finite_pair(value):
 class Session:
     def __init__(self):
         self.phase = "preparation"
+        self.calibrated = False
         self.message = ""
         self.token = 0
         self.onset = None
@@ -92,6 +93,7 @@ class Session:
             or geometry[4] <= 0
         ):
             raise ValueError("Invalid window geometry")
+        self.calibrated = False
         self.geometry = list(geometry)
         self.samples, self.training, self.check_results, self.trials = [], [], [], []
         self.index, self.paused_at = 0, None
@@ -108,7 +110,8 @@ class Session:
 
     def geometry_changed(self, geometry):
         if self.geometry is not None and list(geometry) != self.geometry:
-            self.fail("Pencere konumu veya boyutu değişti. Yeniden kalibrasyon gerekli.")
+            self.calibrated = False
+            self.fail("Pencerenin yeri değişti. Bakışlarını yeniden ayarlayalım.")
 
     def calibration_arrays(self):
         return np.concatenate(self.training), np.repeat(CALIBRATION_POINTS, 45, axis=0)
@@ -137,8 +140,8 @@ class Session:
         self.regions = clean
 
     def start_demo(self):
-        if self.phase not in ("ready", "results"):
-            raise ValueError("Calibration/check required")
+        if self.phase not in ("ready", "results") and not self.calibrated:
+            raise ValueError("Önce göz ayarını tamamla.")
         self.index = 0
         self.trials = []
         self.paused_at = None
@@ -149,7 +152,8 @@ class Session:
         if self.phase == "demo" and self.paused_at is None:
             self.paused_at = now
         elif self.phase in ("calibration", "check", "fitting"):
-            self.fail("Ölçüm kesildi. Hazır olduğunda kalibrasyonu yeniden başlat.")
+            self.calibrated = False
+            self.fail("Göz ayarı yarıda kaldı. Hazır olduğunda yeniden başlayabilirsin.")
 
     def resume(self, now):
         if self.phase == "demo" and self.paused_at is not None:
@@ -218,6 +222,8 @@ class Session:
                 )
                 self.samples = []
                 self.index += 1
+                if self.index == 5:
+                    self.calibrated = True
                 self.transition("ready" if self.index == 5 else "check")
         elif self.phase == "demo":
             if elapsed >= 15:
@@ -235,6 +241,7 @@ class Session:
     def snapshot(self):
         return dict(
             phase=self.phase,
+            can_demo=self.calibrated or self.phase in ("ready", "results"),
             message=self.message,
             token=self.token,
             index=self.index,

@@ -54,13 +54,37 @@ class DesktopAPI:
                 if action == "camera":
                     if self._worker is not None and self._worker.is_alive():
                         raise ValueError("Kamera zaten çalışıyor.")
+                    self._stop.clear()
                     self._camera = "loading"
+                    s.calibrated = False
+                    s.geometry = None
                     s.transition("preparation")
                     s.message = ""
                     self._worker = threading.Thread(
                         target=self._run, name="gaze-camera", daemon=True
                     )
                     self._worker.start()
+                elif action == "stop_camera":
+                    try:
+                        self._save("completed" if len(s.trials) == 12 else "aborted")
+                    finally:
+                        self._stop.set()
+                        self._camera = (
+                            "stopping" if self._worker and self._worker.is_alive() else "off"
+                        )
+                        self._preview = None
+                        self._tracking = False
+                        s.calibrated = False
+                        s.geometry = None
+                        s.message = ""
+                        s.transition("preparation")
+                elif action == "home":
+                    self._save(
+                        "completed" if s.phase == "results" or len(s.trials) == 12 else "aborted"
+                    )
+                    s.message = ""
+                    s.paused_at = None
+                    s.transition("preparation")
                 elif action == "calibrate":
                     if self._camera != "ready" or not self._focused:
                         raise ValueError("Önce kamerayı başlat ve uygulama penceresine dön.")
@@ -77,9 +101,13 @@ class DesktopAPI:
                 elif action == "demo":
                     if not self._focused:
                         raise ValueError("Önce uygulama penceresine dön.")
-                    retry = s.phase == "results"
+                    retry = s.phase == "results" or bool(s.trials)
                     if retry:
-                        self._save("completed")
+                        self._save(
+                            "completed"
+                            if s.phase == "results" or len(s.trials) == 12
+                            else "aborted"
+                        )
                         self._folder = None
                     s.start_demo()
                     if retry:
@@ -146,6 +174,8 @@ class DesktopAPI:
 
             model = CameraModel(self._camera_index)
             with self._lock:
+                if self._stop.is_set():
+                    return
                 self._meta = model.metadata()
                 self._camera = "ready"
             last_preview = 0.0
@@ -159,7 +189,7 @@ class DesktopAPI:
                 captured, features, point, jpeg = model.read(preview=preview)
                 now = time.monotonic()
                 with self._lock:
-                    if self._closed:
+                    if self._stop.is_set():
                         break
                     s = self._session
                     self._tracking = features is not None and now - captured <= 0.3
@@ -210,13 +240,14 @@ class DesktopAPI:
 
     def close(self):
         with self._lock:
-            if self._closed:
-                return
-            self._closed = True
-            self._stop.set()
-            try:
-                self._save("completed" if self._session.phase == "results" else "aborted")
-            except OSError:
-                pass
-        if self._worker is not None:
-            self._worker.join(timeout=3)
+            if not self._closed:
+                self._closed = True
+                self._stop.set()
+                try:
+                    self._save("completed" if self._session.phase == "results" else "aborted")
+                except OSError:
+                    pass
+        # Every caller waits, including the main-thread finalizer after a native
+        # closing event. Otherwise Python can shut down MediaPipe's executor early.
+        if self._worker is not None and self._worker is not threading.current_thread():
+            self._worker.join(timeout=10)

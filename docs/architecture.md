@@ -443,6 +443,17 @@ app/
 
 The application layer should orchestrate modules rather than contain computer-vision or gesture-detection algorithms itself.
 
+### Desktop GUI Framework
+
+The human project team approved Python + pywebview for the desktop application.
+The interface uses local HTML, CSS, and JavaScript in a native desktop window;
+the existing Python gaze-processing components remain local and separate from
+presentation logic. The application layer coordinates communication between them.
+
+The interface must support macOS and Windows and must not require an external
+web service for core interaction. This decision selects the GUI framework only;
+packaging and distribution remain separate, unresolved decisions.
+
 ---
 
 ## 14. Proposed Source Structure
@@ -672,7 +683,6 @@ The unresolved decisions are:
 * gesture thresholds,
 * whether ML is needed for gesture classification,
 * persistence technology,
-* GUI framework,
 * exact macOS input API,
 * exact Windows input API,
 * hardware communication protocol,

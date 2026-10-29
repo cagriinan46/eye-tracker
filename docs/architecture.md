@@ -128,7 +128,10 @@ GazeResult
 - timestamp
 ```
 
-The exact gaze-estimation technique is intentionally TBD.
+The primary development gaze model is UniGaze, approved on 2026-10-29 in
+[ADR-006](decisions/ADR-006-unigaze-primary-development-model.md). MGazeNet remains
+the comparison baseline and explicit rollback option. This selection does not
+claim a finished system, head-position robustness or completed desktop integration.
 
 Do not mandate:
 
@@ -139,7 +142,8 @@ Do not mandate:
 * Kalman filtering,
 * neural-network architecture.
 
-These choices will be determined through experiments.
+The remaining implementation choices will be determined through experiments;
+ADR-006 records the bounded model selection and its measured limitations.
 
 Potential internal modules:
 
@@ -677,7 +681,7 @@ Specific algorithms, native coverage and performance remain experimental.
 
 The unresolved decisions are:
 
-* gaze-estimation algorithm,
+* production integration and head-position robustness of the selected UniGaze model,
 * gaze-filtering technique,
 * calibration method and point count,
 * gesture thresholds,

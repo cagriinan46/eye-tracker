@@ -21,3 +21,5 @@ pythonpath = ["src", "."]
 vision = ["mediapipe==0.10.35", "opencv-contrib-python==5.0.0.93"]
 gaze = ["scikit-learn==1.9.1"]
 desktop = ["pyautogui==0.9.54"]
+# Approved local native-window presentation prototype (issue #136).
+desktop-ui = ["pywebview==6.1"]

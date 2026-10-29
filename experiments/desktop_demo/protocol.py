@@ -1,0 +1,257 @@
+"""Measured desktop-demo protocol, independent of camera and GUI APIs."""
+
+import math
+
+import numpy as np
+
+from eye_tracker.intent.region_dwell import RegionDwell
+
+SHAPES = ["circle", "square", "triangle", "diamond"]
+# Same normalized13-point layout as upstream CalibrationController.
+_X = [50 / 1920, (50 / 1920 + 0.5) / 2, 0.5, (0.5 + 1870 / 1920) / 2, 1870 / 1920]
+_Y = [50 / 1080, (50 / 1080 + 0.5) / 2, 0.5, (0.5 + 1030 / 1080) / 2, 1030 / 1080]
+CALIBRATION_POINTS = [
+    (_X[x], _Y[y])
+    for x, y in [
+        (0, 0),
+        (2, 0),
+        (4, 0),
+        (1, 1),
+        (3, 1),
+        (0, 2),
+        (4, 2),
+        (1, 3),
+        (3, 3),
+        (0, 4),
+        (2, 4),
+        (4, 4),
+        (2, 2),
+    ]
+]
+CHECK_POINTS = [(0.25, 0.25), (0.75, 0.25), (0.5, 0.5), (0.25, 0.75), (0.75, 0.75)]
+TRIAL_ORDER = [
+    "circle",
+    "diamond",
+    "square",
+    "triangle",
+    "square",
+    "circle",
+    "triangle",
+    "diamond",
+    "triangle",
+    "square",
+    "diamond",
+    "circle",
+]
+
+
+def finite_pair(value):
+    return value is not None and len(value) == 2 and all(math.isfinite(v) for v in value)
+
+
+class Session:
+    def __init__(self):
+        self.phase = "preparation"
+        self.calibrated = False
+        self.message = ""
+        self.token = 0
+        self.onset = None
+        self.index = 0
+        self.geometry = None
+        self.samples, self.training, self.check_results, self.trials = [], [], [], []
+        self.regions = {}
+        self.dwell = RegionDwell()
+        self.paused_at = None
+        self.last_point = None
+        self.last_sample = None
+
+    def transition(self, phase):
+        self.phase = phase
+        self.token += 1
+        self.onset = None
+        self.last_sample = None
+        self.dwell.reset()
+
+    @property
+    def point(self):
+        if self.phase == "calibration":
+            return CALIBRATION_POINTS[self.index]
+        if self.phase == "check":
+            return CHECK_POINTS[self.index]
+        return None
+
+    @property
+    def expected(self):
+        return TRIAL_ORDER[self.index] if self.phase == "demo" else None
+
+    def start_calibration(self, geometry):
+        if (
+            len(geometry) != 5
+            or not all(math.isfinite(x) for x in geometry)
+            or geometry[0] < 640
+            or geometry[1] < 480
+            or geometry[4] <= 0
+        ):
+            raise ValueError("Invalid window geometry")
+        self.calibrated = False
+        self.geometry = list(geometry)
+        self.samples, self.training, self.check_results, self.trials = [], [], [], []
+        self.index, self.paused_at = 0, None
+        self.message = ""
+        self.transition("calibration")
+
+    def ack(self, token, now):
+        if token == self.token and self.onset is None and self.paused_at is None:
+            self.onset = now
+
+    def fail(self, message):
+        self.message = message
+        self.transition("error")
+
+    def geometry_changed(self, geometry):
+        if self.geometry is not None and list(geometry) != self.geometry:
+            self.calibrated = False
+            self.fail("Pencerenin yeri değişti. Bakışlarını yeniden ayarlayalım.")
+
+    def calibration_arrays(self):
+        return np.concatenate(self.training), np.repeat(CALIBRATION_POINTS, 45, axis=0)
+
+    def fitted(self):
+        self.index = 0
+        self.samples = []
+        self.transition("check")
+
+    def set_regions(self, regions):
+        if set(regions) != set(SHAPES):
+            raise ValueError("Four target regions required")
+        clean = {}
+        for name, rect in regions.items():
+            if len(rect) != 4 or not all(math.isfinite(x) for x in rect):
+                raise ValueError("Invalid region")
+            x, y, w, h = rect
+            if x < 0 or y < 0 or w <= 0 or h <= 0 or x + w > 1.00001 or y + h > 1.00001:
+                raise ValueError("Region outside viewport")
+            for a, b, c, d in clean.values():
+                if min(x + w, a + c) > max(x, a) and min(y + h, b + d) > max(y, b):
+                    raise ValueError("Overlapping regions")
+            clean[name] = list(rect)
+        if clean != self.regions:
+            self.dwell.reset()
+        self.regions = clean
+
+    def start_demo(self):
+        if self.phase not in ("ready", "results") and not self.calibrated:
+            raise ValueError("Önce göz ayarını tamamla.")
+        self.index = 0
+        self.trials = []
+        self.paused_at = None
+        self.transition("demo")
+
+    def pause(self, now):
+        self.dwell.reset()
+        if self.phase == "demo" and self.paused_at is None:
+            self.paused_at = now
+        elif self.phase in ("calibration", "check", "fitting"):
+            self.calibrated = False
+            self.fail("Göz ayarı yarıda kaldı. Hazır olduğunda yeniden başlayabilirsin.")
+
+    def resume(self, now):
+        if self.phase == "demo" and self.paused_at is not None:
+            if self.onset is not None:
+                self.onset += now - self.paused_at
+            else:
+                self.token += 1
+            self.paused_at = None
+            self.dwell.reset()
+
+    def finish_trial(self, selected, elapsed):
+        self.trials.append(
+            dict(
+                expected=self.expected,
+                selected=selected,
+                outcome="timeout"
+                if selected is None
+                else "correct"
+                if selected == self.expected
+                else "incorrect",
+                elapsed_s=elapsed,
+                modality="gaze",
+            )
+        )
+        self.index += 1
+        self.transition("results" if self.index == len(TRIAL_ORDER) else "demo")
+
+    def sample(self, now, features, point):
+        self.last_point = list(point) if finite_pair(point) else None
+        if self.paused_at is not None or self.onset is None:
+            return
+        if self.last_sample is not None and now <= self.last_sample:
+            self.dwell.reset()
+            return
+        self.last_sample = now
+        elapsed = now - self.onset
+        if self.phase == "calibration":
+            if elapsed > 15:
+                self.fail(
+                    "Yeterli göz verisi alınamadı. Işığı ve kamerayı kontrol edip yeniden dene."
+                )
+            elif elapsed >= 1.5 and features is not None:
+                a = np.asarray(features, dtype=np.float32)
+                if a.shape == (258,) and np.isfinite(a).all():
+                    self.samples.append(a.copy())
+                if len(self.samples) >= 45:
+                    self.training.append(np.array(self.samples))
+                    self.samples = []
+                    self.index += 1
+                    self.transition("fitting" if self.index == 13 else "calibration")
+        elif self.phase == "check":
+            if 1 <= elapsed < 3 and finite_pair(point):
+                self.samples.append(
+                    float(np.linalg.norm((np.array(point) - self.point) * self.geometry[:2]))
+                )
+            if elapsed >= 3:
+                if len(self.samples) < 5:
+                    self.fail("Kısa kontrolde göz verisi yetersiz. Yeniden kalibre et.")
+                    return
+                self.check_results.append(
+                    dict(
+                        target=list(self.point),
+                        n=len(self.samples),
+                        mean_px=float(np.mean(self.samples)),
+                    )
+                )
+                self.samples = []
+                self.index += 1
+                if self.index == 5:
+                    self.calibrated = True
+                self.transition("ready" if self.index == 5 else "check")
+        elif self.phase == "demo":
+            if elapsed >= 15:
+                self.finish_trial(None, 15.0)
+                return
+            target = None
+            if elapsed >= 1 and finite_pair(point):
+                for name, (x, y, w, h) in self.regions.items():
+                    if x <= point[0] < x + w and y <= point[1] < y + h:
+                        target = name
+                        break
+            if self.dwell.update(now, target):
+                self.finish_trial(target, elapsed)
+
+    def snapshot(self):
+        return dict(
+            phase=self.phase,
+            can_demo=self.calibrated or self.phase in ("ready", "results"),
+            message=self.message,
+            token=self.token,
+            index=self.index,
+            point=self.point,
+            expected=self.expected,
+            paused=self.paused_at is not None,
+            dwell_target=self.dwell.target,
+            dwell_progress=self.dwell.progress,
+            sample_count=len(self.samples),
+            checks=list(self.check_results),
+            trials=list(self.trials),
+            total_trials=len(TRIAL_ORDER),
+        )

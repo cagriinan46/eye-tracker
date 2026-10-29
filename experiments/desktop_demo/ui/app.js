@@ -29,7 +29,7 @@ function results(s){const count=k=>s.trials.filter(t=>t.outcome===k).length;
   $('recordPath').textContent=s.record_path?'Seçimlerin bu cihazda saklandı.':'Bu oturum kaydedilemedi.';
 }
 function render(s){
-  state=s;const phase=s.phase;const measurement=['calibration','check','fitting'].includes(phase);
+  state=s;document.title='Eye Tracker · '+(s.model_name==='mgaze'?'MGaze':'UniGaze');const phase=s.phase;const measurement=['calibration','check','fitting'].includes(phase);
   if(lastToken!==s.token){
     lastToken=s.token;acknowledged=null;
     show(measurement?'measurement':['ready','demo','results'].includes(phase)?phase:'preparation');
@@ -46,7 +46,7 @@ function render(s){
   $('calibrate').disabled=s.camera!=='ready'||!s.tracking;
   if(s.preview){$('preview').src=s.preview;$('preview').classList.remove('hidden');$('cameraPlaceholder').classList.add('hidden');}
   else{$('preview').classList.add('hidden');$('cameraPlaceholder').classList.remove('hidden');}
-  $('cameraHint').textContent=s.camera==='ready'?(s.tracking?'Rahat konumunu koru.':'Yüzün ve gözlerin kamerada görünsün.'):s.camera==='loading'?'İlk açılış birkaç saniye sürebilir.':'Kamera yalnızca başlattığında açılır.';
+  $('cameraHint').textContent=s.camera==='ready'?(s.tracking?(s.model_name==='mgaze'?'MGaze':'UniGaze')+' · Rahat konumunu koru. Yer değiştirirsen göz ayarını yenile.':'Yüzün ve gözlerin kamerada görünsün.'):s.camera==='loading'?'İlk açılış birkaç saniye sürebilir.':'Kamera yalnızca başlattığında açılır.';
   if(measurement){$('fitting').classList.toggle('hidden',phase!=='fitting');$('fixation').classList.toggle('hidden',!s.point);if(s.point){$('fixation').style.left=s.point[0]*100+'%';$('fixation').style.top=s.point[1]*100+'%';}}
   if(phase==='ready')$('checkError').textContent=Math.round(s.checks.reduce((v,r)=>v+r.mean_px,0)/s.checks.length)+' px';
   if(phase==='demo'){

@@ -66,7 +66,7 @@ Removing MGaze was explicitly rejected.
   authorized by this decision. Existing privacy and safety requirements apply.
 - No OS actions or hardware control are added. No change to target platforms,
   roadmap or individual capability assumptions is made.
-- The existing desktop prototype in open PR #137 still uses MGaze. Connecting
+- At the time of this decision, the desktop prototype in PR #137 used MGaze. Connecting
   UniGaze there requires a separate implementation: a default UniGaze adapter,
   explicit MGaze selection, model-specific fresh calibration, provenance and
   lifecycle checks. Changing this ADR does not change that runtime.
@@ -75,3 +75,11 @@ Removing MGaze was explicitly rejected.
   dependency/asset configuration and desktop validation are still required.
 
 No historical measurement or MGaze implementation is removed by this decision.
+
+## Implementation follow-up
+
+Issue #139 connects UniGaze as the default in the local macOS desktop prototype,
+with explicit `--model mgaze` rollback and fresh model-specific calibration.
+See `experiments/desktop_demo/README.md`. This implements the runtime selection;
+Windows UniGaze transport, packaging and human validation of the desktop viewport
+remain pending. The accuracy and movement limitations above still apply.

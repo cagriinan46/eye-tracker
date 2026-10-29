@@ -4,7 +4,7 @@ from experiments.desktop_demo.runtime import DesktopAPI
 
 
 def test_window_starts_without_camera_or_model(tmp_path):
-    api = DesktopAPI(output=tmp_path)
+    api = DesktopAPI(model_name="mgaze", output=tmp_path)
     s = api.snapshot()
     assert s["camera"] == "off" and s["phase"] == "preparation"
     assert api._worker is None
@@ -13,7 +13,7 @@ def test_window_starts_without_camera_or_model(tmp_path):
 
 
 def test_commands_cannot_forge_gaze_results(tmp_path):
-    api = DesktopAPI(output=tmp_path)
+    api = DesktopAPI(model_name="mgaze", output=tmp_path)
     assert not api.command("select", {"target": "circle"})["ok"]
     assert not api.command("demo", {})["ok"]
     assert not api.command("calibrate", {"geometry": [1000, 800, 0, 0, 1]})["ok"]
@@ -22,7 +22,7 @@ def test_commands_cannot_forge_gaze_results(tmp_path):
 
 
 def test_report_preserves_wrong_timeout_and_aborted_status(tmp_path):
-    api = DesktopAPI(output=tmp_path)
+    api = DesktopAPI(model_name="mgaze", output=tmp_path)
     api._begin_record()
     api._session.trials = [
         {"outcome": "incorrect", "modality": "gaze", "elapsed_s": 3},
@@ -37,7 +37,7 @@ def test_report_preserves_wrong_timeout_and_aborted_status(tmp_path):
 
 
 def test_hidden_window_pauses_and_requires_explicit_resume(tmp_path):
-    api = DesktopAPI(output=tmp_path)
+    api = DesktopAPI(model_name="mgaze", output=tmp_path)
     api._session.phase = "ready"
     api._session.start_demo()
     api.command("focus", {"active": False})
@@ -48,7 +48,7 @@ def test_hidden_window_pauses_and_requires_explicit_resume(tmp_path):
 
 
 def test_retry_record_starts_empty(tmp_path):
-    api = DesktopAPI(output=tmp_path)
+    api = DesktopAPI(model_name="mgaze", output=tmp_path)
     api._session.phase = "results"
     api._session.trials = [{"outcome": "correct", "modality": "gaze", "elapsed_s": 3}]
     api._begin_record()
@@ -63,7 +63,7 @@ def test_retry_record_starts_empty(tmp_path):
 def test_record_failure_stops_measurement_visibly(tmp_path):
     bad = tmp_path / "not-a-directory"
     bad.write_text("occupied")
-    api = DesktopAPI(output=bad)
+    api = DesktopAPI(model_name="mgaze", output=bad)
     api._camera = "ready"
     result = api.command("calibrate", {"geometry": [1000, 800, 0, 0, 1]})
     assert not result["ok"]
@@ -73,7 +73,7 @@ def test_record_failure_stops_measurement_visibly(tmp_path):
 
 
 def test_retry_write_failure_does_not_rewrite_completed_record(tmp_path):
-    api = DesktopAPI(output=tmp_path / "good")
+    api = DesktopAPI(model_name="mgaze", output=tmp_path / "good")
     api._session.phase = "results"
     api._session.trials = [{"outcome": "correct", "modality": "gaze", "elapsed_s": 3}]
     api._begin_record()
@@ -90,7 +90,7 @@ def test_retry_write_failure_does_not_rewrite_completed_record(tmp_path):
 def test_native_move_callback_returns_no_bridge_payload(tmp_path):
     from experiments.desktop_demo.__main__ import pause_for_window_move
 
-    api = DesktopAPI(output=tmp_path)
+    api = DesktopAPI(model_name="mgaze", output=tmp_path)
     api._session.phase = "ready"
     api._session.start_demo()
     assert pause_for_window_move(api, 10, 20) is None
@@ -99,7 +99,7 @@ def test_native_move_callback_returns_no_bridge_payload(tmp_path):
 
 
 def test_finished_measurements_stay_completed_after_later_window_error(tmp_path):
-    api = DesktopAPI(output=tmp_path)
+    api = DesktopAPI(model_name="mgaze", output=tmp_path)
     api._session.phase = "results"
     api._session.trials = [
         {"outcome": "correct", "modality": "gaze", "elapsed_s": 3} for _ in range(12)
@@ -112,7 +112,7 @@ def test_finished_measurements_stay_completed_after_later_window_error(tmp_path)
 
 
 def test_stop_camera_clears_preview_and_can_return_home(tmp_path):
-    api = DesktopAPI(output=tmp_path)
+    api = DesktopAPI(model_name="mgaze", output=tmp_path)
     api._camera = "ready"
     api._preview = "private-image"
     assert api.command("stop_camera")["ok"]
@@ -123,7 +123,7 @@ def test_stop_camera_clears_preview_and_can_return_home(tmp_path):
 
 
 def test_home_preserves_calibration_but_requires_new_trial_on_return(tmp_path):
-    api = DesktopAPI(output=tmp_path)
+    api = DesktopAPI(model_name="mgaze", output=tmp_path)
     api._camera = "ready"
     api._session.phase = "ready"
     api._session.calibrated = True
@@ -138,7 +138,7 @@ def test_home_preserves_calibration_but_requires_new_trial_on_return(tmp_path):
 
 
 def test_close_always_waits_for_worker_even_when_another_close_started(tmp_path):
-    api = DesktopAPI(output=tmp_path)
+    api = DesktopAPI(model_name="mgaze", output=tmp_path)
     calls = []
 
     class Worker:
@@ -178,7 +178,7 @@ def test_camera_worker_releases_before_restart(monkeypatch, tmp_path):
     monkeypatch.setitem(
         sys.modules, "experiments.desktop_demo.model", SimpleNamespace(CameraModel=Model)
     )
-    api = DesktopAPI(output=tmp_path)
+    api = DesktopAPI(model_name="mgaze", output=tmp_path)
     try:
         for _ in range(2):
             opened.clear()
@@ -197,7 +197,7 @@ def test_camera_worker_releases_before_restart(monkeypatch, tmp_path):
 
 
 def test_camera_stop_survives_report_write_failure(monkeypatch, tmp_path):
-    api = DesktopAPI(output=tmp_path)
+    api = DesktopAPI(model_name="mgaze", output=tmp_path)
     api._camera = "ready"
     api._preview = "memory-only"
     api._session.calibrated = True
@@ -216,7 +216,7 @@ def test_camera_stop_survives_report_write_failure(monkeypatch, tmp_path):
 def test_camera_retry_requires_fresh_calibration(monkeypatch, tmp_path):
     import threading
 
-    api = DesktopAPI(output=tmp_path)
+    api = DesktopAPI(model_name="mgaze", output=tmp_path)
     api._session.calibrated = True
     api._session.geometry = [1280, 772, 0, 0, 1]
     api._session.fail("camera disconnected")

@@ -25,10 +25,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--camera-index", type=int, default=None)
     parser.add_argument("--output", type=Path, default=None)
+    parser.add_argument("--model", choices=("unigaze", "mgaze"), default="unigaze")
     args = parser.parse_args()
     import webview
 
-    api = DesktopAPI(output=args.output, camera_index=args.camera_index)
+    api = DesktopAPI(output=args.output, camera_index=args.camera_index, model_name=args.model)
     window = webview.create_window(
         "Eye Tracker",
         html=html(),

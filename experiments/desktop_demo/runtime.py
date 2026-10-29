@@ -13,11 +13,15 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class DesktopAPI:
-    def __init__(self, output=None, camera_index=None):
+    def __init__(self, output=None, camera_index=None, model_name="unigaze"):
         self._lock = threading.RLock()
         self._stop = threading.Event()
         self._worker = None
-        self._session = Session()
+        self._session = Session(model_name=model_name)
+        self._model_name = model_name
+        self._reset_filter = False
+        self._last_raw_point = None
+        self._filter_history_ms = None
         self._camera = "off"
         self._preview = None
         self._tracking = False
@@ -37,6 +41,7 @@ class DesktopAPI:
             state = self._session.snapshot()
             state.update(
                 camera=self._camera,
+                model_name=self._model_name,
                 preview=self._preview,
                 tracking=self._tracking,
                 record_path=str(self._folder) if self._folder else None,
@@ -91,6 +96,9 @@ class DesktopAPI:
                     self._save("aborted" if s.phase != "results" else "completed")
                     self._folder = None
                     s.start_calibration(payload["geometry"])
+                    self._meta.pop("training_fit_normalized", None)
+                    self._last_raw_point = self._filter_history_ms = None
+                    self._reset_filter = True
                     self._begin_record()
                 elif action == "ack":
                     s.ack(payload["token"], now)
@@ -114,13 +122,16 @@ class DesktopAPI:
                         self._begin_record()
                 elif action == "pause":
                     s.pause(now)
+                    self._reset_filter = True
                 elif action == "resume":
                     if self._focused:
                         s.resume(now)
+                        self._reset_filter = True
                 elif action == "focus":
                     self._focused = bool(payload["active"])
                     if not self._focused:
                         s.pause(now)
+                        self._reset_filter = True
                 else:
                     raise ValueError("Bilinmeyen komut.")
                 return {"ok": True}
@@ -156,10 +167,16 @@ class DesktopAPI:
             dwell_seconds=1.2,
             trial_timeout_seconds=15,
             model=self._meta,
-            protocol="fresh13x45;5point-independent-check;12-four-target-trials",
+            protocol=("fresh13x20-window6s" if self._model_name == "unigaze" else "fresh13x45")
+            + ";5point-independent-check;12-four-target-trials",
+            selected_model=self._model_name,
+            latest_raw_point=self._last_raw_point,
+            latest_filter_history_ms=self._filter_history_ms,
             source_sha256={
-                p.name: hashlib.sha256(p.read_bytes()).hexdigest()
-                for p in Path(__file__).parent.glob("*.py")
+                str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest()
+                for p in list(Path(__file__).parent.glob("*.py"))
+                + list((ROOT / "experiments/unigaze").glob("*.py"))
+                + list((ROOT / "experiments/unigaze").glob("*.json"))
             },
             limitation="Single-user prototype. Calibration fit is not selection accuracy.",
         )
@@ -170,9 +187,16 @@ class DesktopAPI:
     def _run(self):
         model = None
         try:
-            from .model import CameraModel
+            if self._model_name == "unigaze":
+                from .unigaze_model import CameraModel
+            else:
+                from .model import CameraModel
 
-            model = CameraModel(self._camera_index)
+            model = (
+                CameraModel(self._camera_index, stop_event=self._stop)
+                if self._model_name == "unigaze"
+                else CameraModel(self._camera_index)
+            )
             with self._lock:
                 if self._stop.is_set():
                     return
@@ -182,11 +206,16 @@ class DesktopAPI:
             while not self._stop.is_set():
                 with self._lock:
                     token = self._session.token
+                    reset_filter = self._reset_filter
+                    self._reset_filter = False
                     preview = (
                         self._session.phase in ("preparation", "error", "ready", "results")
                         and time.monotonic() - last_preview > 0.2
                     )
+                if reset_filter and hasattr(model, "reset_filter"):
+                    model.reset_filter()
                 captured, features, point, jpeg = model.read(preview=preview)
+                raw_point = getattr(model, "raw_point", point)
                 now = time.monotonic()
                 with self._lock:
                     if self._stop.is_set():
@@ -198,11 +227,15 @@ class DesktopAPI:
                         last_preview = now
                     if now - self._last_ui > 0.8 or not self._focused:
                         s.pause(now)
-                    if token != s.token:
+                        self._reset_filter = True
+                    if token != s.token or self._reset_filter:
                         continue
                     if not self._tracking:
-                        features = point = None
-                    s.sample(captured, features, point)
+                        features = point = raw_point = None
+                        self._reset_filter = True
+                    self._last_raw_point = raw_point
+                    self._filter_history_ms = getattr(model, "filter_history_ms", None)
+                    s.sample(captured, features, point, raw_point=raw_point)
                     if s.phase == "fitting":
                         x, y = s.calibration_arrays()
                         self._meta["training_fit_normalized"] = model.fit(x, y)
@@ -222,6 +255,8 @@ class DesktopAPI:
                         self._last_saved_token = s.token
                 self._stop.wait(0.005)
         except Exception as error:
+            if self._stop.is_set():
+                return
             with self._lock:
                 self._camera = "error"
                 self._tracking = False

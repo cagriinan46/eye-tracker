@@ -1,0 +1,9 @@
+{
+  "support/upstream/unigaze/data/face_model.txt": "0c943d1d48627d97038b64f9a73816b9ab80a002ce81a8f04d532da2f4c337d7",
+  "support/upstream/unigaze/gazelib/gaze/normalize.py": "3c23fe383443021e244604d199cf3088b315d4f01d045bc21a77f598be4e5f5b",
+  "support/upstream/unigaze/gazelib/label_transform.py": "4f2ef2aa260db5cc2fccb03dcf40f13bc78775f9f07bded2f8414205a13d5eb1",
+  "support/upstream/unigaze_easy/src/unigaze/__init__.py": "e58d1de43c821224a20e7222708e1312d9e5db9968d3c2315bf613222d87b8ce",
+  "support/upstream/unigaze_easy/src/unigaze/loader.py": "6788c25ec1499c8e85414f9239e6a4e757e783f78b476f44d77a3b04645d5071",
+  "support/upstream/unigaze_easy/src/unigaze/models/mae.py": "666bdbd4665e371a3b6035ee69599b52f538ceb191a40ba800ce817d1b0b1948",
+  "support/upstream/unigaze_easy/src/unigaze/models/mae_gaze.py": "611df6cbcd705b58262dd8cecb13c931a563eeb3f8d2428d5b3faedbde4467c9"
+}

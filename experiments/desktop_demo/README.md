@@ -1,8 +1,9 @@
 # Desktop target-selection demo
 
-Local Python + pywebview presentation prototype, issue #136. This reuses MGazeNet
-and Ridge alpha0.1 from the GazeFollower experiment; it does not deploy the failed
-head correction, old SVR prediction, OS clicks, or hardware movement.
+Local Python + pywebview presentation prototype, issues #136 and #139.
+UniGaze is the default model; MGazeNet remains an explicit rollback option.
+See the UniGaze setup and calibration details below. No failed head correction,
+old SVR prediction, OS clicks or hardware movement is deployed.
 
 ## Run
 
@@ -25,10 +26,11 @@ is downloaded at application startup. All UI assets are local; no account needed
 ## User flow
 
 1. Application opens with camera off. Start camera explicitly and position yourself.
-2. Start fresh calibration: same13 normalized locations and45 accepted258-feature
+2. For MGaze, start fresh calibration: same13 normalized locations and45 accepted258-feature
    samples each, Ridge alpha0.1. The new GUI waits1.5seconds after rendering each
    point; unlike the old controller, it advances immediately after45 samples
    without the extra0.5second completion hold. A15second point timeout fails clearly.
+   UniGaze uses its measured13x20 timed protocol, described below.
 3. Five separate check points each use1second settling and2seconds measurement.
    At least5 valid samples per point are required. Mean error is expressed in
    logical window pixels, not physical display pixels or a success guarantee.
@@ -78,3 +80,69 @@ the eye setup; returning home while it stays open preserves the setup. Errors
 remain visible until dismissed or a user action succeeds.
 A real participant session is still required to establish this UI's selection
 accuracy. Existing calibration experiments do not validate the new UI geometry.
+
+## UniGaze default (issue #139)
+
+The default model is now **UniGaze**. The existing MGaze adapter is preserved and
+can be selected explicitly; there is no silent automatic fallback:
+
+```sh
+PYTHONPATH=src:. python -m experiments.desktop_demo
+PYTHONPATH=src:. python -m experiments.desktop_demo --model mgaze
+```
+
+On the prepared development Mac, run these with
+`~/.virtualenvs/eye-tracker-gazefollower-20261019/bin/python`. That environment
+owns pywebview; it does not need torch. UniGaze runs in the separate prepared
+`validation/results/unigaze-preflight-kit-20261029/venv/bin/python` environment.
+Each launch starts uncalibrated. Close and restart with `--model mgaze` to roll
+back; a UniGaze calibration is never reused for MGaze.
+
+The tracked `experiments/unigaze` package contains the promoted research adapter,
+not imports of ignored research Python scripts. Prepared model assets remain
+local and are not downloaded at startup. Configure these existing paths if moved:
+
+| Variable | Meaning |
+| --- | --- |
+| `EYE_TRACKER_UNIGAZE_HOME` | Prepared kit root containing `support/upstream`, `support/unigaze_b16_joint.safetensors`, `support/torch/hub/checkpoints` |
+| `EYE_TRACKER_UNIGAZE_PYTHON` | Python with the tested UniGaze dependencies; defaults to kit `venv/bin/python` |
+| `EYE_TRACKER_CAMERA_INTRINSICS` | Accepted measured-intrinsics completion JSON for the selected camera at native640x480 |
+| `EYE_TRACKER_MGAZE_PYTHON` | Existing baseline worker Python; its support files retain the baseline loader's documented location |
+
+The defaults are this development machine's measured FaceTime camera and local
+assets. Do not apply those intrinsics to another camera. UniGaze rejects frames
+not native640x480 instead of resizing against mismatched calibration. Upstream
+source hashes and checkpoint hashes are verified. Missing assets fail visibly.
+The dependency set already prepared/tested is torch2.7.1, torchvision0.22.1,
+timm0.3.2, safetensors0.5.3, face-alignment1.5.0, numpy2.2.6, OpenCV4.11.0.86.
+This is a local integration, not an installer or portable dependency lock.
+
+UniGaze uses the research13-target layout and13x20 training samples, selected
+uniformly over each6second window after1.5seconds settling. Expected calibration
+is about98seconds. Inadequate valid samples fail explicitly. Standardized two-angle
+Ridge alpha0.1 and HeuristicFilter look_ahead3 match the measured implementation.
+MGaze's13x45 behavior is unchanged. The five independent check points and12
+selection trials remain; reports contain filtered check error and separate raw
+error/sample count for UniGaze. Training fit is not validation accuracy.
+
+A baseline worker is still used inside the UniGaze extractor for the measured
+face-matching and eligibility gates. This preserves the validated pipeline, and
+costs processing time; it does not choose MGaze output. Same-frame comparison
+experiments remain intact. Source/model/filter/camera provenance is recorded.
+
+Keep a comfortable posture matching calibration; recalibrate after repositioning.
+UniGaze's measured lateral-translation failure is unresolved. Invalid or stale
+capture data resets selection; existing300ms freshness and800ms UI-heartbeat
+limits are not relaxed to hide slow inference. Filter history age is logged
+separately and is not end-to-end latency. Pause/focus loss clears filter history.
+
+The UniGaze worker currently uses macOS/POSIX inherited sockets. Other operating
+systems fail explicitly before starting this worker; MGaze remains selectable.
+Windows remains a project target, but UniGaze transport/runtime verification is
+pending. No Windows success or new human selection accuracy is claimed.
+
+Python network connects and image/video writes are disabled inside the isolated
+UniGaze inference process. Preview JPEGs travel only through local IPC to the
+native UI. Native MediaPipe has previously logged failed Clearcut upload attempts;
+its payload is unknown, so the Python guard is not a claim of native network
+isolation. No camera was opened during this integration's automated checks.

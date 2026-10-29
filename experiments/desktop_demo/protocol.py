@@ -49,8 +49,32 @@ def finite_pair(value):
     return value is not None and len(value) == 2 and all(math.isfinite(v) for v in value)
 
 
+UNIGAZE_POINTS = [
+    (0.5, 0.5),
+    (0.1, 0.1),
+    (0.5, 0.1),
+    (0.9, 0.1),
+    (0.9, 0.5),
+    (0.9, 0.9),
+    (0.5, 0.9),
+    (0.1, 0.9),
+    (0.1, 0.5),
+    (0.3, 0.3),
+    (0.7, 0.3),
+    (0.7, 0.7),
+    (0.3, 0.7),
+]
+
+
 class Session:
-    def __init__(self):
+    def __init__(self, model_name="mgaze"):
+        if model_name not in ("unigaze", "mgaze"):
+            raise ValueError("Unknown gaze model")
+        self.model_name = model_name
+        self.feature_count = 2 if model_name == "unigaze" else 258
+        self.sample_count = 20 if model_name == "unigaze" else 45
+        self.calibration_points = UNIGAZE_POINTS if model_name == "unigaze" else CALIBRATION_POINTS
+        self.raw_check_samples = []
         self.phase = "preparation"
         self.calibrated = False
         self.message = ""
@@ -67,6 +91,7 @@ class Session:
 
     def transition(self, phase):
         self.phase = phase
+        self.raw_check_samples = []
         self.token += 1
         self.onset = None
         self.last_sample = None
@@ -75,7 +100,7 @@ class Session:
     @property
     def point(self):
         if self.phase == "calibration":
-            return CALIBRATION_POINTS[self.index]
+            return self.calibration_points[self.index]
         if self.phase == "check":
             return CHECK_POINTS[self.index]
         return None
@@ -114,7 +139,9 @@ class Session:
             self.fail("Pencerenin yeri değişti. Bakışlarını yeniden ayarlayalım.")
 
     def calibration_arrays(self):
-        return np.concatenate(self.training), np.repeat(CALIBRATION_POINTS, 45, axis=0)
+        return np.concatenate(self.training), np.repeat(
+            self.calibration_points, self.sample_count, axis=0
+        )
 
     def fitted(self):
         self.index = 0
@@ -181,7 +208,7 @@ class Session:
         self.index += 1
         self.transition("results" if self.index == len(TRIAL_ORDER) else "demo")
 
-    def sample(self, now, features, point):
+    def sample(self, now, features, point, raw_point=None):
         self.last_point = list(point) if finite_pair(point) else None
         if self.paused_at is not None or self.onset is None:
             return
@@ -195,12 +222,19 @@ class Session:
                 self.fail(
                     "Yeterli göz verisi alınamadı. Işığı ve kamerayı kontrol edip yeniden dene."
                 )
-            elif elapsed >= 1.5 and features is not None:
-                a = np.asarray(features, dtype=np.float32)
-                if a.shape == (258,) and np.isfinite(a).all():
-                    self.samples.append(a.copy())
-                if len(self.samples) >= 45:
-                    self.training.append(np.array(self.samples))
+            else:
+                timed = self.model_name == "unigaze"
+                if elapsed >= 1.5 and (not timed or elapsed < 7.5) and features is not None:
+                    a = np.asarray(features, dtype=np.float32)
+                    if a.shape == (self.feature_count,) and np.isfinite(a).all():
+                        self.samples.append(a.copy())
+                finished = elapsed >= 7.5 if timed else len(self.samples) >= self.sample_count
+                if finished:
+                    if len(self.samples) < self.sample_count:
+                        self.fail("Yeterli göz verisi alınamadı. Göz ayarını yeniden başlat.")
+                        return
+                    indices = np.linspace(0, len(self.samples) - 1, self.sample_count, dtype=int)
+                    self.training.append(np.array(self.samples)[indices])
                     self.samples = []
                     self.index += 1
                     self.transition("fitting" if self.index == 13 else "calibration")
@@ -209,6 +243,12 @@ class Session:
                 self.samples.append(
                     float(np.linalg.norm((np.array(point) - self.point) * self.geometry[:2]))
                 )
+                if finite_pair(raw_point):
+                    self.raw_check_samples.append(
+                        float(
+                            np.linalg.norm((np.array(raw_point) - self.point) * self.geometry[:2])
+                        )
+                    )
             if elapsed >= 3:
                 if len(self.samples) < 5:
                     self.fail("Kısa kontrolde göz verisi yetersiz. Yeniden kalibre et.")
@@ -218,6 +258,10 @@ class Session:
                         target=list(self.point),
                         n=len(self.samples),
                         mean_px=float(np.mean(self.samples)),
+                        raw_n=len(self.raw_check_samples),
+                        raw_mean_px=float(np.mean(self.raw_check_samples))
+                        if self.raw_check_samples
+                        else None,
                     )
                 )
                 self.samples = []

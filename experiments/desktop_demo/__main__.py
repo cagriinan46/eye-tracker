@@ -42,10 +42,20 @@ def main():
         zoomable=False,
         text_select=False,
     )
+    pointer = None
+    if sys.platform == "darwin":
+        from eye_tracker.platform_adapters.macos_window_pointer import MacOSWindowPointer
+
+        pointer = MacOSWindowPointer(window, api.pointer_sample, api.request_pointer_pause)
+        window.events.closed += pointer.close
     window.events.closing += api.close
     window.events.moved += lambda *args: pause_for_window_move(api, *args)
     try:
-        webview.start(gui="edgechromium" if sys.platform == "win32" else None, debug=False)
+        webview.start(
+            pointer.start if pointer else None,
+            gui="edgechromium" if sys.platform == "win32" else None,
+            debug=False,
+        )
     finally:
         api.close()
 

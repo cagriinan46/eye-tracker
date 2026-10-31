@@ -24,3 +24,29 @@ No new OS control, profile management, model switching, gaze algorithm, hardware
 - Initial full-suite attempt in the GUI-only environment: 864 passed, 16 SVR-related failures due to absent sklearn. Full suite then passed using the existing full environment; no packages installed. Repository-local .venv executable links are stale and were not modified.
 - Static design scanner warnings: preview image has no source while deliberately hidden with camera off; scanner cannot see injected stylesheet and reports default 16px headings. Actual native captures verified styled heading hierarchy and no broken image.
 - Native check uses synthetic states for flow validation, not human accuracy evidence. No camera capture in this task. Human calibration/selection and Windows remain unverified for this presentation update.
+
+## Explicit owner feedback superseding the initial scope above
+
+The owner requested simpler copy/sidebar, fast camera preview and measured eye
+close-ups, research-style calibration indicators with theme colors, five short
+checks, and web-like controls instead of four shapes. The owner subsequently
+explicitly authorized showing the real system cursor in that local demo. These
+requests supersede the initial no-OS-actions/stimulus-color constraints: movement
+only is enabled on focused macOS demo screens; no OS clicks. Same PR142, issue141.
+
+Implementation: bounded latest capture plus separate preview IPC; registered web
+scenario with target-size records; nonblocking gated native cursor presentation.
+Read-only review identified an AppKit lock-wait risk; a failing regression test
+reproduced it, then nonblocking sampling and deferred pause fixed it. Native camera
+preview and synthetic interaction/measurement checks are recorded separately from
+human selection accuracy, which still needs a participant session.
+
+Follow-up verification: 888 tests passed, Ruff lint/format passed (354 files),
+JavaScript syntax and whitespace checks passed. Native UI test covers all eight
+control regions and actual local form/tab behaviors, themed calibration counters
+and center dot. Native cursor mapping verified expected and actual(756,312) in a
+1280x772 logical viewport; no OS clicks. Initial synchronous cursor assertion ran
+before WindowServer applied focus/movement; event-loop-delayed verification passed.
+976 historical numeric predictions replayed exactly (fit/raw/filter max error0).
+Live camera timing: native UI22.13FPS vs camera22.43FPS; independent camera-only
+23.09FPS despite requested30FPS. Human web-selection accuracy remains unmeasured.

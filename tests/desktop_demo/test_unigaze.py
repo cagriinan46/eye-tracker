@@ -299,3 +299,20 @@ def test_inflight_paused_frame_is_discarded_on_resume(monkeypatch, tmp_path):
     finally:
         release.set()
         api.close()
+
+
+def test_measurement_progress_uses_acknowledged_time_and_phase_duration():
+    s = Session(model_name="unigaze")
+    s.start_calibration([1000, 800, 0, 0, 1])
+    assert s.measurement_progress(99)["remaining_s"] == 7.5
+    s.ack(s.token, 100)
+    assert s.measurement_progress(101)["remaining_s"] == 6.5
+    assert s.measurement_progress(101)["settling"]
+    assert s.measurement_progress(103)["remaining_fraction"] == pytest.approx(0.6)
+    assert s.measurement_progress(103)["index"] == 1
+    assert s.measurement_progress(103)["total"] == 13
+    s.fitted()
+    s.ack(s.token, 110)
+    assert s.measurement_progress(111)["remaining_s"] == 2
+    assert s.measurement_progress(111)["total"] == 5
+    assert s.measurement_progress(120)["remaining_fraction"] == 0

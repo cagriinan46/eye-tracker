@@ -96,10 +96,22 @@ def main(fd):
                 if points is None or len(points) < 468
                 else [[p.x * 640, p.y * 480] for p in points[:468]]
             )
+            raw_points = getattr(f, "face_landmarks", None)
+            preview_eyes = None
+            if raw_points is not None:
+                raw_points = np.asarray(raw_points, float)
+                if raw_points.ndim == 2 and len(raw_points) >= 478:
+                    selected = [
+                        raw_points[[a, b, u, low, *ring], :2]
+                        for a, b, u, low, ring in EYES.values()
+                    ]
+                    if all(np.isfinite(p).all() for p in selected):
+                        preview_eyes = [p.tolist() for p in selected]
             send(
                 sock,
                 dict(
                     status="ok",
+                    preview_eyes=preview_eyes,
                     frame_id=meta["frame_id"],
                     timestamp_ns=meta["timestamp_ns"],
                     raw_sha256=hashlib.sha256(original.tobytes()).hexdigest(),

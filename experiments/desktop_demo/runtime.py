@@ -18,13 +18,16 @@ class DesktopAPI:
         self._lock = threading.RLock()
         self._stop = threading.Event()
         self._worker = None
-        self._session = Session(model_name=model_name)
+        self._session = Session(model_name=model_name, scenario="web")
         self._model_name = model_name
         self._reset_filter = False
         self._last_raw_point = None
         self._filter_history_ms = None
         self._camera = "off"
         self._preview = None
+        self._active_model = None
+        self._pointer_captured = 0
+        self._pointer_pause = threading.Event()
         self._tracking = False
         self._last_ui = time.monotonic()
         self._focused = True
@@ -40,9 +43,38 @@ class DesktopAPI:
         )
         self._preferences = preferences.load(self._preferences_path)
 
+    def request_pointer_pause(self):
+        self._pointer_pause.set()
+
+    def pointer_sample(self):
+        if not self._lock.acquire(blocking=False):
+            return None
+        try:
+            s = self._session
+            if (
+                self._closed
+                or self._pointer_pause.is_set()
+                or self._stop.is_set()
+                or self._camera != "ready"
+                or not self._focused
+                or not self._tracking
+                or s.phase != "demo"
+                or s.paused_at is not None
+                or time.monotonic() - self._last_ui > 0.8
+                or time.monotonic() - self._pointer_captured > 0.3
+            ):
+                return None
+            return s.last_point
+        finally:
+            self._lock.release()
+
     def snapshot(self):
         with self._lock:
             self._last_ui = time.monotonic()
+            if self._pointer_pause.is_set():
+                self._session.pause(self._last_ui)
+                self._reset_filter = True
+                self._pointer_pause.clear()
             state = self._session.snapshot()
             state.update(
                 camera=self._camera,
@@ -52,6 +84,11 @@ class DesktopAPI:
                 record_path=str(self._folder) if self._folder else None,
                 preferences=dict(self._preferences),
             )
+            if self._camera == "ready" and self._active_model is not None:
+                preview_snapshot = getattr(self._active_model, "preview_snapshot", None)
+                if preview_snapshot is not None:
+                    state.update(preview_snapshot())
+            state["measurement"] = self._session.measurement_progress(time.monotonic())
             return state
 
     def command(self, action, payload=None):
@@ -175,7 +212,9 @@ class DesktopAPI:
             status="completed" if len(s.trials) == 12 else status,
             modality="gaze",
             camera_images_saved=False,
-            os_control=False,
+            os_control=True,
+            os_actions=["move_pointer_in_focused_demo"],
+            os_clicks=False,
             geometry=s.geometry,
             checks=s.check_results,
             trials=s.trials,
@@ -185,8 +224,10 @@ class DesktopAPI:
             trial_timeout_seconds=15,
             model=self._meta,
             protocol=("fresh13x20-window6s" if self._model_name == "unigaze" else "fresh13x45")
-            + ";5point-independent-check;12-four-target-trials",
+            + ";5point-independent-check;12-web-control-trials-v1",
             selected_model=self._model_name,
+            scenario=self._session.scenario,
+            appearance=dict(self._preferences),
             latest_raw_point=self._last_raw_point,
             latest_filter_history_ms=self._filter_history_ms,
             source_sha256={
@@ -217,18 +258,15 @@ class DesktopAPI:
             with self._lock:
                 if self._stop.is_set():
                     return
+                self._active_model = model
                 self._meta = model.metadata()
                 self._camera = "ready"
-            last_preview = 0.0
             while not self._stop.is_set():
                 with self._lock:
                     token = self._session.token
                     reset_filter = self._reset_filter
                     self._reset_filter = False
-                    preview = (
-                        self._session.phase in ("preparation", "error", "ready", "results")
-                        and time.monotonic() - last_preview > 0.2
-                    )
+                    preview = self._session.phase in ("preparation", "error", "ready", "results")
                 if reset_filter and hasattr(model, "reset_filter"):
                     model.reset_filter()
                 captured, features, point, jpeg = model.read(preview=preview)
@@ -241,7 +279,6 @@ class DesktopAPI:
                     self._tracking = features is not None and now - captured <= 0.3
                     if jpeg is not None:
                         self._preview = jpeg
-                        last_preview = now
                     if now - self._last_ui > 0.8 or not self._focused:
                         s.pause(now)
                         self._reset_filter = True
@@ -253,6 +290,7 @@ class DesktopAPI:
                     self._last_raw_point = raw_point
                     self._filter_history_ms = getattr(model, "filter_history_ms", None)
                     s.sample(captured, features, point, raw_point=raw_point)
+                    self._pointer_captured = captured
                     if s.phase == "fitting":
                         x, y = s.calibration_arrays()
                         self._meta["training_fit_normalized"] = model.fit(x, y)
@@ -286,6 +324,7 @@ class DesktopAPI:
             if model is not None:
                 model.close()
             with self._lock:
+                self._active_model = None
                 self._preview = None
                 if self._camera != "error":
                     self._camera = "off"

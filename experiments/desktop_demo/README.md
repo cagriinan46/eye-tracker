@@ -34,11 +34,15 @@ is downloaded at application startup. All UI assets are local; no account needed
 3. Five separate check points each use1second settling and2seconds measurement.
    At least5 valid samples per point are required. Mean error is expressed in
    logical window pixels, not physical display pixels or a success guarantee.
-4. Start12 trials with four large shapes; each shape is requested three times in
-   a fixed balanced order. After1second cue time, dwell1.2seconds within one region
-   selects it. A15second deadline records a timeout. Wrong choices count as wrong.
-   No pointer clicking/hovering can select a shape. Preparation/pause/retry are
-   operated with mouse/keyboard by the operator; this is not full independent access.
+4. Start12 fixed tasks in a local web-style daily-planner interface. Eight
+   registered controls include tabs, text fields, a checkbox, a large save button
+   and small detail/clear controls. After1second cue time, dwell1.2seconds within
+   one region activates it. A15second deadline records a timeout; wrong choices
+   count as wrong. Each result records its target's logical pixel dimensions.
+   Physical clicks pause gaze measurement before activating the local control;
+   they never count as gaze success. Text fields receive focus; text entry uses
+   the physical keyboard, not a new gaze keyboard. No user-entered text is saved
+   in experiment records. Preparation/pause/retry still require operator input.
 5. Results include all12 trials, correct/incorrect/timeout counts and mean elapsed
    active trial time (includes cue and timeout; excludes explicit pauses).
 
@@ -158,8 +162,9 @@ Settings offers Lavender, Sunflower and Sage color themes and reduced motion.
 Only appearance preferences persist at `~/.eye-tracker/desktop-preferences.json`;
 no calibration is restored from this file. System reduced-motion preferences are
 also respected. A settings write failure leaves the previous appearance and
-active calibration intact. Themes do not change the calibration stimulus colors,
-model, sample protocol or dwell duration.
+active calibration intact. Themes also color the calibration background and outer
+target; its center stays white. Theme identity is recorded with measurements.
+The model, sample protocol and dwell duration are not theme-dependent.
 
 October 31 validation: native macOS UI and bridge checks with camera off,
 including all five pages, persistent themes, reduced motion, minimum 960×640
@@ -167,3 +172,38 @@ window, and synthetic loading/error/ready/practice transitions. Synthetic state
 checks are not human gaze-accuracy measurements. Local evidence and screenshots:
 `validation/results/desktop-interface-20261031/`. Actual camera/model behavior
 continues to use the existing UniGaze default and explicit MGaze fallback.
+
+## October 31 feedback follow-up (same PR #142)
+
+Preparation now has one numbered guide next to the image; redundant slogans and
+sidebar/footer text are removed. Calibration displays a24px target with6px white
+center, nearby phase/index and a50px shrinking time bar, modeled on the research
+UI. UniGaze timing remains1.5s settle plus6s collection at each of13 points;
+five short controls remain1s settle plus2s collection. MGaze shows sample progress
+rather than a misleading fixed-duration countdown.
+
+A camera-owner thread publishes only the latest native640x480 frame. Inference
+consumes each capture at most once, while a separate local socket transports
+preview snapshots independently. No frame backlog accumulates. Preview and eye
+crops expire after500ms. Eye dots come from actual MGaze/MediaPipe eye and iris
+landmarks on the corresponding raw frame, not decoration or a segmentation claim.
+Eye close-ups update at inference speed; the full camera image updates separately.
+
+Under the measured local conditions: previous preview2.41FPS and inference6.81FPS;
+new adapter preview23.15FPS, capture23.07FPS, inference8.08FPS. Camera alone gave
+23.09FPS despite a requested/reported30FPS. Native UI image-load rate was22.13FPS
+with capture22.43FPS, and eye crops were available. These short, sequential tests
+are not a guarantee of30FPS or a controlled model-speed benchmark. No camera
+images were saved. Numeric reports: `validation/results/desktop-preview-20261031/`.
+
+On macOS, the actual system cursor follows valid gaze only inside the focused,
+unpaused demo viewport. Native Cocoa-to-Quartz logical-coordinate mapping avoids
+Retina scaling errors. Stale gaze, focus loss, pause, camera stop and heartbeat
+loss suppress movement; Escape requests a pause without blocking AppKit. No OS
+click is emitted; local web controls are activated by measured dwell outcomes.
+The cursor timer never waits for the model lock. Windows cursor presentation is
+not implemented or validated in this prototype.
+
+The new web-control scenario is versioned separately from historical four-shape
+trials, which remain supported by the protocol for existing tests/records. Human
+selection accuracy on the new controls remains unmeasured.

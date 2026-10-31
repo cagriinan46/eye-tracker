@@ -1203,3 +1203,12 @@ and GazeFollower environments are absent on Fatih's Mac, so no real timing exist
 **Next (needs the user's run):** run command and what to share are in
 `experiments/desktop_demo/README.md` ("Performance diagnostics"). Any optimization
 is a separate task chosen from the measured bottleneck.
+
+## 2026-10-31 21:15 +03:00 — Issue #145 published; review pending
+
+Commit **`bb8a16fc9efacdb9f5ec16d39627b1c0e00af071`** on
+`feature/145-desktop-perf-diagnostics`. Opened
+[PR #146](https://github.com/cagriinan46/eye-tracker/pull/146) (Closes #145), verified
+OPEN, non-draft, UNMERGED; [CI run 41227731035](https://github.com/cagriinan46/eye-tracker/actions/runs/41227731035)
+on bb8a16f completed **SUCCESS**. This entry is a later commit with its own CI
+run. No merge by the agent; Fatih decides. No real-model measurement yet.

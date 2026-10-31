@@ -146,3 +146,24 @@ UniGaze inference process. Preview JPEGs travel only through local IPC to the
 native UI. Native MediaPipe has previously logged failed Clearcut upload attempts;
 its payload is unknown, so the Python guard is not a claim of native network
 isolation. No camera was opened during this integration's automated checks.
+
+## Desktop appearance and navigation (issue #141)
+
+The preparation shell has Home, Calibration, Gaze practice, Settings and Help
+pages. Navigation does not start the camera. Calibration and live trials use the
+full viewport; their targets do not animate. The shell currently requires pointer,
+keyboard or helper input; this is not hands-free navigation of every menu.
+
+Settings offers Lavender, Sunflower and Sage color themes and reduced motion.
+Only appearance preferences persist at `~/.eye-tracker/desktop-preferences.json`;
+no calibration is restored from this file. System reduced-motion preferences are
+also respected. A settings write failure leaves the previous appearance and
+active calibration intact. Themes do not change the calibration stimulus colors,
+model, sample protocol or dwell duration.
+
+October 31 validation: native macOS UI and bridge checks with camera off,
+including all five pages, persistent themes, reduced motion, minimum 960×640
+window, and synthetic loading/error/ready/practice transitions. Synthetic state
+checks are not human gaze-accuracy measurements. Local evidence and screenshots:
+`validation/results/desktop-interface-20261031/`. Actual camera/model behavior
+continues to use the existing UniGaze default and explicit MGaze fallback.

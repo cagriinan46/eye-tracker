@@ -2,13 +2,13 @@
 const $=id=>document.getElementById(id);
 const names={circle:'Daire',square:'Kare',triangle:'Üçgen',diamond:'Elmas'};
 const targetEls=[...document.querySelectorAll('.target')];
-let api=null,state=null,lastToken=null,acknowledged=null,busy=false,geometryKey='',userBusy=false,errorToken=null;
+let api=null,state=null,lastToken=null,acknowledged=null,busy=false,geometryKey='',userBusy=false,errorToken=null,activePage='home',preferenceEpoch=0,preferenceSaving=false;
 function notice(message=''){ $('error').textContent=message; $('notice').classList.toggle('hidden',!message); }
 async function act(action,payload={}){
   if(userBusy)return;
   if(!api){notice('Uygulama henüz hazır değil. Birkaç saniye bekle.');return;}
   userBusy=true;
-  try{const r=await command(action,payload);if(r?.ok)notice();}
+  try{const r=await command(action,payload);if(r?.ok)notice();return r;}
   finally{userBusy=false;}
 }
 function geometry(){return [innerWidth,innerHeight,screenX,screenY,devicePixelRatio];}
@@ -18,9 +18,49 @@ async function command(action,payload={}){
   catch(e){notice('Uygulama bağlantısı kesildi. Pencereyi yeniden aç.');}
 }
 function regions(){return Object.fromEntries(targetEls.map(el=>{const r=el.getBoundingClientRect();return [el.dataset.shape,[r.x/innerWidth,r.y/innerHeight,r.width/innerWidth,r.height/innerHeight]];}));}
-function show(section){for(const id of ['preparation','ready','results','measurement','demo']){
-  const el=$(id);el.classList.toggle('hidden',id!==section);el.style.display=id===section?(id==='preparation'?'grid':'block'):'none';
-}}
+const pageLabels={home:'Ana sayfa',calibration:'Kalibrasyon',practice:'Bakışla seçim',settings:'Ayarlar',help:'Yardım'};
+function show(section){
+  for(const id of ['preparation','ready','results','measurement','demo']){
+    $(id).classList.toggle('hidden',id!==section);
+  }
+}
+function page(name){
+  activePage=name;
+  for(const key of Object.keys(pageLabels))$(key+'Page').classList.toggle('hidden',key!==name);
+  for(const el of document.querySelectorAll('[data-page]')){
+    const selected=el.dataset.page===name;
+    el.classList.toggle('on',selected);
+    if(selected)el.setAttribute('aria-current','page');else el.removeAttribute('aria-current');
+  }
+  $('pageLabel').textContent=pageLabels[name];
+  for(const id of ['setupArea','setupActions'])$(id).classList.toggle('hidden',!['home','calibration'].includes(name));
+  document.querySelector('.main').scrollTop=0;
+}
+async function navigate(name){
+  if(state&&!['preparation','error'].includes(state.phase)){
+    const r=await act('home');if(!r?.ok)return;
+  }
+  show('preparation');page(name);
+}
+function appearance(p){
+  if(!p)return;
+  document.documentElement.dataset.theme=p.theme;
+  document.documentElement.dataset.reducedMotion=String(p.reduced_motion);
+  for(const el of document.querySelectorAll('[data-theme-choice]'))el.setAttribute('aria-pressed',String(el.dataset.themeChoice===p.theme));
+  $('motionToggle').setAttribute('aria-checked',String(p.reduced_motion));
+}
+async function saveAppearance(p){
+  if(userBusy)return;
+  preferenceSaving=true;preferenceEpoch++;
+  try{
+    const r=await act('preferences',p);
+    if(r?.ok){
+      state.preferences={...state.preferences,...p};
+      appearance(state.preferences);
+      $('settingsStatus').textContent='Tercihin kaydedildi.';
+    }else $('settingsStatus').textContent='Tercih kaydedilemedi. Önceki görünüm korundu.';
+  }finally{preferenceEpoch++;preferenceSaving=false;}
+}
 function results(s){const count=k=>s.trials.filter(t=>t.outcome===k).length;
   $('correct').textContent=count('correct')+' / '+s.total_trials;
   $('wrong').textContent=count('incorrect');$('timeout').textContent=count('timeout');
@@ -34,16 +74,28 @@ function render(s){
     lastToken=s.token;acknowledged=null;
     show(measurement?'measurement':['ready','demo','results'].includes(phase)?phase:'preparation');
     if(phase==='results')results(s);
+    if(phase==='error'){page('calibration');}
+    if(['ready','results'].includes(phase))activePage='practice';
   }
   if(phase==='error'&&errorToken!==s.token){errorToken=s.token;notice(s.message);}
   $('cameraBadge').textContent=({off:'Kamera kapalı',loading:'Kamera hazırlanıyor',ready:s.tracking?'Gözlerin görünüyor':'Yüzünü kameraya çevir',stopping:'Kamera kapanıyor',error:'Kamera açılamadı'})[s.camera];
+  appearance(s.preferences);
+  $('modelLabel').textContent=(s.model_name==='mgaze'?'MGaze':'UniGaze')+' · Geliştirme demosu';
+  $('cameraBadge').classList.toggle('failed',s.camera==='error');
   $('cameraBadge').classList.toggle('tracking',s.camera==='ready'&&s.tracking);
   $('cameraStart').disabled=s.camera==='stopping';
   $('cameraBadge').classList.toggle('loading',['loading','stopping'].includes(s.camera));
-  $('navCalibrate').disabled=s.camera!=='ready'||!s.tracking;
-  $('navPractice').disabled=!s.can_demo||s.camera!=='ready';
+  $('practiceStart').disabled=!s.can_demo||s.camera!=='ready';
+  $('practiceStatus').textContent=s.can_demo&&s.camera==='ready'?'Göz ayarın hazır. İstediğinde başlayabilirsin.':'Önce kamerayı açıp kalibrasyonu tamamla.';
   $('cameraStart').textContent=s.camera==='loading'?'Vazgeç':s.camera==='stopping'?'Kapatılıyor…':s.camera==='ready'?'Kamerayı kapat':'Kamerayı aç';
   $('calibrate').disabled=s.camera!=='ready'||!s.tracking;
+  $('cameraStart').className=s.camera==='ready'?'quiet':'primary';
+  $('calibrate').className=s.camera==='ready'?'primary':'quiet';
+  $('setupStatus').textContent=s.camera==='loading'?'Kamera ve model hazırlanıyor.':s.camera==='ready'?(s.tracking?'Hazırsın. Kalibrasyona geçebilirsin.':'Yüzünü önizlemede görebileceğin bir konum seç.'):'İlk adım: kameranı aç.';
+  $('prepNote').textContent=s.camera==='loading'?'İlk açılış biraz sürebilir. İstersen vazgeçebilirsin.':'Kamera görüntün bu cihazda kalır ve kaydedilmez.';
+  $('stepCamera').className=s.camera==='ready'?'done':'current';
+  $('stepCalibration').className=s.can_demo?'done':s.camera==='ready'?'current':'';
+  $('stepPractice').className=s.can_demo?'current':'';
   if(s.preview){$('preview').src=s.preview;$('preview').classList.remove('hidden');$('cameraPlaceholder').classList.add('hidden');}
   else{$('preview').classList.add('hidden');$('cameraPlaceholder').classList.remove('hidden');}
   $('cameraHint').textContent=s.camera==='ready'?(s.tracking?(s.model_name==='mgaze'?'MGaze':'UniGaze')+' · Rahat konumunu koru. Yer değiştirirsen göz ayarını yenile.':'Yüzün ve gözlerin kamerada görünsün.'):s.camera==='loading'?'İlk açılış birkaç saniye sürebilir.':'Kamera yalnızca başlattığında açılır.';
@@ -68,16 +120,21 @@ function render(s){
 }
 async function poll(){
  if(!api||busy)return;busy=true;
+ const epoch=preferenceEpoch;
  try{const g=geometry(),key=JSON.stringify(g);if(geometryKey!==key){geometryKey=key;await command('geometry',{geometry:g});}
-   const s=await api.snapshot();render(s);
+   const s=await api.snapshot();if(epoch===preferenceEpoch&&!preferenceSaving)render(s);
  }catch(e){notice('Uygulama bağlantısı kesildi. Pencereyi yeniden aç.');for(const el of targetEls)el.querySelector('.fill').style.width='0%';}
  finally{busy=false;setTimeout(poll,50);}
 }
 $('cameraStart').onclick=()=>act(['ready','loading'].includes(state?.camera)?'stop_camera':'camera');
 const calibrate=()=>act('calibrate',{geometry:geometry()});
-for(const id of ['calibrate','recalibrateReady','recalibrateResult','navCalibrate'])$(id).onclick=calibrate;
-for(const id of ['startDemo','again','navPractice'])$(id).onclick=()=>act('demo');
-for(const id of ['navHome','homeDemo','homeReady','homeResult'])$(id).onclick=()=>act('home');
+for(const id of ['calibrate','recalibrateReady','recalibrateResult'])$(id).onclick=calibrate;
+for(const id of ['startDemo','again','practiceStart'])$(id).onclick=()=>act('demo');
+for(const id of ['homeDemo','homeReady','homeResult'])$(id).onclick=()=>navigate('home');
+for(const el of document.querySelectorAll('[data-page]'))el.onclick=()=>navigate(el.dataset.page);
+$('practiceSetup').onclick=()=>navigate('calibration');
+for(const el of document.querySelectorAll('[data-theme-choice]'))el.onclick=()=>saveAppearance({theme:el.dataset.themeChoice});
+$('motionToggle').onclick=()=>saveAppearance({reduced_motion:!state?.preferences?.reduced_motion});
 $('pause').onclick=()=>act(state?.paused?'resume':'pause');
 $('cancelMeasure').onclick=()=>act('pause');
 $('dismissError').onclick=()=>notice();
@@ -94,5 +151,7 @@ function connect(){
 }
 window.addEventListener('pywebviewready',connect);
 show('preparation');
+page('home');
+appearance({theme:'lavender',reduced_motion:false});
 connect();
 setTimeout(()=>{if(!api)notice('Uygulama başlatılamadı. Pencereyi kapatıp yeniden aç.');},10000);

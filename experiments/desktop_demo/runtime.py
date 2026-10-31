@@ -7,13 +7,14 @@ import time
 from pathlib import Path
 from uuid import uuid4
 
+from . import preferences
 from .protocol import Session
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 class DesktopAPI:
-    def __init__(self, output=None, camera_index=None, model_name="unigaze"):
+    def __init__(self, output=None, camera_index=None, model_name="unigaze", preferences_path=None):
         self._lock = threading.RLock()
         self._stop = threading.Event()
         self._worker = None
@@ -34,6 +35,10 @@ class DesktopAPI:
         self._closed = False
         self._last_saved_trials = 0
         self._last_saved_token = None
+        self._preferences_path = (
+            Path(preferences_path) if preferences_path is not None else preferences.DEFAULT_PATH
+        )
+        self._preferences = preferences.load(self._preferences_path)
 
     def snapshot(self):
         with self._lock:
@@ -45,6 +50,7 @@ class DesktopAPI:
                 preview=self._preview,
                 tracking=self._tracking,
                 record_path=str(self._folder) if self._folder else None,
+                preferences=dict(self._preferences),
             )
             return state
 
@@ -56,7 +62,18 @@ class DesktopAPI:
                     raise ValueError("Uygulama kapalı.")
                 now = time.monotonic()
                 s = self._session
-                if action == "camera":
+                if action == "preferences":
+                    if not isinstance(payload, dict):
+                        raise ValueError("Geçersiz görünüm ayarı.")
+                    values = preferences.validated(self._preferences | payload)
+                    try:
+                        self._preferences = preferences.save(self._preferences_path, values)
+                    except OSError:
+                        return {
+                            "ok": False,
+                            "message": "Görünüm kaydedilemedi. Önceki ayar korundu.",
+                        }
+                elif action == "camera":
                     if self._worker is not None and self._worker.is_alive():
                         raise ValueError("Kamera zaten çalışıyor.")
                     self._stop.clear()

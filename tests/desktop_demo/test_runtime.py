@@ -226,3 +226,13 @@ def test_camera_retry_requires_fresh_calibration(monkeypatch, tmp_path):
     assert api._session.geometry is None
     api._worker = None
     api.close()
+
+
+def test_record_identifies_dwell_gap_rule_and_instruction_version(tmp_path):
+    api = DesktopAPI(model_name="mgaze", output=tmp_path)
+    api._begin_record()
+    report = json.loads((api._folder / "session.json").read_text())
+    assert report["dwell_seconds"] == 1.2
+    assert report["dwell_max_interruption_seconds"] == 0.5
+    assert report["protocol"].endswith(";12-web-control-trials-v2")
+    api.close()

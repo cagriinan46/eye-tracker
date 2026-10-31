@@ -49,8 +49,12 @@ is downloaded at application startup. All UI assets are local; no account needed
 Calibration/check sampling starts only after the UI acknowledges rendered targets.
 Coordinates use the measured drawable viewport. Moving/resizing the window or
 changing display scaling invalidates calibration. Focus loss interrupts calibration
-or pauses demo. Resume is explicit. Missing gaze, target changes, stale observations
-(over300ms), UI heartbeat loss (over800ms), pause and layout changes reset dwell.
+or pauses demo. Resume is explicit. A valid point outside the control, another
+control, observation gaps over300ms without a missing-measurement report, UI
+heartbeat loss (over800ms), pause and layout changes reset dwell. A short missing
+measurement (blink, lost face, late frame) holds the progress for at most0.5s after
+the last in-region observation; that gap time is never credited, so it can delay
+but never complete or shorten a selection. The1.2s requirement is unchanged.
 A single in-region frame after a long gap cannot finish a previous dwell.
 
 ## Privacy and records
@@ -207,3 +211,23 @@ not implemented or validated in this prototype.
 The new web-control scenario is versioned separately from historical four-shape
 trials, which remain supported by the protocol for existing tests/records. Human
 selection accuracy on the new controls remains unmeasured.
+
+## Cursor glide, dwell gaps and task wording (October 31 follow-up)
+
+The macOS cursor no longer jumps at each inference result (about8FPS). Its60Hz
+timer glides toward the latest estimate with a distance-dependent time constant:
+about30ms for moves of80 logical pixels or more, up to100ms for small jitter.
+It never passes the estimate or extrapolates, holds still without a fresh sample,
+snaps after a150ms gap and resets when the viewport rectangle changes. This is
+display-only; dwell still uses the unsmoothed model point, and the model,
+HeuristicFilter, calibration and freshness gates are unchanged.
+
+Dwell treats short missing measurements as described above (hold at most0.5s,
+uncredited). Records state `dwell_max_interruption_seconds` and the protocol suffix
+`12-web-control-trials-v2`, which also marks the new task wording.
+
+The12 planner tasks now say where each control is (for example: “Sağ üst köşedeki
+“Notlarda ara” arama alanını seç.”). Each instruction fits on one heading line at
+the960px minimum width; a headless Chrome render at960×640 and1280×800 kept target
+positions identical to the old wording. Automated tests only; no camera or model
+run was performed, and selection accuracy of these changes remains unmeasured.

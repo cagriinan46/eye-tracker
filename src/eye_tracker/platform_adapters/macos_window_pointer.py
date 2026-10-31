@@ -1,11 +1,15 @@
 """Main-thread native cursor display, constrained to a focused demo window."""
 
-from eye_tracker.actions.window_pointer import window_point
+import time
+
+from eye_tracker.actions.window_pointer import PointerSmoother, window_point
 
 
 class MacOSWindowPointer:
-    def __init__(self, window, sample, pause):
+    def __init__(self, window, sample, pause, smoother=None):
         self.window, self.sample, self.pause = window, sample, pause
+        self.smoother = smoother if smoother is not None else PointerSmoother()
+        self.region = None
         self.stopped = False
 
     def start(self):
@@ -36,7 +40,11 @@ class MacOSWindowPointer:
                         rect.size.width,
                         rect.size.height,
                     )
-                    pixel = window_point(point, region)
+                    if region != self.region:
+                        # Never glide from a position mapped into an old viewport.
+                        self.region = region
+                        self.smoother.reset()
+                    pixel = self.smoother.update(time.monotonic(), window_point(point, region))
                     if pixel is not None:
                         Quartz.CGWarpMouseCursorPosition(pixel)
         except Exception:

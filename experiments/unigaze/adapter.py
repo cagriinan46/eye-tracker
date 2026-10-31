@@ -3,6 +3,7 @@
 import hashlib
 import os
 import socket
+import time
 from pathlib import Path
 
 import cv2
@@ -113,12 +114,17 @@ class Candidate:
 
     def infer(self, corrected, landmarks, mgaze_rect):
         result = dict(unigaze_valid=False, unigaze_angles=None, unigaze_reason="no_face")
+        # Wall-clock stage timings only (issue #145); inference is unchanged.
+        self.last_timing = timing = {}
+        started = time.perf_counter()
         rgb = cv2.cvtColor(
             cv2.resize(corrected, None, fx=0.5, fy=0.5, interpolation=cv2.INTER_AREA),
             cv2.COLOR_BGR2RGB,
         )
         with torch.inference_mode():
             faces = self.detector.get_landmarks_from_image(rgb)
+            detected = time.perf_counter()
+            timing["ug_detect_ms"] = (detected - started) * 1000
             result["unigaze_face_count"] = 0 if faces is None else len(faces)
             fan, overlaps, reason = matched_landmarks(faces, landmarks, mgaze_rect)
             result.update(face_box_ious=overlaps, unigaze_reason=reason)
@@ -133,6 +139,8 @@ class Candidate:
                 for a, b, u, d in [(263, 362, 386, 374), (33, 133, 159, 145)]
             ]
             prepared = geometry.normalize_frame(corrected, fan)
+            normalized = time.perf_counter()
+            timing["ug_normalize_ms"] = (normalized - detected) * 1000
             if prepared is None:
                 result["unigaze_reason"] = "invalid_geometry"
                 return result
@@ -142,6 +150,7 @@ class Candidate:
                 .cpu()
                 .numpy()[0]
             )
+            timing["ug_model_ms"] = (time.perf_counter() - normalized) * 1000
             vector, camera_angles = geometry.denormalize(angles, rotation)
             if not np.isfinite(camera_angles).all():
                 result["unigaze_reason"] = "nonfinite_output"

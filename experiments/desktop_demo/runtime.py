@@ -7,14 +7,21 @@ import time
 from pathlib import Path
 from uuid import uuid4
 
-from . import preferences
+from . import perf, preferences
 from .protocol import Session
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 class DesktopAPI:
-    def __init__(self, output=None, camera_index=None, model_name="unigaze", preferences_path=None):
+    def __init__(
+        self,
+        output=None,
+        camera_index=None,
+        model_name="unigaze",
+        preferences_path=None,
+        perf_diagnostics=False,
+    ):
         self._lock = threading.RLock()
         self._stop = threading.Event()
         self._worker = None
@@ -45,31 +52,45 @@ class DesktopAPI:
             Path(preferences_path) if preferences_path is not None else preferences.DEFAULT_PATH
         )
         self._preferences = preferences.load(self._preferences_path)
+        # Opt-in timing aggregates (issue #145); None keeps normal runs unchanged.
+        self._perf = perf.PerfRecorder(self._output, model_name) if perf_diagnostics else None
 
     def request_pointer_pause(self):
         self._pointer_pause.set()
 
     def pointer_sample(self):
         if not self._lock.acquire(blocking=False):
+            if self._perf is not None:
+                self._perf.pointer(time.monotonic(), "busy")
             return None
         try:
-            s = self._session
-            if (
-                self._closed
-                or self._pointer_pause.is_set()
-                or self._stop.is_set()
-                or self._camera != "ready"
-                or not self._focused
-                or not self._tracking
-                or s.phase != "demo"
-                or s.paused_at is not None
-                or time.monotonic() - self._last_ui > 0.8
-                or time.monotonic() - self._pointer_captured > 0.3
-            ):
-                return None
-            return s.last_point
+            point = self._pointer_point()
+            if self._perf is not None:
+                self._perf.pointer(
+                    time.monotonic(),
+                    "none" if point is None else "delivered",
+                    self._pointer_captured,
+                )
+            return point
         finally:
             self._lock.release()
+
+    def _pointer_point(self):
+        s = self._session
+        if (
+            self._closed
+            or self._pointer_pause.is_set()
+            or self._stop.is_set()
+            or self._camera != "ready"
+            or not self._focused
+            or not self._tracking
+            or s.phase != "demo"
+            or s.paused_at is not None
+            or time.monotonic() - self._last_ui > 0.8
+            or time.monotonic() - self._pointer_captured > 0.3
+        ):
+            return None
+        return s.last_point
 
     def snapshot(self):
         with self._lock:
@@ -199,6 +220,7 @@ class DesktopAPI:
                         self._reset_filter = True
                 else:
                     raise ValueError("Bilinmeyen komut.")
+                self._perf_phase(now)
                 return {"ok": True}
         except OSError as error:
             with self._lock:
@@ -206,6 +228,10 @@ class DesktopAPI:
             return {"ok": False, "message": self._session.message + " " + str(error)}
         except (ValueError, KeyError, TypeError) as error:
             return {"ok": False, "message": str(error)}
+
+    def _perf_phase(self, now):
+        if self._perf is not None:
+            self._perf.phase(self._session.phase, now)
 
     def _begin_record(self):
         self._output.mkdir(parents=True, exist_ok=True)
@@ -280,18 +306,25 @@ class DesktopAPI:
                 self._active_model = model
                 self._meta = model.metadata()
                 self._camera = "ready"
+                if self._perf is not None:
+                    model.collect_timing = True
+                    self._perf.set_model(self._meta, self._camera_index)
             while not self._stop.is_set():
                 with self._lock:
                     token = self._session.token
                     reset_filter = self._reset_filter
                     self._reset_filter = False
                     preview = self._session.phase in ("preparation", "error", "ready", "results")
+                reset_started = time.perf_counter()
                 if reset_filter and hasattr(model, "reset_filter"):
                     model.reset_filter()
+                read_started = time.perf_counter()
                 captured, features, point, jpeg = model.read(preview=preview)
+                read_done = time.perf_counter()
                 raw_point = getattr(model, "raw_point", point)
                 now = time.monotonic()
                 with self._lock:
+                    locked = time.perf_counter()
                     if self._stop.is_set():
                         break
                     s = self._session
@@ -308,6 +341,18 @@ class DesktopAPI:
                     )
                     reason = getattr(model, "eligibility_reason", "unknown")
                     self._eligibility_counts[reason] = self._eligibility_counts.get(reason, 0) + 1
+                    if self._perf is not None:
+                        self._perf_frame(
+                            model,
+                            now,
+                            captured,
+                            reason,
+                            reset_ms=(read_started - reset_started) * 1000
+                            if reset_filter
+                            else None,
+                            request_ms=(read_done - read_started) * 1000,
+                            lock_wait_ms=(locked - read_done) * 1000,
+                        )
                     if jpeg is not None:
                         self._preview = jpeg
                     if now - self._last_ui > 0.8 or not self._focused:
@@ -346,6 +391,9 @@ class DesktopAPI:
                         )
                         self._last_saved_trials = len(s.trials)
                         self._last_saved_token = s.token
+                    if self._perf is not None:
+                        self._perf.gui_done((time.perf_counter() - locked) * 1000)
+                        self._perf_phase(now)
                 self._stop.wait(0.005)
         except Exception as error:
             if self._stop.is_set():
@@ -367,6 +415,22 @@ class DesktopAPI:
                 if self._camera != "error":
                     self._camera = "off"
 
+    def _perf_frame(self, model, now, captured, reason, **gui):
+        s = self._session
+        timing = getattr(model, "last_timing", None) or {}
+        values = dict(timing, **gui)
+        if timing.get("wait_ms") is not None and timing.get("worker_ms") is not None:
+            values["transport_ms"] = gui["request_ms"] - timing["wait_ms"] - timing["worker_ms"]
+        self._perf.frame(
+            now,
+            captured=captured,
+            age_ms=(now - captured) * 1000,
+            status=self._signal_status,
+            eligibility=reason,
+            paused=s.paused_at is not None,
+            **values,
+        )
+
     def close(self):
         with self._lock:
             if not self._closed:
@@ -380,3 +444,5 @@ class DesktopAPI:
         # closing event. Otherwise Python can shut down MediaPipe's executor early.
         if self._worker is not None and self._worker is not threading.current_thread():
             self._worker.join(timeout=10)
+        if self._perf is not None:
+            self._perf.close()

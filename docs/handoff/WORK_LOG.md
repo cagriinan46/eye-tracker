@@ -1145,3 +1145,61 @@ commits were reworded to drop their `Co-Authored-By: Claude` trailer and pushed 
 → `674667e`, `8b1a352` → `9b8f76f`. Trees are identical (code unchanged); the
 SHAs cited in the two entries above refer to the pre-reword commits. `main`
 untouched; PR still OPEN and UNMERGED; Fatih merges.
+
+## 2026-10-31 21:05 +03:00 — correction: PR #144 merged
+
+Verified at the start of Issue #145: [PR #144](https://github.com/cagriinan46/eye-tracker/pull/144)
+is **MERGED** (2026-10-31T11:15:56Z, squash commit `8528974feed059c3234c601b5181fb172f9380c0`
+on main; main CI run on 8528974 SUCCESS). The entries above recorded it as pending.
+Local branch `feature/desktop-cursor-dwell-instructions` was not deleted by this task.
+
+## 2026-10-31 21:05 +03:00 — Issue #145: opt-in performance diagnostics for the desktop demo lag
+
+Task text pasted into the session by Fatih (measurement only; branch, commit, push
+and PR requested; no merge). Issue [#145](https://github.com/cagriinan46/eye-tracker/issues/145),
+branch `feature/145-desktop-perf-diagnostics` from synchronized main `8528974`.
+
+**Reported (not measured here):** after the first calibration the web-test cursor
+was smooth and accurate for 2–3 s, then jerky and late; after a second calibration
+it lagged from the start. Sessions: 388 tracking / 446 processing_delayed (46.5 %
+on time); 984 / 273 / 4 no_gaze (78.0 %); 673 / 686 (49.4 %); 606 / 627 (49.0 %);
+almost all measurements `valid`; `latest_filter_history_ms` ≈778–821 ms.
+
+**Code reading (no conclusion):** per processed frame the UniGaze worker runs, in
+series, frame copy + undistortion + SHA-256 hashes, a ≈1.8 MB IPC round trip to
+the vision worker (MGaze face/gaze + MediaPipe landmarks + diagnostics), then the
+UniGaze branch (face detector + FAN landmarks, normalization, B16 forward on MPS
+or CPU), mapping and HeuristicFilter. The GUI marks a valid estimate delayed when
+receipt minus capture time exceeds 300 ms. `latest_filter_history_ms` is the time
+from the capture three processed frames earlier; ≈800 ms is consistent with about
+3–4 processed frames per second in those sessions versus 8.08 FPS measured in
+PR #142 — an inference from the definition, not a measurement of cause.
+
+**Change:** new `experiments/desktop_demo/perf.py` (`PerfRecorder`), enabled only by
+`python -m experiments.desktop_demo --perf-diagnostics`. For each calibration /
+check / demo segment it summarizes `first_3s` and `next_15s` (frames, processed FPS,
+status counts and on-time %, eligibility, camera FPS / skipped frames, cursor poll /
+lock-busy / fresh-estimate rates, CPU % of the three processes, worker peak RSS,
+median/p90/max of frame age and per-stage times). Timing hooks: `runtime.py`
+(request, lock wait, lock-held time, filter reset, pointer polls), `unigaze_model.py`
+(`timing` request flag, `last_timing`), `desktop_worker.py` (wait, start age,
+worker time, CPU, RSS), `paired.py` (`last_timing` side channel; rows unchanged),
+`vision_worker.py` (cumulative CPU seconds, popped before the row), `adapter.py`
+(detector / normalization / forward wall times; inference unchanged). Output is
+one `[perf]` line per window and `validation/results/desktop-perf-*.json`
+(≈4 KB per segment, ≤40 segments); no frames, crops, gaze points or per-frame rows.
+Models, weights, calibration, 300 ms gate, dwell, PointerSmoother, UI and
+dependencies unchanged. Synthetic overhead: ≈1 µs per frame record, ≈4 ms per
+window summary with 2,000 frames.
+
+**Checks (`.venv-fatih`):** `ruff check .` PASS; `ruff format --check .` PASS (356
+files); `pytest` **898 passed, 16 failed**; the same 16 fail on a clean main
+worktree (889 passed, 16 failed: `ModuleNotFoundError: sklearn` in
+`tests/gaze/test_svr_calibration.py` and `tests/test_live_svr_demo.py`, an
+environment gap; main CI is green); `tests/desktop_demo` 81 passed (9 new);
+`git diff --check` clean. **No camera, model or native-window run**: UniGaze kit
+and GazeFollower environments are absent on Fatih's Mac, so no real timing exists.
+
+**Next (needs the user's run):** run command and what to share are in
+`experiments/desktop_demo/README.md` ("Performance diagnostics"). Any optimization
+is a separate task chosen from the measured bottleneck.

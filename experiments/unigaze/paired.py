@@ -17,6 +17,8 @@ class PairedExtractor:
         self.worker = None
         self.last_id = -1
         self.last_timestamp = -1
+        self.last_timing = {}
+        self.vision_cpu = None
         try:
             self.candidate = Candidate()
             self.provenance = self.candidate.provenance
@@ -60,6 +62,7 @@ class PairedExtractor:
         payload = raw.tobytes()
         corrected_digest = hashlib.sha256(corrected.tobytes()).hexdigest()
         digest = hashlib.sha256(payload).hexdigest()
+        sent = time.perf_counter()
         # Same capture: MGaze original raw; candidate/landmarks measured-undistorted.
         send(
             self.sock,
@@ -67,6 +70,8 @@ class PairedExtractor:
             payload + corrected.tobytes(),
         )
         result, _ = receive(self.sock)
+        received = time.perf_counter()
+        vision_cpu = result.pop("process_cpu_s", None)
         expected = dict(
             status="ok",
             frame_id=frame_id,
@@ -88,6 +93,26 @@ class PairedExtractor:
         result["candidate_corrected_sha256"] = corrected_digest
         result["paired_total_ms"] = (time.perf_counter() - start) * 1000
         result["joint_valid"] = result["mgaze_valid"] and result["unigaze_valid"]
+        # Timing-only side channel (issue #145); rows keep their established keys.
+        vision_ms = (received - sent) * 1000
+        inner = [result.get(k) for k in ("mgaze_ms", "landmarks_ms", "diagnostics_ms")]
+        self.last_timing = dict(
+            getattr(self.candidate, "last_timing", None) or {},
+            prepare_ms=(sent - start) * 1000,
+            vision_ms=vision_ms,
+            mgaze_ms=inner[0],
+            landmarks_ms=inner[1],
+            vision_diag_ms=inner[2],
+            vision_overhead_ms=vision_ms - sum(inner)
+            if all(isinstance(v, (int, float)) for v in inner)
+            else None,
+            unigaze_ms=result["unigaze_ms"],
+            paired_ms=result["paired_total_ms"],
+            vision_cpu_ms=None
+            if vision_cpu is None or self.vision_cpu is None
+            else (vision_cpu - self.vision_cpu) * 1000,
+        )
+        self.vision_cpu = vision_cpu
         return result
 
     def close(self):

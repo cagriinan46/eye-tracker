@@ -231,3 +231,67 @@ The12 planner tasks now say where each control is (for example: “Sağ üst kö
 the960px minimum width; a headless Chrome render at960×640 and1280×800 kept target
 positions identical to the old wording. Automated tests only; no camera or model
 run was performed, and selection accuracy of these changes remains unmeasured.
+
+## Performance diagnostics (issue #145)
+
+Measurement only, for the reported lag (smooth for 2–3 s after calibration, then
+jerky; laggy from the start after a second calibration). Nothing in the gaze
+pipeline, models, weights, calibration, 300 ms freshness gate, dwell,
+PointerSmoother or UI changes. Off by default; `--perf-diagnostics` turns it on.
+
+Each calibration, check and demo segment is summarized as two windows measured
+from the moment the phase starts: **`first_3s`** (0–3 s) and **`next_15s`**
+(3–18 s). Leaving a phase early closes the open window as `"complete": false`.
+Per window: processed FPS, tracking / processing_delayed / no_gaze counts and
+on-time %, eligibility counts, camera capture FPS and skipped frames, cursor
+poll / contended-lock / fresh-estimate rates, CPU % of the GUI, UniGaze worker
+and MGaze/MediaPipe vision worker processes (100 % = one core), worker peak RSS,
+and median / p90 / max of these times in ms:
+
+| Key | Meaning |
+| --- | --- |
+| `age_ms` | GUI receipt minus capture time; the value the 300 ms gate tests |
+| `interval_ms` | Time between processed frames in the GUI loop |
+| `start_age_ms` | Frame age when the worker starts processing it |
+| `wait_ms` | Worker wait for a newer camera frame |
+| `worker_ms` | Worker processing of one frame (all stages below) |
+| `prepare_ms` | Frame copy, undistortion and identity hashes |
+| `vision_ms` | Round trip to the vision worker; inside it `mgaze_ms`, `landmarks_ms` (MediaPipe), `vision_diag_ms`, plus `vision_overhead_ms` (IPC, hashing) |
+| `unigaze_ms` | UniGaze branch: `ug_detect_ms` (face detector + FAN landmarks), `ug_normalize_ms` (face matching + normalization), `ug_model_ms` (UniGaze forward) |
+| `post_ms` | Eye-preview crop, eligibility, Ridge mapping and filter |
+| `request_ms`, `transport_ms`, `reset_ms` | GUI-side read request, its IPC share, filter-reset request |
+| `lock_wait_ms`, `gui_ms` | GUI wait for and time holding the shared lock |
+
+Output: one `[perf]` line per window on the terminal and one small JSON file
+(about 4 KB per segment, at most 40 segments) at
+`validation/results/desktop-perf-<time>-<id>.json` (or `--output`). It holds
+aggregates only: no camera frames, video, eye crops, gaze points or per-frame
+rows. Synthetic cost: about 1 µs per frame and a few ms per window summary.
+
+### Run on the prepared Mac
+
+Mains power connected, other heavy applications closed:
+
+```sh
+cd <eye-tracker repository>
+git fetch origin && git switch feature/145-desktop-perf-diagnostics && git pull
+sysctl -n machdep.cpu.brand_string; pmset -g batt | head -1; pmset -g therm
+PYTHONPATH=src:. ~/.virtualenvs/eye-tracker-gazefollower-20261019/bin/python \
+  -m experiments.desktop_demo --perf-diagnostics
+pmset -g therm
+cat "$(ls -t validation/results/desktop-perf-*.json | head -1)"
+```
+
+In the application: start the camera, calibrate (13 points + 5 checks), start
+the web test and keep doing tasks for **at least 20 s**; then go back, calibrate
+a **second** time, start the web test again for at least 20 s, and close the
+window. Share the `[perf]` lines, the JSON file contents and the `sysctl` /
+`pmset` output. Compare `first_3s` with `next_15s`, and the first demo segment
+with the second.
+
+Limitations: capture time is taken when OpenCV returns the frame inside the
+worker's capture thread, so any buffering inside AVFoundation or the camera is
+not visible. Stage times are wall-clock; MPS work is synchronized by the
+existing CPU copies. `--model mgaze` reports only GUI-side values. The
+instrumentation has not been run with the real UniGaze model on Fatih's Mac
+(its local assets are absent); only synthetic tests have run.

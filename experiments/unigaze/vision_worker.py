@@ -123,6 +123,8 @@ def main(fd):
                     landmarks=landmarks,
                     landmarks_ms=landmarks_ms,
                     diagnostics_ms=1000 * (time.perf_counter() - diagnostic_started),
+                    # Cumulative CPU seconds for issue #145 timing; not stored in rows.
+                    process_cpu_s=time.process_time(),
                 ),
             )
     except EOFError:

@@ -7,6 +7,21 @@ import numpy as np
 from eye_tracker.intent.region_dwell import RegionDwell
 
 SHAPES = ["circle", "square", "triangle", "diamond"]
+WEB_TARGETS = ["overview", "notes", "search", "title", "reminder", "save", "details", "clear"]
+WEB_ORDER = [
+    "overview",
+    "title",
+    "reminder",
+    "save",
+    "details",
+    "search",
+    "notes",
+    "clear",
+    "reminder",
+    "details",
+    "title",
+    "save",
+]
 # Same normalized13-point layout as upstream CalibrationController.
 _X = [50 / 1920, (50 / 1920 + 0.5) / 2, 0.5, (0.5 + 1870 / 1920) / 2, 1870 / 1920]
 _Y = [50 / 1080, (50 / 1080 + 0.5) / 2, 0.5, (0.5 + 1030 / 1080) / 2, 1030 / 1080]
@@ -67,9 +82,14 @@ UNIGAZE_POINTS = [
 
 
 class Session:
-    def __init__(self, model_name="mgaze"):
+    def __init__(self, model_name="mgaze", scenario="shapes"):
         if model_name not in ("unigaze", "mgaze"):
             raise ValueError("Unknown gaze model")
+        if scenario not in ("shapes", "web"):
+            raise ValueError("Unknown interaction scenario")
+        self.scenario = scenario
+        self.targets = WEB_TARGETS if scenario == "web" else SHAPES
+        self.trial_order = WEB_ORDER if scenario == "web" else TRIAL_ORDER
         self.model_name = model_name
         self.feature_count = 2 if model_name == "unigaze" else 258
         self.sample_count = 20 if model_name == "unigaze" else 45
@@ -107,7 +127,7 @@ class Session:
 
     @property
     def expected(self):
-        return TRIAL_ORDER[self.index] if self.phase == "demo" else None
+        return self.trial_order[self.index] if self.phase == "demo" else None
 
     def start_calibration(self, geometry):
         if (
@@ -133,6 +153,20 @@ class Session:
         self.message = message
         self.transition("error")
 
+    def retry_calibration(self):
+        if self.phase != "calibration_retry":
+            raise ValueError("Tekrar beklenecek kalibrasyon noktası yok.")
+        self.samples = []
+        self.message = ""
+        self.transition("calibration")
+
+    def insufficient_calibration(self):
+        self.message = (
+            f"{self.index + 1}. noktada {len(self.samples)}/{self.sample_count} geçerli örnek alındı. "
+            "Tamamlanan noktalar korundu. Hazır olduğunda bu noktayı tekrar dene."
+        )
+        self.transition("calibration_retry")
+
     def geometry_changed(self, geometry):
         if self.geometry is not None and list(geometry) != self.geometry:
             self.calibrated = False
@@ -149,8 +183,8 @@ class Session:
         self.transition("check")
 
     def set_regions(self, regions):
-        if set(regions) != set(SHAPES):
-            raise ValueError("Four target regions required")
+        if set(regions) != set(self.targets):
+            raise ValueError("Registered control regions required")
         clean = {}
         for name, rect in regions.items():
             if len(rect) != 4 or not all(math.isfinite(x) for x in rect):
@@ -178,7 +212,7 @@ class Session:
         self.dwell.reset()
         if self.phase == "demo" and self.paused_at is None:
             self.paused_at = now
-        elif self.phase in ("calibration", "check", "fitting"):
+        elif self.phase in ("calibration", "calibration_retry", "check", "fitting"):
             self.calibrated = False
             self.fail("Göz ayarı yarıda kaldı. Hazır olduğunda yeniden başlayabilirsin.")
 
@@ -203,10 +237,17 @@ class Session:
                 else "incorrect",
                 elapsed_s=elapsed,
                 modality="gaze",
+                scenario=self.scenario,
+                target_size_px=[
+                    self.regions[self.expected][2] * self.geometry[0],
+                    self.regions[self.expected][3] * self.geometry[1],
+                ]
+                if self.expected in self.regions and self.geometry
+                else None,
             )
         )
         self.index += 1
-        self.transition("results" if self.index == len(TRIAL_ORDER) else "demo")
+        self.transition("results" if self.index == len(self.trial_order) else "demo")
 
     def sample(self, now, features, point, raw_point=None):
         self.last_point = list(point) if finite_pair(point) else None
@@ -219,9 +260,7 @@ class Session:
         elapsed = now - self.onset
         if self.phase == "calibration":
             if elapsed > 15:
-                self.fail(
-                    "Yeterli göz verisi alınamadı. Işığı ve kamerayı kontrol edip yeniden dene."
-                )
+                self.insufficient_calibration()
             else:
                 timed = self.model_name == "unigaze"
                 if elapsed >= 1.5 and (not timed or elapsed < 7.5) and features is not None:
@@ -231,7 +270,7 @@ class Session:
                 finished = elapsed >= 7.5 if timed else len(self.samples) >= self.sample_count
                 if finished:
                     if len(self.samples) < self.sample_count:
-                        self.fail("Yeterli göz verisi alınamadı. Göz ayarını yeniden başlat.")
+                        self.insufficient_calibration()
                         return
                     indices = np.linspace(0, len(self.samples) - 1, self.sample_count, dtype=int)
                     self.training.append(np.array(self.samples)[indices])
@@ -282,9 +321,31 @@ class Session:
             if self.dwell.update(now, target):
                 self.finish_trial(target, elapsed)
 
+    def measurement_progress(self, now):
+        if self.phase not in ("calibration", "check"):
+            return None
+        duration = 7.5 if self.phase == "calibration" else 3.0
+        settle = 1.5 if self.phase == "calibration" else 1.0
+        elapsed = max(0, now - self.onset) if self.onset is not None else 0
+        fraction = max(0, 1 - elapsed / duration)
+        if self.phase == "calibration" and self.model_name == "mgaze":
+            fraction = max(0, 1 - len(self.samples) / self.sample_count)
+        return dict(
+            index=self.index + 1,
+            total=13 if self.phase == "calibration" else 5,
+            remaining_s=max(0, duration - elapsed),
+            sample_based=self.phase == "calibration" and self.model_name == "mgaze",
+            samples=len(self.samples),
+            required_samples=self.sample_count,
+            remaining_fraction=fraction,
+            settling=elapsed < settle,
+            phase=self.phase,
+        )
+
     def snapshot(self):
         return dict(
             phase=self.phase,
+            scenario=self.scenario,
             can_demo=self.calibrated or self.phase in ("ready", "results"),
             message=self.message,
             token=self.token,
@@ -297,5 +358,5 @@ class Session:
             sample_count=len(self.samples),
             checks=list(self.check_results),
             trials=list(self.trials),
-            total_trials=len(TRIAL_ORDER),
+            total_trials=len(self.trial_order),
         )

@@ -3,6 +3,7 @@
 import base64
 import socket
 import sys
+import threading
 import time
 
 import numpy as np
@@ -29,7 +30,12 @@ def eligible_features(row):
 
 class Engine:
     def __init__(self, camera_index):
-        self.cap = self.pair = None
+        self.cap = self.pair = self.stream = None
+        self.last_capture = -1
+        self.eye_preview = None
+        self.eye_captured = 0
+        self.eye_updated = 0
+        self.eye_detected = False
         try:
             import cv2
 
@@ -61,6 +67,12 @@ class Engine:
             self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
             self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
             self.cap.set(cv2.CAP_PROP_FPS, 30)
+            from .camera_stream import LatestCamera
+            from .preview import jpeg_url
+
+            self.stream = LatestCamera(
+                self.cap, lambda frame: jpeg_url(cv2, cv2.resize(frame, (640, 480))[:, ::-1])
+            )
         except BaseException:
             self.close()
             raise
@@ -68,13 +80,24 @@ class Engine:
     def process_frame(self, frame, captured_ns, preview=False):
         row = self.pair.process(frame, self.frame_id, captured_ns)
         self.frame_id += 1
+        if preview:
+            from .preview import eye_view
+
+            crop = eye_view(self.cv2, frame, row.get("preview_eyes"))
+            self.eye_detected = crop is not None
+            if crop is not None:
+                self.eye_preview = crop
+                self.eye_captured = captured_ns / 1e9
+                self.eye_updated = time.monotonic()
+        else:
+            self.eye_preview = None
         features = eligible_features(row)
         raw = None
         if features is not None and self.mapping.weights is not None:
             raw = self.mapping.predict(features).tolist()
         point, lag = self.smoothing.update(raw, captured_ns)
         jpeg = None
-        if preview:
+        if preview and getattr(self, "stream", None) is None:
             small = self.cv2.resize(frame, (400, 300))[:, ::-1]
             ok, data = self.cv2.imencode(".jpg", small, [self.cv2.IMWRITE_JPEG_QUALITY, 70])
             if ok:
@@ -86,16 +109,31 @@ class Engine:
             raw_point=raw,
             point=point,
             filter_history_ms=lag,
+            eligibility_reason=(
+                "valid"
+                if features is not None
+                else "mgaze_invalid"
+                if not row.get("mgaze_valid")
+                else row.get("unigaze_reason") or "eye_gap_or_invalid_features"
+            ),
             preview=jpeg,
         )
 
     def read(self, preview=False):
-        ok, frame = self.cap.read()
-        captured = time.monotonic_ns()
-        if not ok:
-            raise RuntimeError("Kamera bağlantısı kesildi. Kamerayı yeniden başlat.")
-        # No resizing: measured intrinsics only apply to native640x480.
+        self.stream.enabled = bool(preview)
+        sequence, captured, frame = self.stream.read_after(self.last_capture)
+        self.last_capture = sequence
+        # Both estimators still see exactly this capture; old captures never queue.
         return self.process_frame(frame, captured, preview)
+
+    def preview_snapshot(self):
+        result = self.stream.preview()
+        result["eye_preview"] = (
+            self.eye_preview if time.monotonic() - self.eye_updated < 1.0 else None
+        )
+        result["eye_age_ms"] = max(0, (time.monotonic() - self.eye_captured) * 1000)
+        result["eye_detected"] = self.eye_detected
+        return result
 
     def fit(self, features, labels):
         x, y = np.asarray(features, float), np.asarray(labels, float)
@@ -108,6 +146,10 @@ class Engine:
         )
 
     def close(self):
+        if self.stream is not None:
+            self.stream.close()
+            self.stream = None
+            self.cap = None
         if self.cap is not None:
             self.cap.release()
             self.cap = None
@@ -116,11 +158,29 @@ class Engine:
             self.pair = None
 
 
-def main(fd, camera_index):
+def serve_preview(sock, engine):
+    try:
+        while True:
+            request, _ = receive(sock)
+            if request.get("command") != "preview":
+                break
+            send(sock, engine.preview_snapshot())
+    except (EOFError, OSError):
+        pass
+
+
+def main(fd, camera_index, preview_fd=None):
     sock = socket.socket(fileno=fd)
     engine = None
+    preview_sock = socket.socket(fileno=preview_fd) if preview_fd is not None else None
+    preview_thread = None
     try:
         engine = Engine(camera_index)
+        if preview_sock is not None:
+            preview_thread = threading.Thread(
+                target=serve_preview, args=(preview_sock, engine), daemon=True
+            )
+            preview_thread.start()
         send(sock, dict(status="ready", metadata=engine.metadata))
         while True:
             request, _ = receive(sock)
@@ -147,10 +207,18 @@ def main(fd, camera_index):
         except OSError:
             pass
     finally:
+        if preview_sock is not None:
+            try:
+                preview_sock.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+            preview_sock.close()
+        if preview_thread is not None:
+            preview_thread.join(timeout=1)
         if engine is not None:
             engine.close()
         sock.close()
 
 
 if __name__ == "__main__":
-    main(int(sys.argv[1]), int(sys.argv[2]))
+    main(int(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3]) if len(sys.argv) > 3 else None)

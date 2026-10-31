@@ -145,3 +145,26 @@ def test_pause_before_render_ack_can_resume_with_new_handshake():
     assert s.token != old and s.onset is None
     s.ack(s.token, 2.1)
     assert s.onset == 2.1
+
+
+def test_web_scenario_records_real_control_and_target_size():
+    s = Session(scenario="web")
+    s.phase = "ready"
+    s.geometry = [1000, 800, 0, 0, 1]
+    s.start_demo()
+    assert s.expected == "overview"
+    regions = {name: [i * 0.11, 0.1, 0.09, 0.05] for i, name in enumerate(s.targets)}
+    s.set_regions(regions)
+    s.ack(s.token, 0)
+    for i in range(16):
+        s.sample(1 + i * 0.1, None, [0.03, 0.12])
+    assert s.trials[0]["selected"] == "overview"
+    assert s.trials[0]["target_size_px"] == [90, 40]
+    assert s.trials[0]["scenario"] == "web"
+    assert len(s.trial_order) == 12
+
+
+def test_web_scenario_rejects_unregistered_control_regions():
+    s = Session(scenario="web")
+    with pytest.raises(ValueError):
+        s.set_regions({"pretend": [0, 0, 0.1, 0.1]})

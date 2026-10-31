@@ -153,6 +153,20 @@ class Session:
         self.message = message
         self.transition("error")
 
+    def retry_calibration(self):
+        if self.phase != "calibration_retry":
+            raise ValueError("Tekrar beklenecek kalibrasyon noktası yok.")
+        self.samples = []
+        self.message = ""
+        self.transition("calibration")
+
+    def insufficient_calibration(self):
+        self.message = (
+            f"{self.index + 1}. noktada {len(self.samples)}/{self.sample_count} geçerli örnek alındı. "
+            "Tamamlanan noktalar korundu. Hazır olduğunda bu noktayı tekrar dene."
+        )
+        self.transition("calibration_retry")
+
     def geometry_changed(self, geometry):
         if self.geometry is not None and list(geometry) != self.geometry:
             self.calibrated = False
@@ -198,7 +212,7 @@ class Session:
         self.dwell.reset()
         if self.phase == "demo" and self.paused_at is None:
             self.paused_at = now
-        elif self.phase in ("calibration", "check", "fitting"):
+        elif self.phase in ("calibration", "calibration_retry", "check", "fitting"):
             self.calibrated = False
             self.fail("Göz ayarı yarıda kaldı. Hazır olduğunda yeniden başlayabilirsin.")
 
@@ -246,9 +260,7 @@ class Session:
         elapsed = now - self.onset
         if self.phase == "calibration":
             if elapsed > 15:
-                self.fail(
-                    "Yeterli göz verisi alınamadı. Işığı ve kamerayı kontrol edip yeniden dene."
-                )
+                self.insufficient_calibration()
             else:
                 timed = self.model_name == "unigaze"
                 if elapsed >= 1.5 and (not timed or elapsed < 7.5) and features is not None:
@@ -258,7 +270,7 @@ class Session:
                 finished = elapsed >= 7.5 if timed else len(self.samples) >= self.sample_count
                 if finished:
                     if len(self.samples) < self.sample_count:
-                        self.fail("Yeterli göz verisi alınamadı. Göz ayarını yeniden başlat.")
+                        self.insufficient_calibration()
                         return
                     indices = np.linspace(0, len(self.samples) - 1, self.sample_count, dtype=int)
                     self.training.append(np.array(self.samples)[indices])

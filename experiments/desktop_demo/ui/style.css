@@ -228,3 +228,5 @@ input.web-target::placeholder { color: var(--muted); }
 .web-target:not(:disabled):active { transform: none; }
 .web-notes, .note-item > div { min-width: 0; }
 #webNoteTitle { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+#calibrationRetry { pointer-events: auto; width: min(85%, 540px); }

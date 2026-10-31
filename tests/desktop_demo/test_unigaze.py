@@ -24,13 +24,13 @@ def test_unigaze_calibration_selects_twenty_per_target_after_full_window():
     assert y[0].tolist() == [0.5, 0.5]
 
 
-def test_unigaze_insufficient_samples_fail_without_fitting():
+def test_unigaze_insufficient_samples_offer_retry_without_fitting():
     s = Session(model_name="unigaze")
     s.start_calibration([1000, 800, 0, 0, 1])
     s.ack(s.token, 0)
     s.sample(2, [1, 2], None)
     s.sample(7.6, None, None)
-    assert s.phase == "error" and not s.calibrated
+    assert s.phase == "calibration_retry" and not s.calibrated
 
 
 def test_check_keeps_raw_and_filtered_errors_separate():
@@ -316,3 +316,86 @@ def test_measurement_progress_uses_acknowledged_time_and_phase_duration():
     assert s.measurement_progress(111)["remaining_s"] == 2
     assert s.measurement_progress(111)["total"] == 5
     assert s.measurement_progress(120)["remaining_fraction"] == 0
+
+
+def test_calibration_retry_keeps_completed_targets_and_restarts_only_current():
+    s = Session(model_name="unigaze")
+    s.start_calibration([1000, 800, 0, 0, 1])
+    s.training = [np.ones((20, 2))]
+    s.index = 1
+    s.ack(s.token, 10)
+    s.sample(12, [1, 2], None)
+    s.sample(17.6, None, None)
+    assert s.phase == "calibration_retry"
+    assert len(s.training) == 1
+    assert s.index == 1
+    s.retry_calibration()
+    assert s.phase == "calibration" and s.onset is None
+    assert not s.samples and len(s.training) == 1
+    s.ack(s.token, 20)
+    for t in np.linspace(21.6, 27.4, 22):
+        s.sample(t, [1, 2], None)
+    s.sample(27.6, None, None)
+    assert s.index == 2 and len(s.training) == 2
+
+
+def test_eye_preview_expires_from_completed_inference_not_capture_age():
+    import time
+    from types import SimpleNamespace
+
+    from experiments.unigaze.desktop_worker import Engine
+
+    e = Engine.__new__(Engine)
+    e.stream = SimpleNamespace(preview=lambda: {"preview": "camera"})
+    e.eye_preview = "eyes"
+    e.eye_captured = time.monotonic() - 0.7
+    e.eye_updated = time.monotonic() - 0.01
+    e.eye_detected = True
+    snap = e.preview_snapshot()
+    assert snap["eye_preview"] == "eyes"
+    assert snap["eye_age_ms"] >= 690
+    e.eye_updated = time.monotonic() - 2
+    assert e.preview_snapshot()["eye_preview"] is None
+
+
+@pytest.mark.parametrize("phase", ["calibration", "check", "demo"])
+def test_delayed_valid_features_train_but_never_drive_live_pointer(monkeypatch, tmp_path, phase):
+    import sys
+    import time
+    from types import SimpleNamespace
+
+    from experiments.desktop_demo.runtime import DesktopAPI
+
+    class Model:
+        def __init__(self, index, stop_event=None):
+            self.stop, self.n = stop_event, 0
+
+        def metadata(self):
+            return {}
+
+        def read(self, preview=False):
+            self.n += 1
+            if self.n > 1:
+                self.stop.set()
+            return time.monotonic() - 0.6, [0.1, 0.2], [0.5, 0.5], None
+
+        def close(self):
+            pass
+
+    monkeypatch.setitem(
+        sys.modules, "experiments.desktop_demo.unigaze_model", SimpleNamespace(CameraModel=Model)
+    )
+    api = DesktopAPI(output=tmp_path)
+    api._session.start_calibration([1000, 800, 0, 0, 1])
+    api._session.phase = phase
+    rows = []
+    monkeypatch.setattr(api._session, "sample", lambda t, f, p, **kw: rows.append((f, p)))
+    api._run()
+    expected = {
+        "calibration": ([0.1, 0.2], None),
+        "check": ([0.1, 0.2], [0.5, 0.5]),
+        "demo": (None, None),
+    }
+    assert rows == [expected[phase]]
+    assert not api.snapshot()["tracking"]
+    assert api.pointer_sample() is None

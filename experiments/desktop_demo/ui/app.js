@@ -70,7 +70,7 @@ function results(s){const count=k=>s.trials.filter(t=>t.outcome===k).length;
   $('recordPath').textContent=s.record_path?'Seçimlerin bu cihazda saklandı.':'Bu oturum kaydedilemedi.';
 }
 function render(s){
-  state=s;document.title='Eye Tracker · '+(s.model_name==='mgaze'?'MGaze':'UniGaze');const phase=s.phase;const measurement=['calibration','check','fitting'].includes(phase);
+  state=s;document.title='Eye Tracker · '+(s.model_name==='mgaze'?'MGaze':'UniGaze');const phase=s.phase;const measurement=['calibration','calibration_retry','check','fitting'].includes(phase);
   if(lastToken!==s.token){
     lastToken=s.token;acknowledged=null;
     show(measurement?'measurement':['ready','demo','results'].includes(phase)?phase:'preparation');
@@ -79,7 +79,7 @@ function render(s){
     if(['ready','results'].includes(phase))activePage='practice';
   }
   if(phase==='error'&&errorToken!==s.token){errorToken=s.token;notice(s.message);}
-  $('cameraBadge').textContent=({off:'Kamera kapalı',loading:'Kamera hazırlanıyor',ready:s.tracking?'Gözlerin görünüyor':'Yüzünü kameraya çevir',stopping:'Kamera kapanıyor',error:'Kamera açılamadı'})[s.camera];
+  $('cameraBadge').textContent=({off:'Kamera kapalı',loading:'Kamera hazırlanıyor',ready:s.tracking?'Gözlerin görünüyor':s.signal_status==='processing_delayed'?'Gözler algılandı · İşlem gecikiyor':'Geçerli bakış verisi bekleniyor',stopping:'Kamera kapanıyor',error:'Kamera açılamadı'})[s.camera];
   appearance(s.preferences);
   $('cameraBadge').classList.toggle('failed',s.camera==='error');
   $('cameraBadge').classList.toggle('tracking',s.camera==='ready'&&s.tracking);
@@ -88,7 +88,7 @@ function render(s){
   $('practiceStart').disabled=!s.can_demo||s.camera!=='ready';
   $('practiceStatus').textContent=s.can_demo&&s.camera==='ready'?'Göz ayarın hazır. İstediğinde başlayabilirsin.':'Önce kamerayı açıp kalibrasyonu tamamla.';
   $('cameraStart').textContent=s.camera==='loading'?'Vazgeç':s.camera==='stopping'?'Kapatılıyor…':s.camera==='ready'?'Kamerayı kapat':'Kamerayı aç';
-  $('calibrate').disabled=s.camera!=='ready'||!s.tracking;
+  $('calibrate').disabled=s.camera!=='ready'||(!s.tracking&&s.signal_status!=='processing_delayed');
   $('cameraStart').className=s.camera==='ready'?'quiet':'primary';
   $('calibrate').className=s.camera==='ready'?'primary':'quiet';
   $('stepCamera').className=s.camera==='ready'?'done':'current';
@@ -96,11 +96,14 @@ function render(s){
   $('stepPractice').className=s.can_demo?'current':'';
   if(s.preview){if($('preview').src!==s.preview)$('preview').src=s.preview;$('preview').classList.remove('hidden');$('cameraPlaceholder').classList.add('hidden');}
   else{$('preview').classList.add('hidden');$('cameraPlaceholder').classList.remove('hidden');}
+  $('eyeLabel').textContent=s.eye_preview&&(s.eye_age_ms>500||s.eye_detected===false)?'Göz takibi · Son ölçüm':'Göz takibi';
   if(s.eye_preview){
     if($('eyePreview').src!==s.eye_preview)$('eyePreview').src=s.eye_preview;
     $('eyePreview').classList.remove('hidden');$('eyePlaceholder').classList.add('hidden');
   }else{$('eyePreview').classList.add('hidden');$('eyePlaceholder').classList.remove('hidden');$('eyePlaceholder').textContent=s.camera==='ready'?'Gözler aranıyor…':'Kamera açıldığında görünür.';}
   if(measurement){
+    $('calibrationRetry').classList.toggle('hidden',phase!=='calibration_retry');
+    $('retryMessage').textContent=s.message||'';
     $('fitting').classList.toggle('hidden',phase!=='fitting');
     $('fixation').classList.toggle('hidden',!s.point);
     if(s.point){
@@ -118,7 +121,7 @@ function render(s){
     $('instruction').textContent=s.paused?'Mola veriyoruz.':'“'+names[s.expected]+'” öğesini seç.';
     $('trialInfo').textContent=s.paused?'Hazır olduğunda Devam et düğmesine bas.':`Adım ${s.index+1} / ${s.total_trials} · İstenen öğeye bakışını sabitle.`;
     $('pause').textContent=s.paused?'Devam et':'Duraklat';$('targets').classList.toggle('paused',s.paused);
-    $('trackingLabel').textContent=s.paused?'Duraklatıldı':s.tracking?'Bakışın izleniyor':'Gözlerin görünmüyor. Kameraya doğru bak.';
+    $('trackingLabel').textContent=s.paused?'Duraklatıldı':s.tracking?'Bakışın izleniyor':s.signal_status==='processing_delayed'?'İşlem gecikiyor. Bakışla seçim bekletiliyor.':'Geçerli bakış verisi bekleniyor.';
     for(const el of targetEls){const on=el.dataset.control===s.dwell_target&&!s.paused;el.classList.toggle('focused',on);fillFor(el).style.width=(on?s.dwell_progress*100:0)+'%';}
     const t=s.trials.at(-1);$('lastTrial').textContent=t?`Önceki: ${t.outcome==='correct'?'doğru':t.outcome==='incorrect'?'yanlış':'süre doldu'}`:'';
   }
@@ -171,6 +174,7 @@ $('practiceSetup').onclick=()=>navigate('calibration');
 for(const el of document.querySelectorAll('[data-theme-choice]'))el.onclick=()=>saveAppearance({theme:el.dataset.themeChoice});
 $('motionToggle').onclick=()=>saveAppearance({reduced_motion:!state?.preferences?.reduced_motion});
 $('pause').onclick=()=>act(state?.paused?'resume':'pause');
+$('retryCalibration').onclick=()=>act('retry_calibration');
 $('cancelMeasure').onclick=()=>act('pause');
 $('dismissError').onclick=()=>notice();
 window.addEventListener('blur',()=>command('focus',{active:false}));

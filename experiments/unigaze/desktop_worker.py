@@ -34,6 +34,8 @@ class Engine:
         self.last_capture = -1
         self.eye_preview = None
         self.eye_captured = 0
+        self.eye_updated = 0
+        self.eye_detected = False
         try:
             import cv2
 
@@ -81,8 +83,12 @@ class Engine:
         if preview:
             from .preview import eye_view
 
-            self.eye_preview = eye_view(self.cv2, frame, row.get("preview_eyes"))
-            self.eye_captured = captured_ns / 1e9
+            crop = eye_view(self.cv2, frame, row.get("preview_eyes"))
+            self.eye_detected = crop is not None
+            if crop is not None:
+                self.eye_preview = crop
+                self.eye_captured = captured_ns / 1e9
+                self.eye_updated = time.monotonic()
         else:
             self.eye_preview = None
         features = eligible_features(row)
@@ -103,6 +109,13 @@ class Engine:
             raw_point=raw,
             point=point,
             filter_history_ms=lag,
+            eligibility_reason=(
+                "valid"
+                if features is not None
+                else "mgaze_invalid"
+                if not row.get("mgaze_valid")
+                else row.get("unigaze_reason") or "eye_gap_or_invalid_features"
+            ),
             preview=jpeg,
         )
 
@@ -116,8 +129,10 @@ class Engine:
     def preview_snapshot(self):
         result = self.stream.preview()
         result["eye_preview"] = (
-            self.eye_preview if time.monotonic() - self.eye_captured < 0.5 else None
+            self.eye_preview if time.monotonic() - self.eye_updated < 1.0 else None
         )
+        result["eye_age_ms"] = max(0, (time.monotonic() - self.eye_captured) * 1000)
+        result["eye_detected"] = self.eye_detected
         return result
 
     def fit(self, features, labels):

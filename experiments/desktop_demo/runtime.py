@@ -29,6 +29,9 @@ class DesktopAPI:
         self._pointer_captured = 0
         self._pointer_pause = threading.Event()
         self._tracking = False
+        self._signal_status = "waiting"
+        self._signal_counts = {}
+        self._eligibility_counts = {}
         self._last_ui = time.monotonic()
         self._focused = True
         self._output = Path(output) if output is not None else ROOT / "validation/results"
@@ -81,6 +84,7 @@ class DesktopAPI:
                 model_name=self._model_name,
                 preview=self._preview,
                 tracking=self._tracking,
+                signal_status=self._signal_status,
                 record_path=str(self._folder) if self._folder else None,
                 preferences=dict(self._preferences),
             )
@@ -150,10 +154,17 @@ class DesktopAPI:
                     self._save("aborted" if s.phase != "results" else "completed")
                     self._folder = None
                     s.start_calibration(payload["geometry"])
+                    self._signal_counts = {}
+                    self._eligibility_counts = {}
                     self._meta.pop("training_fit_normalized", None)
                     self._last_raw_point = self._filter_history_ms = None
                     self._reset_filter = True
                     self._begin_record()
+                elif action == "retry_calibration":
+                    if self._camera != "ready" or not self._focused:
+                        raise ValueError("Önce uygulama penceresine dön.")
+                    s.retry_calibration()
+                    self._reset_filter = True
                 elif action == "ack":
                     s.ack(payload["token"], now)
                 elif action == "regions":
@@ -210,6 +221,13 @@ class DesktopAPI:
         s = self._session
         record = dict(
             status="completed" if len(s.trials) == 12 else status,
+            phase=s.phase,
+            message=s.message,
+            calibration_index=s.index,
+            completed_calibration_points=len(s.training),
+            current_samples=len(s.samples),
+            signal_counts=dict(self._signal_counts),
+            eligibility_counts=dict(self._eligibility_counts),
             modality="gaze",
             camera_images_saved=False,
             os_control=True,
@@ -276,7 +294,19 @@ class DesktopAPI:
                     if self._stop.is_set():
                         break
                     s = self._session
-                    self._tracking = features is not None and now - captured <= 0.3
+                    self._tracking = features is not None and 0 <= now - captured <= 0.3
+                    self._signal_status = (
+                        "tracking"
+                        if self._tracking
+                        else "processing_delayed"
+                        if features is not None
+                        else "no_gaze"
+                    )
+                    self._signal_counts[self._signal_status] = (
+                        self._signal_counts.get(self._signal_status, 0) + 1
+                    )
+                    reason = getattr(model, "eligibility_reason", "unknown")
+                    self._eligibility_counts[reason] = self._eligibility_counts.get(reason, 0) + 1
                     if jpeg is not None:
                         self._preview = jpeg
                     if now - self._last_ui > 0.8 or not self._focused:
@@ -285,8 +315,14 @@ class DesktopAPI:
                     if token != s.token or self._reset_filter:
                         continue
                     if not self._tracking:
-                        features = point = raw_point = None
-                        self._reset_filter = True
+                        # Calibration is indexed by capture time, as in the research runner.
+                        # Late features must never move the live pointer or accrue dwell.
+                        if s.phase not in ("calibration", "check"):
+                            features = None
+                        if s.phase != "check":
+                            point = raw_point = None
+                        if features is None or s.phase != "check":
+                            self._reset_filter = True
                     self._last_raw_point = raw_point
                     self._filter_history_ms = getattr(model, "filter_history_ms", None)
                     s.sample(captured, features, point, raw_point=raw_point)
@@ -297,7 +333,8 @@ class DesktopAPI:
                         s.fitted()
                         self._save("in_progress")
                     if len(s.trials) != self._last_saved_trials or (
-                        s.phase == "error" and s.token != self._last_saved_token
+                        s.phase in ("error", "calibration_retry")
+                        and s.token != self._last_saved_token
                     ):
                         self._save(
                             "completed"

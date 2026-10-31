@@ -37,7 +37,7 @@ def main():
         width=1280,
         height=800,
         min_size=(960, 640),
-        resizable=False,
+        resizable=True,
         background_color="#100e17",
         zoomable=False,
         text_select=False,
@@ -50,6 +50,7 @@ def main():
         window.events.closed += pointer.close
     window.events.closing += api.close
     window.events.moved += lambda *args: pause_for_window_move(api, *args)
+    window.events.resized += lambda *args: pause_for_window_move(api, *args)
     try:
         webview.start(
             pointer.start if pointer else None,

@@ -1125,3 +1125,12 @@ performed**; cursor feel and selection accuracy remain unmeasured.
 on `app.js` OK. One existing test expectation changed by design (a 0.1 s gaze
 loss no longer zeroes dwell progress). Full suite not run (user asked for
 relevant checks only).
+
+## 2026-10-31 13:58 +03:00 — Issue #143 published; review pending
+
+Commit **`9a78b7076d7fc2b029c24e7d5e233db6f36467a7`** on
+`feature/desktop-cursor-dwell-instructions`. Opened
+[PR #144](https://github.com/cagriinan46/eye-tracker/pull/144) (Closes #143), verified
+OPEN, non-draft, UNMERGED; [CI run 41194636172](https://github.com/cagriinan46/eye-tracker/actions/runs/41194636172)
+on 9a78b70 completed **SUCCESS**. This entry is a later commit with its own CI
+run. No merge by the agent; Fatih decides.

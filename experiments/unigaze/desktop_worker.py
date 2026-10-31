@@ -1,6 +1,8 @@
 """Isolated real inference/camera worker. Preview bytes remain only in local IPC."""
 
 import base64
+import os
+import resource
 import socket
 import sys
 import threading
@@ -36,6 +38,7 @@ class Engine:
         self.eye_captured = 0
         self.eye_updated = 0
         self.eye_detected = False
+        self.cpu_seconds = None
         try:
             import cv2
 
@@ -119,12 +122,43 @@ class Engine:
             preview=jpeg,
         )
 
-    def read(self, preview=False):
+    def read(self, preview=False, timing=False):
         self.stream.enabled = bool(preview)
+        requested = time.perf_counter()
         sequence, captured, frame = self.stream.read_after(self.last_capture)
+        received, received_ns = time.perf_counter(), time.monotonic_ns()
+        skipped = sequence - self.last_capture - 1 if self.last_capture >= 0 else None
         self.last_capture = sequence
         # Both estimators still see exactly this capture; old captures never queue.
-        return self.process_frame(frame, captured, preview)
+        response = self.process_frame(frame, captured, preview)
+        if timing:
+            response["timing"] = self.timing(
+                requested, received, received_ns, captured, sequence, skipped
+            )
+        return response
+
+    def timing(self, requested, received, received_ns, captured_ns, sequence, skipped):
+        """Opt-in aggregate timings (issue #145); no image or gaze content."""
+        worker_ms = (time.perf_counter() - received) * 1000
+        cpu = os.times()
+        cpu_seconds = cpu.user + cpu.system
+        cpu_ms = None if self.cpu_seconds is None else (cpu_seconds - self.cpu_seconds) * 1000
+        self.cpu_seconds = cpu_seconds
+        rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        pair = dict(getattr(self.pair, "last_timing", None) or {})
+        paired_ms = pair.get("paired_ms")
+        return dict(
+            pair,
+            camera_sequence=sequence,
+            skipped_frames=skipped,
+            wait_ms=(received - requested) * 1000,
+            start_age_ms=(received_ns - captured_ns) / 1e6,
+            worker_ms=worker_ms,
+            post_ms=None if paired_ms is None else worker_ms - paired_ms,
+            worker_cpu_ms=cpu_ms,
+            # macOS reports bytes, Linux kibibytes.
+            worker_rss_mb=rss / 2**20 if sys.platform == "darwin" else rss / 2**10,
+        )
 
     def preview_snapshot(self):
         result = self.stream.preview()
@@ -188,7 +222,7 @@ def main(fd, camera_index, preview_fd=None):
             if command == "close":
                 break
             if command == "read":
-                response = engine.read(request.get("preview", False))
+                response = engine.read(request.get("preview", False), request.get("timing", False))
             elif command == "fit":
                 response = dict(
                     status="ok", error=engine.fit(request["features"], request["labels"])

@@ -26,10 +26,21 @@ def main():
     parser.add_argument("--camera-index", type=int, default=None)
     parser.add_argument("--output", type=Path, default=None)
     parser.add_argument("--model", choices=("unigaze", "mgaze"), default="unigaze")
+    parser.add_argument(
+        "--perf-diagnostics",
+        action="store_true",
+        help="print and save timing aggregates (first 3 s / next 15 s of each phase); "
+        "no images or gaze points are saved",
+    )
     args = parser.parse_args()
     import webview
 
-    api = DesktopAPI(output=args.output, camera_index=args.camera_index, model_name=args.model)
+    api = DesktopAPI(
+        output=args.output,
+        camera_index=args.camera_index,
+        model_name=args.model,
+        perf_diagnostics=args.perf_diagnostics,
+    )
     window = webview.create_window(
         "Eye Tracker",
         html=html(),

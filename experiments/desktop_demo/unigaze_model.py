@@ -23,6 +23,8 @@ class CameraModel:
         self.latest_preview = {}
         self.raw_point = None
         self.filter_history_ms = None
+        self.collect_timing = False  # Set by --perf-diagnostics (issue #145).
+        self.last_timing = None
         if sys.platform != "darwin":
             raise RuntimeError(
                 "UniGaze masaüstü bağlantısı şu an macOS için hazır. MGaze için --model mgaze kullan."
@@ -104,7 +106,10 @@ class CameraModel:
         return result
 
     def read(self, preview=False):
-        r = self._request("read", preview=bool(preview))
+        r = self._request(
+            "read", preview=bool(preview), timing=bool(getattr(self, "collect_timing", False))
+        )
+        self.last_timing = r.get("timing")
         self.eligibility_reason = r.get("eligibility_reason", "unknown")
         self.raw_point = r["raw_point"]
         self.filter_history_ms = r["filter_history_ms"]

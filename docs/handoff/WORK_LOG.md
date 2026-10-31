@@ -1134,3 +1134,14 @@ Commit **`9a78b7076d7fc2b029c24e7d5e233db6f36467a7`** on
 OPEN, non-draft, UNMERGED; [CI run 41194636172](https://github.com/cagriinan46/eye-tracker/actions/runs/41194636172)
 on 9a78b70 completed **SUCCESS**. This entry is a later commit with its own CI
 run. No merge by the agent; Fatih decides.
+
+## 2026-10-31 14:10 +03:00 — correction: PR #144 branch commits reworded at Fatih's request
+
+Fatih asked that commits and the PR description must not show Claude as co-author
+or contributor. The "Generated with Claude Code" line was removed from the PR #144
+description. With Fatih's explicit approval ("full silip"), the two unmerged task-branch
+commits were reworded to drop their `Co-Authored-By: Claude` trailer and pushed with
+`--force-with-lease` to `feature/desktop-cursor-dwell-instructions` only: `9a78b70`
+→ `674667e`, `8b1a352` → `9b8f76f`. Trees are identical (code unchanged); the
+SHAs cited in the two entries above refer to the pre-reword commits. `main`
+untouched; PR still OPEN and UNMERGED; Fatih merges.

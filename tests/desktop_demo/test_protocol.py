@@ -109,8 +109,14 @@ def test_gaze_loss_and_pause_cannot_complete_old_dwell():
         s.sample(1 + i * 0.1, None, [0.1, 0.5])
     s.sample(2, None, None)
     s.sample(2.1, None, [0.1, 0.5])
+    # A short measurement gap holds 0.9 s of progress; its 0.2 s is not credited.
+    assert not s.trials and abs(s.dwell.progress - 0.9 / 1.2) < 1e-9
+    s.sample(2.2, None, None)
+    s.sample(2.7, None, None)
+    s.sample(2.75, None, [0.1, 0.5])
     assert not s.trials and s.dwell.progress == 0
-    s.pause(2.2)
+    s.sample(2.85, None, [0.1, 0.5])
+    s.pause(2.9)
     s.resume(10)
     s.sample(10.1, None, [0.1, 0.5])
     assert not s.trials and s.dwell.progress == 0
@@ -168,3 +174,60 @@ def test_web_scenario_rejects_unregistered_control_regions():
     s = Session(scenario="web")
     with pytest.raises(ValueError):
         s.set_regions({"pretend": [0, 0, 0.1, 0.1]})
+
+
+def test_short_gaze_gaps_delay_but_do_not_change_selection():
+    s = ready_session()
+    s.start_demo()
+    s.ack(s.token, 0)
+    s.set_regions({key: [i * 0.25, 0, 0.24, 1] for i, key in enumerate(SHAPES)})
+    t = 1.0
+    for _ in range(3):
+        for _ in range(4):
+            s.sample(t, None, [0.1, 0.5])
+            t += 0.125
+        for _ in range(2):
+            s.sample(t, None, None)
+            t += 0.125
+    assert not s.trials
+    while not s.trials:
+        s.sample(t, None, [0.1, 0.5])
+        t += 0.125
+    assert s.trials[0]["selected"] == SHAPES[0]
+    # 1.2 s observed in-region time plus the uncredited gaps.
+    assert s.trials[0]["elapsed_s"] > 2.2 + 0.7
+
+
+def test_web_instructions_name_each_task_control_with_location():
+    from experiments.desktop_demo.protocol import WEB_INSTRUCTIONS, WEB_ORDER
+
+    labels = {
+        "overview": "Genel bakış",
+        "notes": "Notlar",
+        "search": "Notlarda ara",
+        "title": "Başlık",
+        "reminder": "Hatırlatıcı ekle",
+        "save": "Notu kaydet",
+        "details": "Ayrıntı",
+        "clear": "Temizle",
+    }
+    places = ("üst", "sol", "sağ", "alt")
+    assert len(WEB_INSTRUCTIONS) == len(WEB_ORDER) == 12
+    for target, text in zip(WEB_ORDER, WEB_INSTRUCTIONS, strict=True):
+        assert "“" + labels[target] + "”" in text
+        assert any(word in text.lower() for word in places)
+        assert text.endswith("seç.")
+        # Stays on one heading line at the 960 px minimum window width.
+        assert len(text) <= 70
+
+
+def test_snapshot_shows_instruction_only_for_active_web_task():
+    s = Session(scenario="web")
+    assert s.snapshot()["instruction"] is None
+    s.phase = "ready"
+    s.geometry = [1000, 800, 0, 0, 1]
+    s.start_demo()
+    assert "“Genel bakış”" in s.snapshot()["instruction"]
+    shapes = ready_session()
+    shapes.start_demo()
+    assert shapes.snapshot()["instruction"] is None

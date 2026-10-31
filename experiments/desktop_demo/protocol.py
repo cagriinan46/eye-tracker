@@ -22,6 +22,21 @@ WEB_ORDER = [
     "title",
     "save",
 ]
+# One instruction per WEB_ORDER task; each names the control and where it sits.
+WEB_INSTRUCTIONS = [
+    "Üstteki sekmelerden en soldaki “Genel bakış” sekmesini seç.",
+    "Sol sütunda, en üstteki “Başlık” metin alanını seç.",
+    "Sol sütunda, “Başlık”ın altındaki “Hatırlatıcı ekle” kutusunu seç.",
+    "Sol sütunun altındaki büyük “Notu kaydet” düğmesini seç.",
+    "Sağdaki not kartının sağ üst köşesindeki “Ayrıntı” düğmesini seç.",
+    "Sağ üst köşedeki “Notlarda ara” arama alanını seç.",
+    "Üstteki sekmelerden “Genel bakış”ın sağındaki “Notlar” sekmesini seç.",
+    "Sol altta, “Notu kaydet”in sağındaki küçük “Temizle” bağlantısını seç.",
+    "Sol sütundaki “Hatırlatıcı ekle” kutusunu yeniden seç.",
+    "Sağdaki not kartında yer alan küçük “Ayrıntı” düğmesini yeniden seç.",
+    "Sol sütunun üst kısmındaki “Başlık” metin alanını yeniden seç.",
+    "Sol sütunun altındaki büyük “Notu kaydet” düğmesini yeniden seç.",
+]
 # Same normalized13-point layout as upstream CalibrationController.
 _X = [50 / 1920, (50 / 1920 + 0.5) / 2, 0.5, (0.5 + 1870 / 1920) / 2, 1870 / 1920]
 _Y = [50 / 1080, (50 / 1080 + 0.5) / 2, 0.5, (0.5 + 1030 / 1080) / 2, 1030 / 1080]
@@ -128,6 +143,12 @@ class Session:
     @property
     def expected(self):
         return self.trial_order[self.index] if self.phase == "demo" else None
+
+    @property
+    def instruction(self):
+        if self.phase != "demo" or self.scenario != "web":
+            return None
+        return WEB_INSTRUCTIONS[self.index]
 
     def start_calibration(self, geometry):
         if (
@@ -312,8 +333,12 @@ class Session:
             if elapsed >= 15:
                 self.finish_trial(None, 15.0)
                 return
+            if elapsed >= 1 and not finite_pair(point):
+                # A brief measurement gap holds, but never advances, the dwell.
+                self.dwell.missing(now)
+                return
             target = None
-            if elapsed >= 1 and finite_pair(point):
+            if elapsed >= 1:
                 for name, (x, y, w, h) in self.regions.items():
                     if x <= point[0] < x + w and y <= point[1] < y + h:
                         target = name
@@ -352,6 +377,7 @@ class Session:
             index=self.index,
             point=self.point,
             expected=self.expected,
+            instruction=self.instruction,
             paused=self.paused_at is not None,
             dwell_target=self.dwell.target,
             dwell_progress=self.dwell.progress,

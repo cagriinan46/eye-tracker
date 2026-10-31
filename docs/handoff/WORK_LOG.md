@@ -1082,3 +1082,46 @@ Docs commit **`c61e1924302d0d08ffc48788c1118d7147272776`** on
 OPEN, non-draft, UNMERGED; [CI run 38392227636](https://github.com/cagriinan46/eye-tracker/actions/runs/38392227636)
 on c61e192 completed **SUCCESS**. This entry is a later commit with its own CI
 run. No merge by the agent; Fatih decides.
+
+## 2026-10-31 13:53 +03:00 — Issue #143: desktop cursor glide, dwell gap hold, planner task wording
+
+Approved by Fatih in chat ("bugün yalnızca şu üç değişikliği yap"); scope limited
+to the desktop demo. Branch `feature/desktop-cursor-dwell-instructions` from
+synchronized main `db3fe9a`. Calibration, UniGaze/MGaze, HeuristicFilter,
+experiment data, other UI features, architecture and dependencies unchanged.
+
+**Observations before changes:** the macOS cursor timer runs at 60 Hz but warped
+straight to each new estimate (about 8 FPS for UniGaze), so it moved in jumps.
+Any missing measurement (blink/eye-gap gate, lost face, late frame) reset the
+whole 1.2 s dwell. All 12 tasks used the generic “X” öğesini seç wording.
+
+1. **Cursor:** new display-only `PointerSmoother` (`src/eye_tracker/actions/window_pointer.py`)
+   used by `MacOSWindowPointer`. Exponential glide toward the latest estimate,
+   time constant ≈30 ms for moves ≥80 logical px up to 100 ms for small jitter;
+   no overshoot/extrapolation, no movement without a valid gated sample, snap
+   after a 150 ms gap, reset on viewport change. Dwell still uses the raw point.
+2. **Dwell:** `RegionDwell.missing()` holds progress for at most 0.5 s after the
+   last in-region observation; the gap is subtracted from observed time, so it
+   can only delay a selection. Outside/other-region points, longer gaps, pause
+   and layout changes still reset. Records add `dwell_max_interruption_seconds`
+   and protocol suffix `12-web-control-trials-v2`. The 0.5 s value is a design
+   choice (typical blink plus one ≈8 FPS frame), not a measured optimum.
+3. **Wording:** `WEB_INSTRUCTIONS` (12 location-specific Turkish sentences, ≤70
+   characters) in `protocol.py`, sent in the snapshot and shown by `app.js`.
+   Headless Chrome render at 960×640 and 1280×800: every instruction stays on one
+   line and target layout is identical to the old wording (an earlier, longer
+   draft wrapped to two lines at 960 px and pushed targets to 0.995 of viewport
+   height, so it was shortened).
+
+**Local assets:** none of the UniGaze kit, GazeFollower Python/support
+directory, or camera intrinsics JSON exist on Fatih's Mac (`validation/results/unigaze-preflight-kit-20261029/…`,
+`~/.virtualenvs/eye-tracker-gazefollower-20261019*`, `validation/results/phone-intrinsics-cdaef08c1c6a/completion.json`);
+`.venv-fatih` has no pywebview. **No camera, model or native-window run was
+performed**; cursor feel and selection accuracy remain unmeasured.
+
+**Checks (`.venv-fatih`):** `pytest tests/desktop_demo tests/test_pointer_control.py tests/test_package_imports.py`
+**76 passed** (60 desktop-demo tests before the change); `ruff check .` PASS;
+`ruff format --check .` PASS (354 files); `git diff --check` clean; `node --check`
+on `app.js` OK. One existing test expectation changed by design (a 0.1 s gaze
+loss no longer zeroes dwell progress). Full suite not run (user asked for
+relevant checks only).

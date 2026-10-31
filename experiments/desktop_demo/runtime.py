@@ -239,10 +239,11 @@ class DesktopAPI:
             completed_trials=len(s.trials),
             planned_trials=12,
             dwell_seconds=1.2,
+            dwell_max_interruption_seconds=s.dwell.max_interruption,
             trial_timeout_seconds=15,
             model=self._meta,
             protocol=("fresh13x20-window6s" if self._model_name == "unigaze" else "fresh13x45")
-            + ";5point-independent-check;12-web-control-trials-v1",
+            + ";5point-independent-check;12-web-control-trials-v2",
             selected_model=self._model_name,
             scenario=self._session.scenario,
             appearance=dict(self._preferences),

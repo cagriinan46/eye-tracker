@@ -118,7 +118,7 @@ function render(s){
   while(appliedTrial<s.trials.length){const trial=s.trials[appliedTrial++];if(trial.selected)activateControl(trial.selected);}
   if(phase==='ready')$('checkError').textContent=Math.round(s.checks.reduce((v,r)=>v+r.mean_px,0)/s.checks.length)+' px';
   if(phase==='demo'){
-    $('instruction').textContent=s.paused?'Mola veriyoruz.':'“'+names[s.expected]+'” öğesini seç.';
+    $('instruction').textContent=s.paused?'Mola veriyoruz.':s.instruction||'“'+names[s.expected]+'” öğesini seç.';
     $('trialInfo').textContent=s.paused?'Hazır olduğunda Devam et düğmesine bas.':`Adım ${s.index+1} / ${s.total_trials} · İstenen öğeye bakışını sabitle.`;
     $('pause').textContent=s.paused?'Devam et':'Duraklat';$('targets').classList.toggle('paused',s.paused);
     $('trackingLabel').textContent=s.paused?'Duraklatıldı':s.tracking?'Bakışın izleniyor':s.signal_status==='processing_delayed'?'İşlem gecikiyor. Bakışla seçim bekletiliyor.':'Geçerli bakış verisi bekleniyor.';

@@ -5,7 +5,9 @@ import math
 import numpy as np
 
 from eye_tracker.intent.region_dwell import RegionDwell
+from eye_tracker.intent.region_magnet import RegionMagnet
 
+DWELL_SECONDS = 1.2
 SHAPES = ["circle", "square", "triangle", "diamond"]
 WEB_TARGETS = ["overview", "notes", "search", "title", "reminder", "save", "details", "clear"]
 WEB_ORDER = [
@@ -119,18 +121,22 @@ class Session:
         self.geometry = None
         self.samples, self.training, self.check_results, self.trials = [], [], [], []
         self.regions = {}
-        self.dwell = RegionDwell()
+        self.dwell = RegionDwell(seconds=DWELL_SECONDS)
+        self.magnet = RegionMagnet()
         self.paused_at = None
         self.last_point = None
         self.last_sample = None
+        self.trial_errors = []
 
     def transition(self, phase):
         self.phase = phase
         self.raw_check_samples = []
+        self.trial_errors = []
         self.token += 1
         self.onset = None
         self.last_sample = None
         self.dwell.reset()
+        self.magnet.reset()
 
     @property
     def point(self):
@@ -219,6 +225,7 @@ class Session:
             clean[name] = list(rect)
         if clean != self.regions:
             self.dwell.reset()
+            self.magnet.reset()
         self.regions = clean
 
     def start_demo(self):
@@ -231,6 +238,7 @@ class Session:
 
     def pause(self, now):
         self.dwell.reset()
+        self.magnet.reset()
         if self.phase == "demo" and self.paused_at is None:
             self.paused_at = now
         elif self.phase in ("calibration", "calibration_retry", "check", "fitting"):
@@ -245,6 +253,17 @@ class Session:
                 self.token += 1
             self.paused_at = None
             self.dwell.reset()
+            self.magnet.reset()
+
+    def record_trial_error(self, point):
+        """Display/record-only distance to the requested control; never affects dwell."""
+        rect = self.regions.get(self.expected)
+        if rect is None or not self.geometry:
+            return
+        center = np.array([rect[0] + rect[2] / 2, rect[1] + rect[3] / 2])
+        self.trial_errors.append(
+            float(np.linalg.norm((np.array(point) - center) * self.geometry[:2]))
+        )
 
     def finish_trial(self, selected, elapsed):
         self.trials.append(
@@ -257,6 +276,8 @@ class Session:
                 if selected == self.expected
                 else "incorrect",
                 elapsed_s=elapsed,
+                mean_error_px=float(np.mean(self.trial_errors)) if self.trial_errors else None,
+                error_samples=len(self.trial_errors),
                 modality="gaze",
                 scenario=self.scenario,
                 target_size_px=[
@@ -339,10 +360,14 @@ class Session:
                 return
             target = None
             if elapsed >= 1:
-                for name, (x, y, w, h) in self.regions.items():
-                    if x <= point[0] < x + w and y <= point[1] < y + h:
-                        target = name
-                        break
+                # Error stays on the unassisted gaze; selection uses the assisted point.
+                self.record_trial_error(point)
+                point = self.magnet.update(now, point, self.regions, self.geometry[:2])
+                self.last_point = point
+                # Dwell starts only once the pull has settled, so a passing glance
+                # that merely attracts the cursor can never select a control.
+                if self.magnet.settled:
+                    target = self.magnet.target
             if self.dwell.update(now, target):
                 self.finish_trial(target, elapsed)
 
@@ -385,4 +410,12 @@ class Session:
             checks=list(self.check_results),
             trials=list(self.trials),
             total_trials=len(self.trial_order),
+            gaze_ring=dict(
+                point=self.last_point,
+                radius_px=self.magnet.radius,
+                target=self.magnet.target,
+                strength=self.magnet.strength,
+            )
+            if self.phase == "demo" and self.paused_at is None and self.last_point is not None
+            else None,
         )

@@ -234,5 +234,5 @@ def test_record_identifies_dwell_gap_rule_and_instruction_version(tmp_path):
     report = json.loads((api._folder / "session.json").read_text())
     assert report["dwell_seconds"] == 1.2
     assert report["dwell_max_interruption_seconds"] == 0.5
-    assert report["protocol"].endswith(";12-web-control-trials-v2")
+    assert report["protocol"].endswith(";12-web-control-trials-v3-magnet")
     api.close()

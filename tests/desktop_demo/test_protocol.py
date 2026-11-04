@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 
 from experiments.desktop_demo.protocol import CALIBRATION_POINTS, SHAPES, Session
+from eye_tracker.intent.region_magnet import RegionMagnet
 
 
 def ready_session():
@@ -57,7 +58,7 @@ def test_demo_counts_wrong_selection_not_just_success():
     wrong = next(x for x in SHAPES if x != s.expected)
     s.set_regions({key: [i * 0.25, 0, 0.24, 1] for i, key in enumerate(SHAPES)})
     x = SHAPES.index(wrong) * 0.25 + 0.1
-    for i in range(16):
+    for i in range(25):
         s.sample(1 + i * 0.1, None, [x, 0.5])
     assert len(s.trials) == 1
     assert s.trials[0]["outcome"] == "incorrect"
@@ -102,6 +103,7 @@ def test_stale_ack_does_not_start_new_target():
 
 def test_gaze_loss_and_pause_cannot_complete_old_dwell():
     s = ready_session()
+    s.magnet = RegionMagnet(pull_seconds=1e-6)  # These gap rules concern the dwell alone.
     s.start_demo()
     s.ack(s.token, 0)
     s.set_regions({key: [i * 0.25, 0, 0.24, 1] for i, key in enumerate(SHAPES)})
@@ -109,8 +111,8 @@ def test_gaze_loss_and_pause_cannot_complete_old_dwell():
         s.sample(1 + i * 0.1, None, [0.1, 0.5])
     s.sample(2, None, None)
     s.sample(2.1, None, [0.1, 0.5])
-    # A short measurement gap holds 0.9 s of progress; its 0.2 s is not credited.
-    assert not s.trials and abs(s.dwell.progress - 0.9 / 1.2) < 1e-9
+    # A short measurement gap holds 0.8 s of progress; its 0.2 s is not credited.
+    assert not s.trials and abs(s.dwell.progress - 0.8 / 1.2) < 1e-9
     s.sample(2.2, None, None)
     s.sample(2.7, None, None)
     s.sample(2.75, None, [0.1, 0.5])
@@ -162,7 +164,7 @@ def test_web_scenario_records_real_control_and_target_size():
     regions = {name: [i * 0.11, 0.1, 0.09, 0.05] for i, name in enumerate(s.targets)}
     s.set_regions(regions)
     s.ack(s.token, 0)
-    for i in range(16):
+    for i in range(25):
         s.sample(1 + i * 0.1, None, [0.03, 0.12])
     assert s.trials[0]["selected"] == "overview"
     assert s.trials[0]["target_size_px"] == [90, 40]
@@ -178,6 +180,7 @@ def test_web_scenario_rejects_unregistered_control_regions():
 
 def test_short_gaze_gaps_delay_but_do_not_change_selection():
     s = ready_session()
+    s.magnet = RegionMagnet(pull_seconds=1e-6)  # These gap rules concern the dwell alone.
     s.start_demo()
     s.ack(s.token, 0)
     s.set_regions({key: [i * 0.25, 0, 0.24, 1] for i, key in enumerate(SHAPES)})
@@ -231,3 +234,69 @@ def test_snapshot_shows_instruction_only_for_active_web_task():
     shapes = ready_session()
     shapes.start_demo()
     assert shapes.snapshot()["instruction"] is None
+
+
+def web_demo():
+    s = Session(scenario="web")
+    s.phase = "ready"
+    s.geometry = [1000, 800, 0, 0, 1]
+    s.start_demo()
+    s.set_regions({name: [i * 0.11, 0.1, 0.09, 0.05] for i, name in enumerate(s.targets)})
+    s.ack(s.token, 0)
+    return s
+
+
+def test_trial_error_averages_distance_to_requested_control_center():
+    s = web_demo()
+    s.sample(0.5, None, [0.9, 0.9])  # Cue time is not measured.
+    s.sample(1.0, None, None)  # Missing measurement has no distance.
+    for i in range(25):
+        s.sample(1.05 + i * 0.1, None, [0.03, 0.12])
+    trial = s.trials[0]
+    assert trial["selected"] == "overview"
+    assert trial["error_samples"] >= 20  # 0.8 s pull + 1.2 s dwell at 0.1 s spacing.
+    # Center (0.045, 0.125) of a 1000x800 viewport: offsets 15 px and 4 px.
+    assert trial["mean_error_px"] == pytest.approx((15**2 + 4**2) ** 0.5)
+
+
+def test_trial_error_uses_requested_control_when_another_is_selected():
+    s = web_demo()
+    for i in range(25):
+        s.sample(1 + i * 0.1, None, [0.155, 0.125])
+    assert s.trials[0]["outcome"] == "incorrect"
+    # Center of "notes" is 110 px right of the requested "overview" center.
+    assert s.trials[0]["mean_error_px"] == pytest.approx(110)
+
+
+def test_trial_error_starts_fresh_each_trial_and_is_empty_without_gaze():
+    s = web_demo()
+    for i in range(25):
+        s.sample(1 + i * 0.1, None, [0.03, 0.12])
+    s.ack(s.token, 10)
+    s.sample(25.1, None, None)
+    assert s.trials[1]["outcome"] == "timeout"
+    assert s.trials[1]["mean_error_px"] is None
+    assert s.trials[1]["error_samples"] == 0
+
+
+def test_selection_needs_settled_pull_and_then_the_full_dwell():
+    s = web_demo()
+    for i in range(19):
+        s.sample(1 + i * 0.1, None, [0.03, 0.12])
+    assert not s.trials
+    for i in range(19, 25):
+        s.sample(1 + i * 0.1, None, [0.03, 0.12])
+    assert s.trials[0]["selected"] == "overview"
+
+
+def test_passing_glance_attracts_the_cursor_but_cannot_select():
+    s = web_demo()
+    for i in range(7):
+        s.sample(1 + i * 0.1, None, [0.03, 0.12])
+    assert s.magnet.target == "overview"
+    assert s.dwell.target is None and s.dwell.progress == 0
+    s.sample(1.7, None, [0.5, 0.9])
+    assert s.magnet.target is None
+    for i in range(20):
+        s.sample(1.8 + i * 0.1, None, [0.5, 0.9])
+    assert not s.trials

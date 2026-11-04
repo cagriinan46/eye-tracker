@@ -232,6 +232,44 @@ the960px minimum width; a headless Chrome render at960×640 and1280×800 kept ta
 positions identical to the old wording. Automated tests only; no camera or model
 run was performed, and selection accuracy of these changes remains unmeasured.
 
+## Gaze magnet (November 4 follow-up)
+
+The 12 selection tasks now use a gradual pull toward a nearby control, implemented
+in `src/eye_tracker/intent/region_magnet.py`. It is always on in this demo; there
+is no switch. This changes the selection timing described above:
+
+- A 35 logical-pixel ring is drawn around the cursor after the 1 second cue time.
+- When a control lies within that distance of the **unassisted** gaze point, the
+  point moves to the control's center over 0.8 s. The nearest control wins, with a
+  20 px margin against switching between adjacent controls on small jitter.
+- The 1.2 s dwell starts only after the pull has settled, so a selection takes at
+  least about 2 s. A passing glance can attract the cursor but cannot select.
+- Looking away releases at once because the decision always uses unassisted gaze.
+  A gap over 0.5 s restarts the pull.
+
+Records use the protocol suffix `12-web-control-trials-v3-magnet` and add
+`magnet_radius_px` and `magnet_pull_seconds`; compare them with v2 records only as
+a different protocol. Each trial also records `mean_error_px` and `error_samples`:
+the mean distance from unassisted gaze to the requested control's center in logical
+window pixels, excluding cue time, pauses and missing measurements. This is not
+shown in the UI, and a correct selection on a large control can still score high.
+
+The magnet needs application-owned control rectangles, so it only works inside this
+window. Radius and pull time are development values set by trial on one user, not
+validated thresholds. No selection-accuracy improvement has been measured, and the
+trial runs used another camera's intrinsics, so they do not establish accuracy.
+
+### Blink stabilization
+
+Gaze goes missing during a blink, and frames while the eyes close or reopen can pass
+validity checks yet point far away. `src/eye_tracker/intent/gaze_stabilizer.py` holds
+a jump over 120 px until the next sample lands within 80 px of it, in every demo task
+before the magnet and dwell. Real saccades therefore start about one inference frame
+later. `PointerSmoother` now glides after gaps of up to 0.6 s (it used to snap after
+150 ms) with its fast time constant raised from 30 ms to 60 ms. The ring stays visible
+through gaps of up to 0.5 s. Model, HeuristicFilter and calibration are unchanged.
+The thresholds are development values; blink behavior has only synthetic tests.
+
 ## Performance diagnostics (issue #145)
 
 Measurement only, for the reported lag (smooth for 2–3 s after calibration, then

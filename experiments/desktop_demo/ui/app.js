@@ -123,6 +123,8 @@ function render(s){
     $('pause').textContent=s.paused?'Devam et':'Duraklat';$('targets').classList.toggle('paused',s.paused);
     $('trackingLabel').textContent=s.paused?'Duraklatıldı':s.tracking?'Bakışın izleniyor':s.signal_status==='processing_delayed'?'İşlem gecikiyor. Bakışla seçim bekletiliyor.':'Geçerli bakış verisi bekleniyor.';
     for(const el of targetEls){const on=el.dataset.control===s.dwell_target&&!s.paused;el.classList.toggle('focused',on);fillFor(el).style.width=(on?s.dwell_progress*100:0)+'%';}
+    const ring=s.gaze_ring;$('gazeRing').classList.toggle('hidden',!ring);
+    if(ring){const el=$('gazeRing');el.style.width=el.style.height=ring.radius_px*2+'px';el.style.transform=`translate(${ring.point[0]*innerWidth-ring.radius_px}px,${ring.point[1]*innerHeight-ring.radius_px}px)`;el.classList.toggle('pulling',!!ring.target);}
     const t=s.trials.at(-1);$('lastTrial').textContent=t?`Önceki: ${t.outcome==='correct'?'doğru':t.outcome==='incorrect'?'yanlış':'süre doldu'}`:'';
   }
   if(acknowledged!==s.token&&['calibration','check','demo'].includes(phase)&&!s.paused){

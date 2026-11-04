@@ -1212,3 +1212,47 @@ Commit **`bb8a16fc9efacdb9f5ec16d39627b1c0e00af071`** on
 OPEN, non-draft, UNMERGED; [CI run 41227731035](https://github.com/cagriinan46/eye-tracker/actions/runs/41227731035)
 on bb8a16f completed **SUCCESS**. This entry is a later commit with its own CI
 run. No merge by the agent; Fatih decides. No real-model measurement yet.
+
+## 2026-11-04 18:50 +03:00 — Desktop gaze magnet; environments restored on Fatih's Mac
+
+**Request:** Fatih asked for a ring around the cursor that gradually pulls toward
+nearby buttons, tuned by trying it. No GitHub issue; explicit human request.
+
+**Change:** new `src/eye_tracker/intent/region_magnet.py` (`RegionMagnet`), used by
+`experiments/desktop_demo/protocol.py`. Pull decisions use unassisted gaze; the 1.2 s
+dwell starts after the 0.8 s pull settles; ring radius 35 px (tried 70, then 45, which
+Fatih found too large and too quick to select). A 0.6 s dwell was also tried and
+reverted. Protocol suffix is now `12-web-control-trials-v3-magnet`; records add
+magnet settings and per-trial `mean_error_px`/`error_samples`, not shown in the UI.
+Model, weights, calibration, freshness gates and the `RegionDwell` default are unchanged.
+
+**Local setup:** the transferred virtual environments point at `/Users/cagri` and do
+not run here. Clean environments with the transferred versions were created outside the
+repository; repository assets were reused. The built-in camera's name
+("MacBook Pro Kamerası") is not matched by `select_macbook_camera`, so runs passed
+`--camera-index 0`. **Fatih's camera intrinsics were not measured**; trial runs used
+`phone-intrinsics-cdaef08c1c6a` by Fatih's explicit choice to try the UI, so those
+results do not establish accuracy on this camera.
+
+**Observed before the magnet (four completed 12-task runs, other camera's intrinsics):**
+3-4/12 correct, 7-8 timeouts, about 11 processed FPS, five-point check mean 36 px and
+93 px depending on calibration. Magnet sessions were tried and judged by feel only;
+their records were not analyzed. MediaPipe's native code logged failed Clearcut upload
+attempts (42 in one run, `FAILED_PRECONDITION`); payload unknown, not investigated.
+
+**Checks:** see the pull request. Human selection accuracy with the magnet is unmeasured.
+
+## 2026-11-04 — Blink stabilization for the desktop demo cursor
+
+**Request:** Fatih reported the cursor teleporting when blinking and asked for smoother
+motion. **Cause, from reading the code (not measured during a real blink):** missing
+gaze made `PointerSmoother` snap after 150 ms, and frames around a blink can pass validity
+checks yet point far away; `StreamFilter` also resets on missing input.
+
+**Change:** new `src/eye_tracker/intent/gaze_stabilizer.py` holds a jump over 120 px until
+the next sample lands within 80 px, before the magnet and dwell. `PointerSmoother` glides
+after gaps up to 0.6 s, with its fast time constant raised from 30 ms to 60 ms. The ring
+stays through gaps up to 0.5 s. Model, HeuristicFilter and calibration are unchanged.
+
+**Result:** Fatih tried it and said it was good ("güzel"). That is one subjective report;
+blink behavior has synthetic tests only and its records were not analyzed.

@@ -230,3 +230,5 @@ input.web-target::placeholder { color: var(--muted); }
 #webNoteTitle { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 #calibrationRetry { pointer-events: auto; width: min(85%, 540px); }
+.gaze-ring { position: fixed; left: 0; top: 0; z-index: 50; border: 2px solid var(--muted); border-radius: 50%; pointer-events: none; transition: transform 90ms linear, border-color 120ms linear; }
+.gaze-ring.pulling { border-color: var(--accent); }

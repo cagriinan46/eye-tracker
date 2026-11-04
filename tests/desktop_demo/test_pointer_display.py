@@ -80,9 +80,21 @@ def test_pointer_smoother_is_faster_for_large_moves_than_small_jitter():
         s.update(0, (0, 0))
         return s.update(1 / 60, (distance, 0))[0] / distance
 
-    assert fraction(300) > 0.4
+    assert fraction(300) > 0.2
     assert fraction(10) < 0.2
     assert fraction(300) > fraction(40) > fraction(10)
+
+
+def test_pointer_smoother_glides_after_a_blink_length_gap():
+    from eye_tracker.actions.window_pointer import PointerSmoother
+
+    s = PointerSmoother()
+    s.update(0, (0, 0))
+    assert s.update(0.1, None) is None
+    x = s.update(0.3, (500, 0))[0]
+    assert 0 < x < 300  # The gap is not credited as glide time.
+    xs = [s.update(0.3 + i / 60, (500, 0))[0] for i in range(1, 60)]
+    assert x < xs[0] and xs[-1] == 500
 
 
 def test_pointer_smoother_snaps_after_gap_or_reset():

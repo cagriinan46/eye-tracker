@@ -1241,3 +1241,18 @@ their records were not analyzed. MediaPipe's native code logged failed Clearcut 
 attempts (42 in one run, `FAILED_PRECONDITION`); payload unknown, not investigated.
 
 **Checks:** see the pull request. Human selection accuracy with the magnet is unmeasured.
+
+## 2026-11-04 — Blink stabilization for the desktop demo cursor
+
+**Request:** Fatih reported the cursor teleporting when blinking and asked for smoother
+motion. **Cause, from reading the code (not measured during a real blink):** missing
+gaze made `PointerSmoother` snap after 150 ms, and frames around a blink can pass validity
+checks yet point far away; `StreamFilter` also resets on missing input.
+
+**Change:** new `src/eye_tracker/intent/gaze_stabilizer.py` holds a jump over 120 px until
+the next sample lands within 80 px, before the magnet and dwell. `PointerSmoother` glides
+after gaps up to 0.6 s, with its fast time constant raised from 30 ms to 60 ms. The ring
+stays through gaps up to 0.5 s. Model, HeuristicFilter and calibration are unchanged.
+
+**Result:** Fatih tried it and said it was good ("güzel"). That is one subjective report;
+blink behavior has synthetic tests only and its records were not analyzed.

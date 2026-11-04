@@ -4,6 +4,7 @@ import math
 
 import numpy as np
 
+from eye_tracker.intent.gaze_stabilizer import GazeStabilizer
 from eye_tracker.intent.region_dwell import RegionDwell
 from eye_tracker.intent.region_magnet import RegionMagnet
 
@@ -123,6 +124,8 @@ class Session:
         self.regions = {}
         self.dwell = RegionDwell(seconds=DWELL_SECONDS)
         self.magnet = RegionMagnet()
+        self.stabilizer = GazeStabilizer()
+        self.ring_point = self.ring_seen = None
         self.paused_at = None
         self.last_point = None
         self.last_sample = None
@@ -234,11 +237,14 @@ class Session:
         self.index = 0
         self.trials = []
         self.paused_at = None
+        self.stabilizer.reset()
+        self.ring_point = self.ring_seen = None
         self.transition("demo")
 
     def pause(self, now):
         self.dwell.reset()
         self.magnet.reset()
+        self.stabilizer.reset()
         if self.phase == "demo" and self.paused_at is None:
             self.paused_at = now
         elif self.phase in ("calibration", "calibration_retry", "check", "fitting"):
@@ -264,6 +270,13 @@ class Session:
         self.trial_errors.append(
             float(np.linalg.norm((np.array(point) - center) * self.geometry[:2]))
         )
+
+    def update_ring(self, now, point):
+        """Keep the ring steady through a blink instead of hiding and reshowing it."""
+        if finite_pair(point):
+            self.ring_point, self.ring_seen = list(point), now
+        elif self.ring_seen is not None and now - self.ring_seen > self.magnet.max_gap:
+            self.ring_point = self.ring_seen = None
 
     def finish_trial(self, selected, elapsed):
         self.trials.append(
@@ -354,20 +367,28 @@ class Session:
             if elapsed >= 15:
                 self.finish_trial(None, 15.0)
                 return
+            gaze = point
+            if finite_pair(point):
+                point = self.stabilizer.update(now, point, self.geometry[:2])
+                self.last_point = point
+            else:
+                self.stabilizer.missing()
             if elapsed >= 1 and not finite_pair(point):
                 # A brief measurement gap holds, but never advances, the dwell.
                 self.dwell.missing(now)
+                self.update_ring(now, None)
                 return
             target = None
             if elapsed >= 1:
                 # Error stays on the unassisted gaze; selection uses the assisted point.
-                self.record_trial_error(point)
+                self.record_trial_error(gaze)
                 point = self.magnet.update(now, point, self.regions, self.geometry[:2])
                 self.last_point = point
                 # Dwell starts only once the pull has settled, so a passing glance
                 # that merely attracts the cursor can never select a control.
                 if self.magnet.settled:
                     target = self.magnet.target
+            self.update_ring(now, self.last_point)
             if self.dwell.update(now, target):
                 self.finish_trial(target, elapsed)
 
@@ -411,11 +432,11 @@ class Session:
             trials=list(self.trials),
             total_trials=len(self.trial_order),
             gaze_ring=dict(
-                point=self.last_point,
+                point=self.ring_point,
                 radius_px=self.magnet.radius,
                 target=self.magnet.target,
                 strength=self.magnet.strength,
             )
-            if self.phase == "demo" and self.paused_at is None and self.last_point is not None
+            if self.phase == "demo" and self.paused_at is None and self.ring_point is not None
             else None,
         )

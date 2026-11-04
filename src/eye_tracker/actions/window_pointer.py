@@ -21,16 +21,19 @@ class PointerSmoother:
     for small fixation jitter to ``fast`` for moves of ``distance`` pixels or
     more, so large gaze shifts follow with little added delay. It never passes
     the estimate or extrapolates, and it does not affect dwell selection. A
-    missing estimate moves nothing; after ``max_gap`` seconds it snaps instead
-    of gliding from an old position.
+    missing estimate moves nothing. A short gap such as a blink resumes gliding:
+    the elapsed time credited to one step is capped at ``max_step``, so the gap
+    cannot turn into a jump. After ``max_gap`` seconds it snaps instead of gliding
+    from an old position.
     """
 
-    def __init__(self, fast=0.03, slow=0.1, distance=80.0, max_gap=0.15):
-        if not all(isfinite(v) and v > 0 for v in (fast, slow, distance, max_gap)):
+    def __init__(self, fast=0.06, slow=0.1, distance=80.0, max_gap=0.6, max_step=0.05):
+        if not all(isfinite(v) and v > 0 for v in (fast, slow, distance, max_gap, max_step)):
             raise ValueError("Invalid pointer smoothing")
         if fast > slow:
             raise ValueError("fast time constant must not exceed slow")
         self.fast, self.slow, self.distance, self.max_gap = fast, slow, distance, max_gap
+        self.max_step = max_step
         self.reset()
 
     def reset(self):
@@ -49,7 +52,7 @@ class PointerSmoother:
             dx, dy = x - px, y - py
             gap = hypot(dx, dy)
             tau = self.slow + (self.fast - self.slow) * min(1.0, gap / self.distance)
-            alpha = 1 - exp(-(now - self.last) / tau)
+            alpha = 1 - exp(-min(now - self.last, self.max_step) / tau)
             # Stop sub-pixel creeping once the remaining distance is invisible.
             self.point = (x, y) if gap * (1 - alpha) < 0.5 else (px + alpha * dx, py + alpha * dy)
         self.last = now

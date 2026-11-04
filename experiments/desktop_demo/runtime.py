@@ -267,6 +267,8 @@ class DesktopAPI:
             dwell_seconds=s.dwell.seconds,
             magnet_radius_px=s.magnet.radius,
             magnet_pull_seconds=s.magnet.pull_seconds,
+            stabilizer_jump_px=s.stabilizer.jump_px,
+            stabilizer_confirm_px=s.stabilizer.confirm_px,
             dwell_max_interruption_seconds=s.dwell.max_interruption,
             trial_timeout_seconds=15,
             model=self._meta,

@@ -259,6 +259,17 @@ window. Radius and pull time are development values set by trial on one user, no
 validated thresholds. No selection-accuracy improvement has been measured, and the
 trial runs used another camera's intrinsics, so they do not establish accuracy.
 
+### Blink stabilization
+
+Gaze goes missing during a blink, and frames while the eyes close or reopen can pass
+validity checks yet point far away. `src/eye_tracker/intent/gaze_stabilizer.py` holds
+a jump over 120 px until the next sample lands within 80 px of it, in every demo task
+before the magnet and dwell. Real saccades therefore start about one inference frame
+later. `PointerSmoother` now glides after gaps of up to 0.6 s (it used to snap after
+150 ms) with its fast time constant raised from 30 ms to 60 ms. The ring stays visible
+through gaps of up to 0.5 s. Model, HeuristicFilter and calibration are unchanged.
+The thresholds are development values; blink behavior has only synthetic tests.
+
 ## Performance diagnostics (issue #145)
 
 Measurement only, for the reported lag (smooth for 2–3 s after calibration, then

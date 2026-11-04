@@ -296,6 +296,7 @@ def test_passing_glance_attracts_the_cursor_but_cannot_select():
     assert s.magnet.target == "overview"
     assert s.dwell.target is None and s.dwell.progress == 0
     s.sample(1.7, None, [0.5, 0.9])
+    s.sample(1.75, None, [0.5, 0.9])  # A jump counts once the next sample confirms it.
     assert s.magnet.target is None
     for i in range(20):
         s.sample(1.8 + i * 0.1, None, [0.5, 0.9])

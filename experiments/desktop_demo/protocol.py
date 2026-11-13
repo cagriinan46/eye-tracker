@@ -8,7 +8,12 @@ from eye_tracker.intent.gaze_stabilizer import GazeStabilizer
 from eye_tracker.intent.region_dwell import RegionDwell
 from eye_tracker.intent.region_magnet import RegionMagnet
 
+from .keyboard import KEY_IDS, Keyboard
+
 DWELL_SECONDS = 1.2
+# Development values for the keyboard, set by trial; not validated thresholds.
+KEYBOARD_DWELL_SECONDS = 0.8
+KEYBOARD_PULL_SECONDS = 0.3
 SHAPES = ["circle", "square", "triangle", "diamond"]
 WEB_TARGETS = ["overview", "notes", "search", "title", "reminder", "save", "details", "clear"]
 WEB_ORDER = [
@@ -124,6 +129,9 @@ class Session:
         self.regions = {}
         self.dwell = RegionDwell(seconds=DWELL_SECONDS)
         self.magnet = RegionMagnet()
+        self.keyboard = None
+        self.key_dwell = RegionDwell(seconds=KEYBOARD_DWELL_SECONDS)
+        self.key_magnet = RegionMagnet(pull_seconds=KEYBOARD_PULL_SECONDS)
         self.stabilizer = GazeStabilizer()
         self.ring_point = self.ring_seen = None
         self.paused_at = None
@@ -140,6 +148,16 @@ class Session:
         self.last_sample = None
         self.dwell.reset()
         self.magnet.reset()
+        self.key_dwell.reset()
+        self.key_magnet.reset()
+
+    @property
+    def active_dwell(self):
+        return self.key_dwell if self.phase == "keyboard" else self.dwell
+
+    @property
+    def active_magnet(self):
+        return self.key_magnet if self.phase == "keyboard" else self.magnet
 
     @property
     def point(self):
@@ -213,7 +231,10 @@ class Session:
         self.transition("check")
 
     def set_regions(self, regions):
-        if set(regions) != set(self.targets):
+        if self.phase == "keyboard":
+            if not regions or not set(regions) <= KEY_IDS:
+                raise ValueError("Registered keyboard regions required")
+        elif set(regions) != set(self.targets):
             raise ValueError("Registered control regions required")
         clean = {}
         for name, rect in regions.items():
@@ -227,9 +248,33 @@ class Session:
                     raise ValueError("Overlapping regions")
             clean[name] = list(rect)
         if clean != self.regions:
-            self.dwell.reset()
-            self.magnet.reset()
+            self.active_dwell.reset()
+            self.active_magnet.reset()
         self.regions = clean
+
+    def start_keyboard(self, suggester=None):
+        """Open the keyboard. Uncalibrated use is allowed: keys then need a manual press."""
+        if self.phase not in ("preparation", "ready", "results"):
+            raise ValueError("Klavye şu anda açılamaz.")
+        if self.keyboard is None:
+            self.keyboard = Keyboard(suggester)
+        else:
+            self.keyboard.reset()
+        self.regions = {}
+        self.paused_at = None
+        self.stabilizer.reset()
+        self.ring_point = self.ring_seen = None
+        self.transition("keyboard")
+
+    def press_key(self, key, now, modality):
+        if self.phase != "keyboard" or self.keyboard is None:
+            raise ValueError("Klavye açık değil.")
+        if not self.keyboard.press(key, now, modality):
+            return False
+        # The next key needs a fresh pull and dwell, also for a repeated letter.
+        self.key_dwell.reset()
+        self.key_magnet.reset()
+        return True
 
     def start_demo(self):
         if self.phase not in ("ready", "results") and not self.calibrated:
@@ -244,15 +289,17 @@ class Session:
     def pause(self, now):
         self.dwell.reset()
         self.magnet.reset()
+        self.key_dwell.reset()
+        self.key_magnet.reset()
         self.stabilizer.reset()
-        if self.phase == "demo" and self.paused_at is None:
+        if self.phase in ("demo", "keyboard") and self.paused_at is None:
             self.paused_at = now
         elif self.phase in ("calibration", "calibration_retry", "check", "fitting"):
             self.calibrated = False
             self.fail("Göz ayarı yarıda kaldı. Hazır olduğunda yeniden başlayabilirsin.")
 
     def resume(self, now):
-        if self.phase == "demo" and self.paused_at is not None:
+        if self.phase in ("demo", "keyboard") and self.paused_at is not None:
             if self.onset is not None:
                 self.onset += now - self.paused_at
             else:
@@ -260,6 +307,8 @@ class Session:
             self.paused_at = None
             self.dwell.reset()
             self.magnet.reset()
+            self.key_dwell.reset()
+            self.key_magnet.reset()
 
     def record_trial_error(self, point):
         """Display/record-only distance to the requested control; never affects dwell."""
@@ -275,7 +324,7 @@ class Session:
         """Keep the ring steady through a blink instead of hiding and reshowing it."""
         if finite_pair(point):
             self.ring_point, self.ring_seen = list(point), now
-        elif self.ring_seen is not None and now - self.ring_seen > self.magnet.max_gap:
+        elif self.ring_seen is not None and now - self.ring_seen > self.active_magnet.max_gap:
             self.ring_point = self.ring_seen = None
 
     def finish_trial(self, selected, elapsed):
@@ -391,6 +440,22 @@ class Session:
             self.update_ring(now, self.last_point)
             if self.dwell.update(now, target):
                 self.finish_trial(target, elapsed)
+        elif self.phase == "keyboard":
+            if not self.calibrated or not self.geometry or not self.regions:
+                return
+            if not finite_pair(point):
+                self.stabilizer.missing()
+                self.key_dwell.missing(now)
+                self.update_ring(now, None)
+                return
+            point = self.stabilizer.update(now, point, self.geometry[:2])
+            point = self.key_magnet.update(now, point, self.regions, self.geometry[:2])
+            self.last_point = point
+            self.update_ring(now, point)
+            # As in the selection tasks, a key is chosen only after the pull settles.
+            target = self.key_magnet.target if self.key_magnet.settled else None
+            if self.key_dwell.update(now, target):
+                self.press_key(target, now, "gaze")
 
     def measurement_progress(self, now):
         if self.phase not in ("calibration", "check"):
@@ -425,18 +490,23 @@ class Session:
             expected=self.expected,
             instruction=self.instruction,
             paused=self.paused_at is not None,
-            dwell_target=self.dwell.target,
-            dwell_progress=self.dwell.progress,
+            dwell_target=self.active_dwell.target,
+            dwell_progress=self.active_dwell.progress,
             sample_count=len(self.samples),
             checks=list(self.check_results),
             trials=list(self.trials),
             total_trials=len(self.trial_order),
             gaze_ring=dict(
                 point=self.ring_point,
-                radius_px=self.magnet.radius,
-                target=self.magnet.target,
-                strength=self.magnet.strength,
+                radius_px=self.active_magnet.radius,
+                target=self.active_magnet.target,
+                strength=self.active_magnet.strength,
             )
-            if self.phase == "demo" and self.paused_at is None and self.ring_point is not None
+            if self.phase in ("demo", "keyboard")
+            and self.paused_at is None
+            and self.ring_point is not None
+            else None,
+            keyboard=self.keyboard.snapshot()
+            if self.phase == "keyboard" and self.keyboard is not None
             else None,
         )

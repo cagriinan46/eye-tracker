@@ -8,6 +8,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from . import perf, preferences
+from .keyboard import Suggester
 from .protocol import Session
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -54,6 +55,7 @@ class DesktopAPI:
         self._preferences = preferences.load(self._preferences_path)
         # Opt-in timing aggregates (issue #145); None keeps normal runs unchanged.
         self._perf = perf.PerfRecorder(self._output, model_name) if perf_diagnostics else None
+        self._suggester = None
 
     def request_pointer_pause(self):
         self._pointer_pause.set()
@@ -84,7 +86,8 @@ class DesktopAPI:
             or self._camera != "ready"
             or not self._focused
             or not self._tracking
-            or s.phase != "demo"
+            or s.phase not in ("demo", "keyboard")
+            or (s.phase == "keyboard" and not s.calibrated)
             or s.paused_at is not None
             or time.monotonic() - self._last_ui > 0.8
             or time.monotonic() - self._pointer_captured > 0.3
@@ -135,6 +138,8 @@ class DesktopAPI:
                             "ok": False,
                             "message": "Görünüm kaydedilemedi. Önceki ayar korundu.",
                         }
+                    if s.keyboard is not None:
+                        s.keyboard.suggestions_on = self._preferences["word_suggestions"]
                 elif action == "camera":
                     if self._worker is not None and self._worker.is_alive():
                         raise ValueError("Kamera zaten çalışıyor.")
@@ -206,6 +211,21 @@ class DesktopAPI:
                     s.start_demo()
                     if retry:
                         self._begin_record()
+                elif action == "keyboard":
+                    if s.phase == "results" or len(s.trials) == 12:
+                        self._save("completed")
+                    if self._suggester is None:
+                        # Local word list only; a missing file leaves suggestions empty.
+                        try:
+                            self._suggester = Suggester.from_file()
+                        except OSError:
+                            self._suggester = Suggester([])
+                    s.start_keyboard(self._suggester)
+                    s.keyboard.suggestions_on = self._preferences["word_suggestions"]
+                    self._reset_filter = True
+                elif action == "key":
+                    # A physical click or tap; counted apart from gaze selections.
+                    s.press_key(payload["key"], now, "manual")
                 elif action == "pause":
                     s.pause(now)
                     self._reset_filter = True
@@ -262,6 +282,14 @@ class DesktopAPI:
             geometry=s.geometry,
             checks=s.check_results,
             trials=s.trials,
+            keyboard=None
+            if s.keyboard is None
+            else dict(
+                s.keyboard.stats(),
+                dwell_seconds=s.key_dwell.seconds,
+                magnet_pull_seconds=s.key_magnet.pull_seconds,
+                text_saved=False,
+            ),
             completed_trials=len(s.trials),
             planned_trials=12,
             dwell_seconds=s.dwell.seconds,

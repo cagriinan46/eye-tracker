@@ -1335,3 +1335,15 @@ flaky under virtual time (some runs ended before the regions call), so the rende
 appearance check, not an automated test.
 
 **Checks:** see the pull request.
+
+## 2026-11-13 18:50 +03:00 — Gaze keyboard published; review pending
+
+Commit **`1929998035948d5ddc9f335d6e52661870e1e4cf`** on `feature/gaze-keyboard`. Opened
+[PR #148](https://github.com/cagriinan46/eye-tracker/pull/148) (no linked issue), verified
+OPEN, non-draft, UNMERGED, mergeable; [CI run 43454128291](https://github.com/cagriinan46/eye-tracker/actions/runs/43454128291)
+on 1929998 completed **SUCCESS**. Local checks: `ruff check .` and `ruff format --check .`
+PASS (363 files), `git diff --check` clean, `tests/desktop_demo` 123 passed, full suite 940
+passed / 16 failed (the same 16 fail on unchanged main in the GazeFollower environment,
+which lacks scikit-learn). This entry is a later commit with its own CI run. No merge by
+the agent; Fatih decides. Still open: Fatih's native-window and real-gaze trial of the
+keyboard, and confirmation of the word-list license.

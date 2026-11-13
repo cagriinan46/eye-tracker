@@ -50,6 +50,8 @@ function appearance(p){
   for(const el of document.querySelectorAll('[data-theme-choice]'))el.setAttribute('aria-pressed',String(el.dataset.themeChoice===p.theme));
   $('motionToggle').setAttribute('aria-checked',String(p.reduced_motion));
   $('suggestToggle').setAttribute('aria-checked',String(p.word_suggestions!==false));
+  document.documentElement.dataset.kbSize=p.keyboard_size||'medium';
+  for(const el of document.querySelectorAll('[data-kb-size]'))el.setAttribute('aria-pressed',String(el.dataset.kbSize===(p.keyboard_size||'medium')));
 }
 async function saveAppearance(p){
   if(userBusy)return;
@@ -149,24 +151,24 @@ async function poll(){
 }
 // Gaze keyboard: keys are built once; labels, suggestions and text come from the snapshot.
 const kbLayout=[
-  [['sug0',5],['sug1',5],['sug2',5],['sug3',5]],
-  Array.from({length:10},(_,c)=>['r0c'+c,2]),
-  Array.from({length:10},(_,c)=>['r1c'+c,2]),
-  [...Array.from({length:9},(_,c)=>['r2c'+c,2]),['backspace',2]],
-  [['page',3],['shift',3],['space',8],['period',2],['delete_word',4]],
+  [['sug0',6],['sug1',6],['sug2',6],['sug3',6]],
+  Array.from({length:12},(_,c)=>['r0c'+c,2]),
+  Array.from({length:11},(_,c)=>['r1c'+c,2,c?0:2]),
+  [...Array.from({length:9},(_,c)=>['r2c'+c,2,c?0:3]),['backspace',4]],
+  [['page',4],['shift',4],['space',9],['period',3],['delete_word',4]],
 ];
 const kbNames={backspace:'Sil',page:'Sayfa değiştir',shift:'Büyük harf',space:'Boşluk',period:'Nokta',delete_word:'Kelimeyi sil'};
 const kbEls={};let kbSent=null,kbSending=false;
-for(const row of kbLayout)for(const [id,span] of row){
+for(const row of kbLayout)for(const [id,span,start] of row){
   const el=document.createElement('button');el.className='kb-key'+(id.startsWith('sug')?' kb-sug':/^r\d/.test(id)?'':' kb-ctl');
-  el.dataset.key=id;el.style.gridColumn='span '+span;
+  el.dataset.key=id;el.style.gridColumn=(start?start+' / ':'')+'span '+span;
   const label=document.createElement('span');label.className='kb-label';
   const fill=document.createElement('span');fill.className='fill';
   el.append(label,fill);el.onclick=()=>command('key',{key:id});
   if(kbNames[id])el.setAttribute('aria-label',kbNames[id]);
   $('kbKeys').append(el);kbEls[id]=el;
 }
-function kbLayoutKey(s){return s.keyboard.suggestions_on+'|'+innerWidth+'x'+innerHeight;}
+function kbLayoutKey(s){return s.keyboard.suggestions_on+'|'+(s.preferences?.keyboard_size||'')+'|'+innerWidth+'x'+innerHeight;}
 function kbRegions(){return Object.fromEntries(Object.entries(kbEls).filter(([,el])=>!el.classList.contains('gone')).map(([id,el])=>{const r=el.getBoundingClientRect();return [id,[r.x/innerWidth,r.y/innerHeight,r.width/innerWidth,r.height/innerHeight]];}));}
 function renderKeyboard(s){
   const k=s.keyboard,label=(id,text)=>{const el=kbEls[id].firstChild;if(el.textContent!==text)el.textContent=text;};
@@ -224,6 +226,7 @@ for(const el of document.querySelectorAll('[data-page]'))el.onclick=()=>navigate
 $('practiceSetup').onclick=()=>navigate('calibration');
 for(const el of document.querySelectorAll('[data-theme-choice]'))el.onclick=()=>saveAppearance({theme:el.dataset.themeChoice});
 $('motionToggle').onclick=()=>saveAppearance({reduced_motion:!state?.preferences?.reduced_motion});
+for(const el of document.querySelectorAll('[data-kb-size]'))el.onclick=()=>saveAppearance({keyboard_size:el.dataset.kbSize});
 $('suggestToggle').onclick=()=>saveAppearance({word_suggestions:state?.preferences?.word_suggestions===false});
 $('pause').onclick=()=>act(state?.paused?'resume':'pause');
 $('kbPause').onclick=()=>act(state?.paused?'resume':'pause');

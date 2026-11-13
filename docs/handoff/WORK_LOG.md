@@ -1347,3 +1347,20 @@ passed / 16 failed (the same 16 fail on unchanged main in the GazeFollower envir
 which lacks scikit-learn). This entry is a later commit with its own CI run. No merge by
 the agent; Fatih decides. Still open: Fatih's native-window and real-gaze trial of the
 keyboard, and confirmation of the word-list license.
+
+## 2026-11-13 19:10 +03:00 — Gaze keyboard: full Q layout and adjustable size (same PR #148)
+
+At Fatih's request after the first version: Q, W and X moved to the first page (full
+Turkish Q layout, staggered rows of 12/11/9 keys; digits and punctuation stay on the
+second page), and a "Klavye boyutu" choice in Settings (small 44 %, medium 56 %, large
+70 % of the viewport height; preference `keyboard_size`, default medium). This reverses
+his earlier choice of a 10-column first page; letter keys are now about 115 px wide
+instead of 140 px at 1512×949 (headless render). Still no native-window or real-gaze run.
+
+In the same message Fatih raised two further topics that are **not started and need his
+approval as separate tasks**: live compensation for head movement after calibration, and
+feeding the magnet with control positions outside this window (he suggested reading a
+screenshot). Recorded for the proposal: `experiments/unigaze/adapter.py` already returns
+the 3D gaze vector and face center per frame, which a geometric mapping could use;
+ADR-005 chose accessibility-based discovery and excluded screenshot/OCR for its first
+slice, and open issue #116 covers the missing web targets in Chrome.

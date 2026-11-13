@@ -249,7 +249,7 @@ input.web-target::placeholder { color: var(--muted); }
 .kb-stats { margin-left: auto; color: var(--muted); font-size: 13px; white-space: nowrap; }
 .kb-text { flex: 1; min-height: 52px; line-height: 1.45; padding: 12px 18px; overflow: hidden; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 26px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
 .kb-text::after { content: ""; display: inline-block; width: 2px; height: 30px; margin-left: 3px; vertical-align: middle; background: var(--accent); }
-.kb-keys { flex: none; height: 56vh; display: grid; grid-template-columns: repeat(20, minmax(0, 1fr)); grid-template-rows: .8fr repeat(4, minmax(0, 1fr)); gap: 8px; }
+.kb-keys { flex: none; height: 56vh; display: grid; grid-template-columns: repeat(24, minmax(0, 1fr)); grid-template-rows: .8fr repeat(4, minmax(0, 1fr)); gap: 8px; }
 .kb-key { position: relative; overflow: hidden; min-width: 0; padding: 0 6px; display: flex; align-items: center; justify-content: center; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; font-size: 30px; font-weight: 550; }
 .kb-key:not(:disabled):hover { background: var(--surface-hover); }
 .kb-key:not(:disabled):active { transform: none; }
@@ -259,6 +259,12 @@ input.web-target::placeholder { color: var(--muted); }
 .kb-key.kb-ctl { font-size: 18px; color: var(--muted); }
 .kb-key.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 .kb-key.gone { display: none; }
+:root[data-kb-size="small"] .kb-keys { height: 44vh; }
+:root[data-kb-size="large"] .kb-keys { height: 70vh; }
+.segmented { display: flex; flex: none; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.segmented button { min-height: 44px; padding: 8px 18px; background: var(--surface); font-size: 14px; }
+.segmented button + button { border-left: 1px solid var(--line); }
+.segmented button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); font-weight: 550; }
 .kb-keys.nosug { grid-template-rows: repeat(4, minmax(0, 1fr)); }
 .kb-key.empty { opacity: .35; }
 .kb-keys.paused .kb-key { opacity: .6; }

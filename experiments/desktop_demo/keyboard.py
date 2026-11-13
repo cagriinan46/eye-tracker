@@ -10,8 +10,9 @@ from heapq import nlargest
 from pathlib import Path
 
 WORDS_PATH = Path(__file__).parent / "data" / "tr_words.txt"
-LETTER_ROWS = ("ertyuıopğü", "asdfghjklş", "zcvbnmöçi")
-SYMBOL_ROWS = ("1234567890", "qwx-_@()'\"", ",?!:;/+=%")
+# Turkish Q layout, including Q, W and X.
+LETTER_ROWS = ("qwertyuıopğü", "asdfghjklşi", "zxcvbnmöç")
+SYMBOL_ROWS = ("1234567890-_", "@()'\"/+=%&*", ",?!:;#<>₺")
 SUGGESTION_SLOTS = 4
 SENTENCE_END = ".!?"
 CLOSING_PUNCTUATION = ".,!?:;"

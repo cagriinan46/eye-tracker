@@ -276,11 +276,12 @@ Requested directly by Fatih (no linked issue). "Klavye" in the sidebar opens a
 Turkish on-screen keyboard inside this window (FR-012, FR-013). Fatih also asked for
 word suggestions now, although FR-021 places them in a later stage.
 
-- **Layout:** the 29 Turkish letters in Q order on three rows (10/10/9), backspace
-  at the end of the third row, and a bottom row with page switch, shift, space,
-  period and delete-word. Q, W, X, digits and punctuation are on the second page.
-  The keyboard takes the lower 56 % of the viewport at full width; the typed text
-  fills the area above it.
+- **Layout:** the Turkish Q layout on three staggered rows (12/11/9 keys, including
+  Q, W and X), backspace at the end of the third row, and a bottom row with page
+  switch, shift, space, period and delete-word. Digits and punctuation are on the
+  second page. The keyboard sits at the bottom of the viewport at full width and the
+  typed text fills the area above it. Its height is chosen in Settings ("Klavye
+  boyutu"): small 44 %, medium 56 % (default) or large 70 % of the viewport.
 - **Suggestions:** four slots above the letters complete the current word from a
   local list of 20,000 word forms ranked by corpus frequency
   ([source and license](data/README.md)); with no word started they show the most
@@ -306,13 +307,15 @@ word suggestions now, although FR-021 places them in a later stage.
   window with an OS text adapter could reuse it; that is a separate decision.
 
 Settings also gains a neutral "Koyu" (dark) theme next to Lavender, Sunflower and
-Sage, and the preferences file now stores `word_suggestions`.
+Sage, and the preferences file now stores `word_suggestions` and `keyboard_size`.
 
-Key sizes from a headless Chrome render (not a human measurement): letter keys about
-140×94 px at 1512×949 with suggestions on, 140×115 px with them off, and about
-85×58 px at the 960×640 minimum. The five-point check on this Mac gave 28–35 px mean
-error right after calibration and worse in other runs, so wrong-key selections are
-expected, mostly between rows. **No human typing result exists yet**: the keyboard
+Key sizes from a headless Chrome render (not a human measurement), suggestions on:
+letter keys about 115 px wide at 1512×949 and about 72, 94 and 119 px tall for small,
+medium and large; about 69×58 px at the 960×640 minimum with medium. An earlier
+10-column layout with Q, W and X on the second page had 140 px keys; Fatih chose the
+full layout. The five-point check on this Mac gave 28–49 px mean unfiltered error
+right after calibration, so wrong-key selections are expected, more so at the small
+size. **No human typing result exists yet**: the keyboard
 has synthetic tests and a browser render only; it has not been run in the native
 window or with real gaze.
 

@@ -49,19 +49,20 @@ def type_text(keyboard, text, now=0.0):
     return now
 
 
-def test_layout_holds_the_turkish_alphabet_and_moves_q_w_x_to_the_second_page():
+def test_layout_is_turkish_q_with_q_w_x_on_the_first_page():
     letters = "".join(LETTER_ROWS)
-    assert sorted(letters) == sorted("abcçdefgğhıijklmnoöprsştuüvyz") and len(letters) == 29
-    assert [len(row) for row in LETTER_ROWS] == [10, 10, 9]
-    assert [len(row) for row in SYMBOL_ROWS] == [10, 10, 9]
-    assert set("qwx0123456789") <= set("".join(SYMBOL_ROWS))
-    assert len(KEY_IDS) == 29 + 4 + 6
+    assert sorted(letters) == sorted("abcçdefgğhıijklmnoöprsştuüvyzqwx") and len(letters) == 32
+    assert LETTER_ROWS[0].startswith("qwerty") and LETTER_ROWS[1].startswith("asdf")
+    assert [len(row) for row in LETTER_ROWS] == [12, 11, 9]
+    assert [len(row) for row in SYMBOL_ROWS] == [12, 11, 9]
+    assert set("0123456789") <= set("".join(SYMBOL_ROWS))
+    assert len(KEY_IDS) == 32 + 4 + 6
 
 
 def test_turkish_case_mapping_keeps_dotted_and_dotless_i_apart():
     assert turkish_upper("ıi") == "Iİ" and turkish_lower("Iİ") == "ıi"
     keyboard = Keyboard()
-    assert keyboard.shift and "İ" in keyboard.rows[2] and "I" in keyboard.rows[0]
+    assert keyboard.shift and "İ" in keyboard.rows[1] and "I" in keyboard.rows[0]
     type_text(keyboard, "Işık İyi")
     assert keyboard.text == "Işık İyi"
 
@@ -74,10 +75,12 @@ def test_shift_applies_to_one_letter_and_returns_after_a_sentence():
     assert keyboard.text == "Evet. Pek" and keyboard.counts["backspace"] == 1
 
 
-def test_symbol_page_types_digits_and_foreign_letters():
+def test_first_page_types_q_w_x_and_symbol_page_types_digits():
     keyboard = Keyboard()
-    type_text(keyboard, "x2")
-    assert keyboard.text == "x2" and keyboard.page == "symbols"
+    type_text(keyboard, "Qwx")
+    assert keyboard.text == "Qwx" and keyboard.page == "letters"
+    type_text(keyboard, "2")
+    assert keyboard.text == "Qwx2" and keyboard.page == "symbols"
     assert keyboard.press("page", 0) and keyboard.page == "letters"
     assert not keyboard.press("r2c9", 0) and not keyboard.press("unknown", 0)
 
@@ -161,12 +164,12 @@ def test_gaze_types_a_key_only_after_pull_and_dwell_and_repeats_need_a_new_dwell
     now = look(session, [0.05, 0.55], 0.1, 0.9)
     assert session.keyboard.text == ""  # 0.3 s pull + 0.8 s dwell not reached.
     now = look(session, [0.05, 0.55], now + 0.1, 0.4)
-    assert session.keyboard.text == "E" and session.keyboard.counts["gaze"] == 1
+    assert session.keyboard.text == "Q" and session.keyboard.counts["gaze"] == 1
     look(session, [0.05, 0.55], now + 0.1, 0.6)
-    assert session.keyboard.text == "E"
+    assert session.keyboard.text == "Q"
     look(session, [0.05, 0.55], now + 0.8, 0.8)
-    assert session.keyboard.text == "Ee"
-    assert session.snapshot()["keyboard"]["text"] == "Ee"
+    assert session.keyboard.text == "Qq"
+    assert session.snapshot()["keyboard"]["text"] == "Qq"
 
 
 def test_glancing_between_keys_or_pausing_never_types():
@@ -187,7 +190,7 @@ def test_uncalibrated_keyboard_ignores_gaze_but_accepts_manual_keys():
     look(session, [0.05, 0.55], 0.1, 3.0)
     assert session.keyboard.text == ""
     assert session.press_key("r0c0", 4.0, "manual")
-    assert session.keyboard.text == "E" and session.keyboard.counts == dict(
+    assert session.keyboard.text == "Q" and session.keyboard.counts == dict(
         gaze=0, manual=1, backspace=0, delete_word=0, suggestion=0
     )
 
@@ -209,7 +212,7 @@ def test_bridge_opens_keyboard_without_camera_and_records_no_text(tmp_path):
     state = api.snapshot()
     assert state["phase"] == "keyboard" and state["keyboard"]["suggestions"][0] == "Bir"
     assert api.command("key", {"key": "r0c0"})["ok"] and api.command("key", {"key": "nope"})["ok"]
-    assert api.snapshot()["keyboard"]["text"] == "E"
+    assert api.snapshot()["keyboard"]["text"] == "Q"
     assert api.command("home")["ok"] and api.snapshot()["keyboard"] is None
     assert api.command("keyboard")["ok"] and api.snapshot()["keyboard"]["text"] == ""
     api.close()
@@ -239,6 +242,9 @@ def test_word_suggestions_follow_the_saved_setting_and_dark_theme_is_accepted(tm
     api = DesktopAPI(model_name="mgaze", output=tmp_path, preferences_path=path)
     assert api.command("preferences", {"theme": "dark", "word_suggestions": False})["ok"]
     assert not api.command("preferences", {"word_suggestions": "no"})["ok"]
+    assert not api.command("preferences", {"keyboard_size": "huge"})["ok"]
+    assert api.command("preferences", {"keyboard_size": "large"})["ok"]
+    assert api.snapshot()["preferences"]["keyboard_size"] == "large"
     assert api.command("keyboard")["ok"]
     assert api.snapshot()["keyboard"]["suggestions"] == ["", "", "", ""]
     assert api.command("preferences", {"word_suggestions": True})["ok"]

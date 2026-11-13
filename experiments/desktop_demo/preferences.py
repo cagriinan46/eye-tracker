@@ -5,7 +5,13 @@ import os
 import tempfile
 from pathlib import Path
 
-DEFAULTS = {"theme": "lavender", "reduced_motion": False, "word_suggestions": True}
+DEFAULTS = {
+    "theme": "lavender",
+    "reduced_motion": False,
+    "word_suggestions": True,
+    "keyboard_size": "medium",
+}
+KEYBOARD_SIZES = ("small", "medium", "large")
 DEFAULT_PATH = Path.home() / ".eye-tracker" / "desktop-preferences.json"
 
 
@@ -19,6 +25,8 @@ def validated(values):
         raise ValueError("Hareket ayarı açık veya kapalı olmalı.")
     if type(result["word_suggestions"]) is not bool:
         raise ValueError("Kelime önerisi ayarı açık veya kapalı olmalı.")
+    if result["keyboard_size"] not in KEYBOARD_SIZES:
+        raise ValueError("Geçersiz klavye boyutu.")
     return result
 
 

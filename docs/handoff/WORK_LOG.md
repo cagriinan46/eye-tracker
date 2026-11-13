@@ -1256,3 +1256,82 @@ stays through gaps up to 0.5 s. Model, HeuristicFilter and calibration are uncha
 
 **Result:** Fatih tried it and said it was good ("güzel"). That is one subjective report;
 blink behavior has synthetic tests only and its records were not analyzed.
+
+## 2026-11-13 17:50 +03:00 — correction: PR #147 merged
+
+Verified at session start: [PR #147](https://github.com/cagriinan46/eye-tracker/pull/147)
+is **MERGED** (2026-11-04T17:43:37Z, squash commit `c9b9ca48bb3ef0fb740c6e27be7fbd3d5137d1c9`,
+merged by Fatih). `git diff origin/main feature/desktop-gaze-magnet` is empty, so the
+magnet and the blink stabilization are both on main. The two entries above recorded it as
+pending. The local and remote `feature/desktop-gaze-magnet` branches were not deleted.
+
+## 2026-11-13 18:15 +03:00 — Mapping shadow comparison: no candidate adopted (parked, unpushed)
+
+**Request:** Fatih asked whether gaze-point accuracy could be improved and approved a
+bounded attempt, with the condition that nothing changes if it does not help.
+
+**First plan, not carried out:** measure Fatih's own camera intrinsics (the demo uses
+`phone-intrinsics-cdaef08c1c6a`, another camera's). A checkerboard tool was written
+(`experiments/camera_intrinsics/`, 7 synthetic tests; on the recorded corner file of that
+other camera it gave fx 524.3 vs the recorded 527.2 and validation RMS 0.150 vs 0.147 px).
+Fatih did not want to show a pattern on a phone, so **no measurement was taken**.
+
+**Second plan:** in the same session and on the same frames, compare the live standardized
+Ridge mapping with two shadow candidates fitted on the same 13×20 calibration samples:
+per-target trimming (keep the 70 % of samples nearest the target's median) and quadratic
+terms. Rule fixed before the runs: adopt a candidate only if it is better in at least 3 of
+4 sessions and lowers mean error by at least 15 %. Live behavior was unchanged.
+
+**Result (Fatih, built-in camera, other camera's intrinsics, window 1512×949 logical px;
+mean unfiltered error over the five check points):**
+
+| Session | Live linear | Trimmed linear | Quadratic | Live filtered |
+| --- | --- | --- | --- | --- |
+| `desktop-gaze-…c0d390a2` | 35.4 px | 34.8 px | 33.3 px | 27.6 px |
+| `desktop-gaze-…7eabcc07` | 49.2 px | 49.2 px | 45.9 px | 34.9 px |
+
+The quadratic candidate was 6 % and 7 % better on the session mean and worse on two of
+five points in the first session. Fatih stopped after two of the four planned sessions and
+moved to other work, so the rule was **not evaluated as planned**; on the two sessions no
+candidate comes near 15 %. No candidate was adopted and nothing was merged. Fatih also
+asked about reaching under 10 px; at an assumed 55 cm that is about 0.2°, below published
+accuracy of dedicated eye trackers, and was recorded as not a realistic gaze-only target.
+
+**State:** both pieces are one local commit `6addf3d` on `feature/camera-intrinsics-baseline`,
+not pushed, no PR. An earlier claim in the session that ruff had passed was wrong: the
+`.venv-fatih` ruff binary is killed at start on this Mac (exit 137); checks were rerun with
+the ruff in `~/.virtualenvs/eye-tracker-gazefollower-20261019`.
+
+## 2026-11-13 18:40 +03:00 — Gaze keyboard, word suggestions and dark theme
+
+**Request:** Fatih asked for an on-screen keyboard suited to gaze control with word
+suggestions, then for: Q/W/X on a second page, a normal keyboard look, the suggestion
+switch in Settings rather than on the keyboard, a keyboard that covers only part of the
+screen, and a dark theme. No GitHub issue; explicit human request. Word prediction is
+FR-021 (Graduation Project II, optional); Fatih explicitly asked for it now, which is a
+human priority decision, as is working on Phase 5 before the Phase 1 exit criteria.
+
+**Change (branch `feature/gaze-keyboard` from main `c9b9ca4`):** new
+`experiments/desktop_demo/keyboard.py` (text state, Turkish case rules, `Suggester`) with
+no GUI or OS dependency; a `keyboard` phase in `protocol.py` that reuses the stabilizer,
+`RegionMagnet` (0.3 s pull) and `RegionDwell` (0.8 s); `keyboard` and `key` bridge commands
+and a `keyboard` object in the session record in `runtime.py`; keyboard screen, settings
+switch and "Koyu" theme in `ui/`; `word_suggestions` in `preferences.py`;
+`data/tr_words.txt` (20,000 forms from hermitdave/FrequencyWords `tr_50k.txt`,
+OpenSubtitles 2018, CC-BY-SA-4.0, downloaded 2026-11-13; see `data/README.md`). Details
+and limits are in `experiments/desktop_demo/README.md`. The typed text is never saved and
+nothing is typed into other applications. The selection tasks, model, calibration and
+their timings are unchanged; no Python dependency was added.
+
+**Word list decision:** Fatih was offered this list or a short hand-written one and
+answered only that suggestions should be built, so the recommended list was used. Its
+license and informal subtitle vocabulary should be confirmed at review.
+
+**Not established:** the keyboard was rendered in headless Chrome with a stub bridge
+(letter keys about 140×94 px at 1512×949, 85×58 px at 960×640) and has synthetic tests.
+It was **not run in the native window or with real gaze**; typing speed, wrong-key rate
+and whether 0.3 s + 0.8 s suits Fatih are unmeasured. The headless region measurement was
+flaky under virtual time (some runs ended before the regions call), so the render is an
+appearance check, not an automated test.
+
+**Checks:** see the pull request.

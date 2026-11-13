@@ -21,7 +21,7 @@ async function command(action,payload={}){
 function regions(){return Object.fromEntries(targetEls.map(el=>{const r=el.getBoundingClientRect();return [el.dataset.control,[r.x/innerWidth,r.y/innerHeight,r.width/innerWidth,r.height/innerHeight]];}));}
 const pageLabels={home:'Ana sayfa',calibration:'Kalibrasyon',practice:'Bakışla seçim',settings:'Ayarlar',help:'Yardım'};
 function show(section){
-  for(const id of ['preparation','ready','results','measurement','demo']){
+  for(const id of ['preparation','ready','results','measurement','demo','keyboard']){
     $(id).classList.toggle('hidden',id!==section);
   }
 }
@@ -49,6 +49,7 @@ function appearance(p){
   document.documentElement.dataset.reducedMotion=String(p.reduced_motion);
   for(const el of document.querySelectorAll('[data-theme-choice]'))el.setAttribute('aria-pressed',String(el.dataset.themeChoice===p.theme));
   $('motionToggle').setAttribute('aria-checked',String(p.reduced_motion));
+  $('suggestToggle').setAttribute('aria-checked',String(p.word_suggestions!==false));
 }
 async function saveAppearance(p){
   if(userBusy)return;
@@ -73,7 +74,7 @@ function render(s){
   state=s;document.title='Eye Tracker · '+(s.model_name==='mgaze'?'MGaze':'UniGaze');const phase=s.phase;const measurement=['calibration','calibration_retry','check','fitting'].includes(phase);
   if(lastToken!==s.token){
     lastToken=s.token;acknowledged=null;
-    show(measurement?'measurement':['ready','demo','results'].includes(phase)?phase:'preparation');
+    show(measurement?'measurement':['ready','demo','results','keyboard'].includes(phase)?phase:'preparation');
     if(phase==='results')results(s);
     if(phase==='error'){page('calibration');}
     if(['ready','results'].includes(phase))activePage='practice';
@@ -127,11 +128,13 @@ function render(s){
     if(ring){const el=$('gazeRing');el.style.width=el.style.height=ring.radius_px*2+'px';el.style.transform=`translate(${ring.point[0]*innerWidth-ring.radius_px}px,${ring.point[1]*innerHeight-ring.radius_px}px)`;el.classList.toggle('pulling',!!ring.target);}
     const t=s.trials.at(-1);$('lastTrial').textContent=t?`Önceki: ${t.outcome==='correct'?'doğru':t.outcome==='incorrect'?'yanlış':'süre doldu'}`:'';
   }
-  if(acknowledged!==s.token&&['calibration','check','demo'].includes(phase)&&!s.paused){
+  if(phase==='keyboard'&&s.keyboard)renderKeyboard(s);
+  if(acknowledged!==s.token&&['calibration','check','demo','keyboard'].includes(phase)&&!s.paused){
     const token=s.token;acknowledged=token;
     requestAnimationFrame(()=>requestAnimationFrame(async()=>{
       if(lastToken!==token)return;
       if(phase==='demo'){const r=await command('regions',{regions:regions()});if(!r?.ok){await command('pause');return;}}
+      if(phase==='keyboard'){const key=kbLayoutKey(state);const r=await command('regions',{regions:kbRegions()});if(!r?.ok){await command('pause');return;}kbSent=key;}
       await command('ack',{token});
     }));
   }
@@ -143,6 +146,52 @@ async function poll(){
    const s=await api.snapshot();if(epoch===preferenceEpoch&&!preferenceSaving)render(s);
  }catch(e){notice('Uygulama bağlantısı kesildi. Pencereyi yeniden aç.');for(const el of targetEls)fillFor(el).style.width='0%';}
  finally{busy=false;setTimeout(poll,16);}
+}
+// Gaze keyboard: keys are built once; labels, suggestions and text come from the snapshot.
+const kbLayout=[
+  [['sug0',5],['sug1',5],['sug2',5],['sug3',5]],
+  Array.from({length:10},(_,c)=>['r0c'+c,2]),
+  Array.from({length:10},(_,c)=>['r1c'+c,2]),
+  [...Array.from({length:9},(_,c)=>['r2c'+c,2]),['backspace',2]],
+  [['page',3],['shift',3],['space',8],['period',2],['delete_word',4]],
+];
+const kbNames={backspace:'Sil',page:'Sayfa değiştir',shift:'Büyük harf',space:'Boşluk',period:'Nokta',delete_word:'Kelimeyi sil'};
+const kbEls={};let kbSent=null,kbSending=false;
+for(const row of kbLayout)for(const [id,span] of row){
+  const el=document.createElement('button');el.className='kb-key'+(id.startsWith('sug')?' kb-sug':/^r\d/.test(id)?'':' kb-ctl');
+  el.dataset.key=id;el.style.gridColumn='span '+span;
+  const label=document.createElement('span');label.className='kb-label';
+  const fill=document.createElement('span');fill.className='fill';
+  el.append(label,fill);el.onclick=()=>command('key',{key:id});
+  if(kbNames[id])el.setAttribute('aria-label',kbNames[id]);
+  $('kbKeys').append(el);kbEls[id]=el;
+}
+function kbLayoutKey(s){return s.keyboard.suggestions_on+'|'+innerWidth+'x'+innerHeight;}
+function kbRegions(){return Object.fromEntries(Object.entries(kbEls).filter(([,el])=>!el.classList.contains('gone')).map(([id,el])=>{const r=el.getBoundingClientRect();return [id,[r.x/innerWidth,r.y/innerHeight,r.width/innerWidth,r.height/innerHeight]];}));}
+function renderKeyboard(s){
+  const k=s.keyboard,label=(id,text)=>{const el=kbEls[id].firstChild;if(el.textContent!==text)el.textContent=text;};
+  $('kbTarget').textContent=k.target;
+  if($('kbText').textContent!==k.text){$('kbText').textContent=k.text;$('kbText').scrollTop=$('kbText').scrollHeight;}
+  $('kbKeys').classList.toggle('nosug',!k.suggestions_on);
+  k.rows.forEach((row,r)=>row.forEach((c,i)=>label('r'+r+'c'+i,c)));
+  k.suggestions.forEach((word,i)=>{const el=kbEls['sug'+i];label('sug'+i,word);el.classList.toggle('gone',!k.suggestions_on);el.classList.toggle('empty',!word);el.disabled=!word;});
+  label('backspace','⌫');label('page',k.page==='letters'?'?123':'ABC');label('shift','⇧');label('space','boşluk');label('period','.');label('delete_word','kelime sil');
+  kbEls.shift.classList.toggle('on',k.shift&&k.page==='letters');
+  for(const [id,el] of Object.entries(kbEls)){const on=id===s.dwell_target&&!s.paused;el.classList.toggle('focused',on);el.lastChild.style.width=(on?s.dwell_progress*100:0)+'%';}
+  const st=k.stats,parts=[st.characters+' karakter'];
+  if(st.words_per_minute)parts.push(st.words_per_minute.toFixed(1)+' kelime/dk');
+  if(st.target_completed_s!=null)parts.push('Cümle tamamlandı: '+st.target_completed_s.toFixed(0)+' sn');
+  $('kbStats').textContent=parts.join(' · ');
+  $('kbPause').textContent=s.paused?'Devam et':'Duraklat';$('kbKeys').classList.toggle('paused',s.paused);
+  $('kbTracking').textContent=!s.can_demo||s.camera!=='ready'?'Göz ayarı yok. Tuşlara tıklayarak deneyebilirsin.':s.paused?'Duraklatıldı':s.tracking?'Bakışın izleniyor':s.signal_status==='processing_delayed'?'İşlem gecikiyor. Bakışla seçim bekletiliyor.':'Geçerli bakış verisi bekleniyor.';
+  const ring=s.gaze_ring,el=$('kbRing');el.classList.toggle('hidden',!ring);
+  if(ring){el.style.width=el.style.height=ring.radius_px*2+'px';el.style.transform=`translate(${ring.point[0]*innerWidth-ring.radius_px}px,${ring.point[1]*innerHeight-ring.radius_px}px)`;el.classList.toggle('pulling',!!ring.target);}
+  // Showing or hiding the suggestion row, or resizing, changes which keys gaze may select.
+  const key=kbLayoutKey(s);
+  if(acknowledged===s.token&&kbSent!==null&&kbSent!==key&&!kbSending){
+    kbSending=true;
+    requestAnimationFrame(()=>requestAnimationFrame(async()=>{try{if(state?.phase==='keyboard'){const now=kbLayoutKey(state);const r=await command('regions',{regions:kbRegions()});if(r?.ok)kbSent=now;}}finally{kbSending=false;}}));
+  }
 }
 function fillFor(el){return el.querySelector('.fill')||el.parentElement.querySelector('.fill');}
 function activateControl(id){
@@ -175,7 +224,11 @@ for(const el of document.querySelectorAll('[data-page]'))el.onclick=()=>navigate
 $('practiceSetup').onclick=()=>navigate('calibration');
 for(const el of document.querySelectorAll('[data-theme-choice]'))el.onclick=()=>saveAppearance({theme:el.dataset.themeChoice});
 $('motionToggle').onclick=()=>saveAppearance({reduced_motion:!state?.preferences?.reduced_motion});
+$('suggestToggle').onclick=()=>saveAppearance({word_suggestions:state?.preferences?.word_suggestions===false});
 $('pause').onclick=()=>act(state?.paused?'resume':'pause');
+$('kbPause').onclick=()=>act(state?.paused?'resume':'pause');
+$('navKeyboard').onclick=()=>act('keyboard');
+$('homeKeyboard').onclick=()=>navigate('home');
 $('retryCalibration').onclick=()=>act('retry_calibration');
 $('cancelMeasure').onclick=()=>act('pause');
 $('dismissError').onclick=()=>notice();

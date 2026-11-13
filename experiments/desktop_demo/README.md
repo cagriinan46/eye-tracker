@@ -270,6 +270,52 @@ later. `PointerSmoother` now glides after gaps of up to 0.6 s (it used to snap a
 through gaps of up to 0.5 s. Model, HeuristicFilter and calibration are unchanged.
 The thresholds are development values; blink behavior has only synthetic tests.
 
+## Gaze keyboard, word suggestions and dark theme (November 13)
+
+Requested directly by Fatih (no linked issue). "Klavye" in the sidebar opens a
+Turkish on-screen keyboard inside this window (FR-012, FR-013). Fatih also asked for
+word suggestions now, although FR-021 places them in a later stage.
+
+- **Layout:** the 29 Turkish letters in Q order on three rows (10/10/9), backspace
+  at the end of the third row, and a bottom row with page switch, shift, space,
+  period and delete-word. Q, W, X, digits and punctuation are on the second page.
+  The keyboard takes the lower 56 % of the viewport at full width; the typed text
+  fills the area above it.
+- **Suggestions:** four slots above the letters complete the current word from a
+  local list of 20,000 word forms ranked by corpus frequency
+  ([source and license](data/README.md)); with no word started they show the most
+  frequent words. Choosing one replaces the partial word and adds a space, which
+  gives way to closing punctuation. There is no language model, next-word
+  prediction, learning from the user or network access. The row is switched in
+  Settings ("Kelime önerisi"); when off, the letter rows use its space.
+- **Case:** shift applies to one letter and turns on at the start of the text and
+  after `.`, `!` or `?`. Turkish pairs are kept apart (ı/I, i/İ).
+- **Selection:** as in the selection tasks, gaze passes the blink stabilizer and the
+  magnet; a key is pressed after a 0.3 s pull and a 0.8 s dwell, and repeating a key
+  needs a new pull and dwell. These are untested development values. Pause, focus
+  loss, stale gaze and heartbeat loss stop selection as elsewhere.
+- **Without calibration:** the keyboard opens with the camera off and keys can be
+  clicked. Clicks are counted as `manual`, gaze selections as `gaze`.
+- **Records:** the typed text stays in memory and is never written. If a calibration
+  record is open, `session.json` gains a `keyboard` object with counts, elapsed time,
+  words per minute (five characters per word) and the time to complete the fixed
+  sentence "Bugün hava çok güzel."; a record that only used the keyboard is saved
+  with status `aborted` because no selection trial ran.
+- **Text stays in this window.** Nothing is typed into other applications and no OS
+  key event is sent. `keyboard.py` has no GUI or OS dependency, so a later floating
+  window with an OS text adapter could reuse it; that is a separate decision.
+
+Settings also gains a neutral "Koyu" (dark) theme next to Lavender, Sunflower and
+Sage, and the preferences file now stores `word_suggestions`.
+
+Key sizes from a headless Chrome render (not a human measurement): letter keys about
+140×94 px at 1512×949 with suggestions on, 140×115 px with them off, and about
+85×58 px at the 960×640 minimum. The five-point check on this Mac gave 28–35 px mean
+error right after calibration and worse in other runs, so wrong-key selections are
+expected, mostly between rows. **No human typing result exists yet**: the keyboard
+has synthetic tests and a browser render only; it has not been run in the native
+window or with real gaze.
+
 ## Performance diagnostics (issue #145)
 
 Measurement only, for the reported lag (smooth for 2–3 s after calibration, then

@@ -1364,3 +1364,20 @@ screenshot). Recorded for the proposal: `experiments/unigaze/adapter.py` already
 the 3D gaze vector and face center per frame, which a geometric mapping could use;
 ADR-005 chose accessibility-based discovery and excluded screenshot/OCR for its first
 slice, and open issue #116 covers the missing web targets in Chrome.
+
+## 2026-11-19 — macOS floating keyboard (Çağrı / Codex)
+
+Based on PR #148 at 4747d79. Added an automatically displayed, nonactivating
+click keyboard for external accessible text controls using the demo's Turkish Q
+and symbol rows. Desktop demo tests: 123 passed. Native two-process smoke test
+verified focus detection, panel display, a button click inserting ğ, and
+backspace in a temporary Cocoa text field. Browser/Office coverage and Windows
+system integration were not tested. Branch: feature/text-focus-keyboard.
+
+2026-11-19 follow-up (Çağrı / Codex, PR #149): restored ignored UniGaze kit
+and original camera intrinsics from local backup. Asset checks passed and the
+default model read a frame from the built-in FaceTime HD camera (index 1).
+Panel placement now uses AX caret/field bounds and follows visible focus changes.
+Native tests with lower and upper text fields placed the panel above and below
+respectively. A combined test missed focus on launching its second test app;
+the separate upper-field test passed. Desktop demo tests: 123 passed.

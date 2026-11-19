@@ -1364,3 +1364,12 @@ screenshot). Recorded for the proposal: `experiments/unigaze/adapter.py` already
 the 3D gaze vector and face center per frame, which a geometric mapping could use;
 ADR-005 chose accessibility-based discovery and excluded screenshot/OCR for its first
 slice, and open issue #116 covers the missing web targets in Chrome.
+
+## 2026-11-19 — macOS floating keyboard (Çağrı / Codex)
+
+Based on PR #148 at 4747d79. Added an automatically displayed, nonactivating
+click keyboard for external accessible text controls using the demo's Turkish Q
+and symbol rows. Desktop demo tests: 123 passed. Native two-process smoke test
+verified focus detection, panel display, a button click inserting ğ, and
+backspace in a temporary Cocoa text field. Browser/Office coverage and Windows
+system integration were not tested. Branch: feature/text-focus-keyboard.

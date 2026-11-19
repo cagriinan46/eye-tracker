@@ -53,18 +53,28 @@ def main():
         zoomable=False,
         text_select=False,
     )
-    pointer = None
+    pointer = keyboard = None
     if sys.platform == "darwin":
         from eye_tracker.platform_adapters.macos_window_pointer import MacOSWindowPointer
 
+        from .macos_keyboard import FocusKeyboard
+
+        keyboard = FocusKeyboard()
+        window.events.closed += keyboard.close
         pointer = MacOSWindowPointer(window, api.pointer_sample, api.request_pointer_pause)
         window.events.closed += pointer.close
     window.events.closing += api.close
     window.events.moved += lambda *args: pause_for_window_move(api, *args)
     window.events.resized += lambda *args: pause_for_window_move(api, *args)
+
+    def start_native():
+        if pointer:
+            pointer.start()
+            keyboard.start()
+
     try:
         webview.start(
-            pointer.start if pointer else None,
+            start_native if pointer else None,
             gui="edgechromium" if sys.platform == "win32" else None,
             debug=False,
         )

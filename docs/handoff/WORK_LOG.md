@@ -1373,3 +1373,11 @@ and symbol rows. Desktop demo tests: 123 passed. Native two-process smoke test
 verified focus detection, panel display, a button click inserting ğ, and
 backspace in a temporary Cocoa text field. Browser/Office coverage and Windows
 system integration were not tested. Branch: feature/text-focus-keyboard.
+
+2026-11-19 follow-up (Çağrı / Codex, PR #149): restored ignored UniGaze kit
+and original camera intrinsics from local backup. Asset checks passed and the
+default model read a frame from the built-in FaceTime HD camera (index 1).
+Panel placement now uses AX caret/field bounds and follows visible focus changes.
+Native tests with lower and upper text fields placed the panel above and below
+respectively. A combined test missed focus on launching its second test app;
+the separate upper-field test passed. Desktop demo tests: 123 passed.

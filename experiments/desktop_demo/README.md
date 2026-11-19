@@ -386,7 +386,7 @@ instrumentation has not been run with the real UniGaze model on Fatih's Mac
 ### Typing into other applications on macOS
 
 Keep the demo running and click an editable text control in another application.
-The floating Turkish Q keyboard appears at the bottom of the screen. Click a
+The floating Turkish Q keyboard chooses a position on the editor’s display to keep the caret and text field visible. Click a
 key to type at the current selection. Use ⇧ for capitals, 123 for symbols and
 Kapat to dismiss the panel until focus changes. The system panel supports mouse
 clicks. The in-app practice keyboard continues to support gaze and suggestions.

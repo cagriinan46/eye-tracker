@@ -15,6 +15,58 @@ def attribute(element, name):
     return value if error == 0 else None
 
 
+def ax_geometry(value, kind):
+    if value is not None and AX.AXValueGetType(value) == kind:
+        ok, geometry = AX.AXValueGetValue(value, kind, None)
+        if ok:
+            return geometry
+    return None
+
+
+def panel_rect(element, fallback):
+    # AX uses a top-left origin on the primary display; Cocoa uses bottom-left.
+    screens = UI.NSScreen.screens()
+    top = UI.NSMaxY(screens[0].frame())
+    position = ax_geometry(attribute(element, "AXPosition"), AX.kAXValueCGPointType)
+    size = ax_geometry(attribute(element, "AXSize"), AX.kAXValueCGSizeType)
+    field = caret = None
+    if position is not None and size is not None:
+        field = UI.NSMakeRect(position.x, top - position.y - size.height, size.width, size.height)
+    selected = attribute(element, "AXSelectedTextRange")
+    if selected is not None:
+        err, value = AX.AXUIElementCopyParameterizedAttributeValue(
+            element, "AXBoundsForRange", selected, None
+        )
+        bounds = ax_geometry(value, AX.kAXValueCGRectType) if not err else None
+        if bounds and bounds.size.height > 0:
+            caret = UI.NSMakeRect(
+                bounds.origin.x,
+                top - bounds.origin.y - bounds.size.height,
+                max(1, bounds.size.width),
+                bounds.size.height,
+            )
+    anchor = caret or field or UI.NSMakeRect(fallback.x, fallback.y, 1, 1)
+
+    def area(a, b):
+        overlap = UI.NSIntersectionRect(a, b)
+        return overlap.size.width * overlap.size.height
+
+    screen = max(screens, key=lambda screen: area(screen.frame(), anchor))
+    v = screen.visibleFrame()
+    width = min(760, v.size.width - 24)
+    height = min(235, v.size.height * 0.36)
+    xs = (UI.NSMidX(v) - width / 2, UI.NSMinX(v) + 8, UI.NSMaxX(v) - width - 8)
+    ys = (UI.NSMinY(v) + 8, UI.NSMaxY(v) - height - 8)
+    candidates = [UI.NSMakeRect(x, y, width, height) for y in ys for x in xs]
+    return min(
+        candidates,
+        key=lambda rect: (
+            area(rect, UI.NSInsetRect(anchor, -8, -8)),
+            area(rect, field) if field else 0,
+        ),
+    )
+
+
 class KeyboardPanel(UI.NSPanel):
     def canBecomeKeyWindow(self):
         return False
@@ -64,17 +116,17 @@ class FocusKeyboard:
             if self.panel:
                 self.panel.orderOut_(None)
             if target:
+                self.fallback = UI.NSEvent.mouseLocation()
                 self.build()
+        elif target and self.panel and self.panel.isVisible():
+            rect = panel_rect(target[1], self.fallback)
+            if not UI.NSEqualRects(rect, self.panel.frame()):
+                self.build(rect)
         AppHelper.callLater(0.25, self.tick)
 
-    def build(self):
-        screen = UI.NSScreen.mainScreen()
-        visible = screen.visibleFrame()
-        width = min(760, visible.size.width - 24)
-        height = min(235, visible.size.height * 0.36)
-        rect = UI.NSMakeRect(
-            visible.origin.x + (visible.size.width - width) / 2, visible.origin.y + 8, width, height
-        )
+    def build(self, rect=None):
+        rect = rect or panel_rect(self.target[1], self.fallback)
+        width, height = rect.size
         if self.panel is None:
             self.panel = KeyboardPanel.alloc().initWithContentRect_styleMask_backing_defer_(
                 rect, UI.NSWindowStyleMaskNonactivatingPanel, UI.NSBackingStoreBuffered, False

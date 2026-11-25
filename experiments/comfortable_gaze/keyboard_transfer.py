@@ -16,7 +16,7 @@ import numpy as np
 from Foundation import NSDate, NSDefaultRunLoopMode
 from PyObjCTools import AppHelper
 
-from experiments.desktop_demo.macos_keyboard import AX, FocusKeyboard, panel_rect, turkish_upper
+from experiments.desktop_demo.macos_keyboard import AX, FocusKeyboard, panel_rect
 from experiments.desktop_demo.protocol import UNIGAZE_POINTS
 from experiments.desktop_demo.unigaze_model import CameraModel
 from experiments.unigaze.mapping import Ridge
@@ -27,6 +27,7 @@ from .local_residual import PersonalCorrection
 from .replay import metrics
 
 KEYS = ("ç", "e", "k", "z", "ü", "a", "m", "ı", "s", "g")
+SETTLE_SECONDS = 3
 
 
 def panel_process(pipe, editor_pid):
@@ -34,17 +35,20 @@ def panel_process(pipe, editor_pid):
     app.setActivationPolicy_(UI.NSApplicationActivationPolicyAccessory)
     kb = FocusKeyboard()
     key = None
-    feedback = ""
+    progress = 0
+    bar = UI.NSView.alloc().initWithFrame_(UI.NSZeroRect)
+    bar.setWantsLayer_(True)
+    bar.layer().setBackgroundColor_(UI.NSColor.labelColor().CGColor())
 
     def poll():
-        nonlocal key, feedback
+        nonlocal key, progress
         try:
             while pipe.poll():
                 message = pipe.recv()
                 if message is None:
                     AppHelper.stopEventLoop()
                     return
-                key, feedback = message
+                key, progress = message
             if key is None:
                 AppHelper.callLater(0.1, poll)
                 return
@@ -66,9 +70,14 @@ def panel_process(pipe, editor_pid):
                 for button in kb.panel.contentView().subviews():
                     selected = button.identifier() == key
                     button.setBezelColor_(UI.NSColor.systemYellowColor() if selected else None)
-                    if button.identifier() == "space":
-                        button.setTitle_(feedback)
                     if selected:
+                        if bar.superview() != button:
+                            bar.removeFromSuperview()
+                            button.addSubview_(bar)
+                        width = button.bounds().size.width - 8
+                        bar.setFrame_(((4, 4), (width * max(0, progress) / 100, 3)))
+                        if progress < 0:
+                            button.setBezelColor_(UI.NSColor.systemOrangeColor())
                         r = kb.panel.convertRectToScreen_(button.frame())
                         h = UI.NSScreen.screens()[0].frame().size.height
                         bounds = [r.origin.x, h - UI.NSMaxY(r), r.size.width, r.size.height]
@@ -109,7 +118,7 @@ class Editor:
         self.window.setTitle_("Masaüstü klavyesi · Bakış ölçümü")
         self.window.setDelegate_(self.controls)
         self.label = UI.NSTextField.wrappingLabelWithString_(
-            "Önce 13 noktaya, sonra klavyede sırayla işaretlenen 10 tuşa bak. Rahatça oturabilirsin."
+            "Önce 13 beyaz noktayı takip et. Klavye açılınca sarı tuşun ortasına bak. Çizgi dolunca sıradaki tuş yanar. Turuncu, kameranın göz verisi beklediğini gösterir."
         )
         self.label.setFont_(UI.NSFont.systemFontOfSize_(19))
         self.label.setFrame_(((20, 112), (660, 65)))
@@ -265,22 +274,19 @@ def measure(ui, camera, pipe, rows, model, correction):
     ui.window.makeKeyAndOrderFront_(None)
     ui.app.activateIgnoringOtherApps_(True)
     ui.window.makeFirstResponder_(ui.field)
-    for index, key in enumerate(KEYS, 1):
-        ui.label.setStringValue_(f"İşaretli {turkish_upper(key)} tuşunun ortasına bak.")
-        ui.window.display()
+    ui.label.setStringValue_("Klavye görünmüyorsa ölçüm alanına tıkla.")
+    ui.label.setHidden_(True)
+    for key in KEYS:
         last_message = None
 
-        def show(note):
+        def show(progress):
             nonlocal last_message
-            message = (key, f"{index}/{len(KEYS)} · {note}")
+            message = (key, progress)
             if message != last_message:
                 pipe.send(message)
-                ui.label.setStringValue_(
-                    f"{turkish_upper(key)} tuşunun ortasına bak.   {message[1]}"
-                )
                 last_message = message
 
-        show("Hazırlanıyor")
+        show(0)
         onset = bounds = None
         observation = (0, None, None)
         filters = [StreamFilter(), StreamFilter()]
@@ -301,8 +307,9 @@ def measure(ui, camera, pipe, rows, model, correction):
                     for stream in filters:
                         stream.reset()
             seen, selected, rect = observation
+            ui.label.setHidden_(bool(bounds) or not seen)
             if not bounds or onset is None or stamp < onset or time.monotonic() - seen > 0.4:
-                show("Ölçüm alanına tıkla" if not bounds else "Klavye bekleniyor")
+                show(0)
                 continue
             raw = (
                 model.predict(angles)
@@ -318,14 +325,14 @@ def measure(ui, camera, pipe, rows, model, correction):
                 )
             ]
             if raw is None:
-                show("Göz verisi bekleniyor")
+                show(-1)
                 continue
-            if stamp - onset < 1:
-                show("Hedefe bak")
+            if stamp - onset < SETTLE_SECONDS:
+                show(0)
             else:
                 valid += 1
-                progress = min((stamp - onset - 1) / 2, valid / 5, 1)
-                show(f"Ölçülüyor %{int(progress * 100)}")
+                progress = min((stamp - onset - SETTLE_SECONDS) / 2, valid / 5, 1)
+                show(int(progress * 100))
                 trial.append(
                     dict(
                         key=key,
@@ -337,7 +344,7 @@ def measure(ui, camera, pipe, rows, model, correction):
                         ],
                     )
                 )
-            if stamp - onset >= 3 and valid >= 5:
+            if stamp - onset >= SETTLE_SECONDS + 2 and valid >= 5:
                 rows.extend(trial)
                 break
 
@@ -407,12 +414,20 @@ def run(output):
     report = summarize(rows)
     path.write_text(
         json.dumps(
-            dict(status=status, screen_size=ui.size.tolist(), keys=KEYS, rows=rows, report=report),
+            dict(
+                status=status,
+                settle_seconds=SETTLE_SECONDS,
+                screen_size=ui.size.tolist(),
+                keys=KEYS,
+                rows=rows,
+                report=report,
+            ),
             allow_nan=False,
         )
     )
     print(path, status, flush=True)
     if status != "interrupted":
+        ui.label.setHidden_(False)
         ui.controls.started = False
         if status == "completed":
             base, personal = report["baseline"], report["personal"]

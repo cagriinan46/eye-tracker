@@ -61,7 +61,8 @@ def matched_landmarks(faces, landmarks, mgaze_rect):
 
 
 class Candidate:
-    def __init__(self):
+    def __init__(self, comparison=None):
+        self.comparison = comparison
         os.environ["TORCH_HOME"] = str(PREFLIGHT / "support/torch")
         os.environ["NUMBA_CACHE_DIR"] = str(PREFLIGHT / "support/numba-cache")
         os.environ["HF_HUB_OFFLINE"] = "1"
@@ -145,16 +146,15 @@ class Candidate:
                 result["unigaze_reason"] = "invalid_geometry"
                 return result
             patch, rotation, detail = prepared
-            angles = (
-                self.model(geometry.tensor_from_patch(patch).to(self.device))["pred_gaze"]
-                .cpu()
-                .numpy()[0]
-            )
+            tensor = geometry.tensor_from_patch(patch).to(self.device)
+            angles = self.model(tensor)["pred_gaze"].cpu().numpy()[0]
             timing["ug_model_ms"] = (time.perf_counter() - normalized) * 1000
             vector, camera_angles = geometry.denormalize(angles, rotation)
             if not np.isfinite(camera_angles).all():
                 result["unigaze_reason"] = "nonfinite_output"
                 return result
+            if self.comparison is not None:
+                result["comparison_angles"] = self.comparison(tensor, rotation)
             result.update(
                 unigaze_valid=True,
                 unigaze_angles=camera_angles.tolist(),

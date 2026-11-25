@@ -72,3 +72,13 @@ In the personal correction experiment, derive 13 anchor positions from the media
 
 Run the same command and four session paths above with module names
 `experiments.comfortable_gaze.bias_transfer` and `experiments.comfortable_gaze.local_residual` to reproduce the two follow-ups.
+
+## Prospective same-frame model comparison
+
+Run `PYTHONPATH=src:. validation/results/unigaze-preflight-kit-20261029/venv/bin/python -m experiments.comfortable_gaze.live_pair` on the prepared Mac. Space starts the camera session and each evaluation block. Esc exits. The experiment shows a fixation point and stores only numeric features, target locations, timestamps, model provenance and results locally.
+
+ETH-XGaze uses the local hysts ResNet18 checkpoint (SHA-256 d1c91b2aa6a0c73856c16890d337afdecdb05563ed52182dfdb77742f1c856bc). The two angle models receive the same normalized 224 × 224 RGB face tensor and inverse rotation. This isolates the prediction networks using UniGaze's shared face normalization. MGaze uses its own preprocessing on the same original frame. Each model receives a separate personal Ridge mapping fitted on identical samples (16 jointly valid scored frames per calibration target). The two angle models use standardized features; MGaze uses its original feature scale.
+
+Score eight unseen locations in a comfortable posture, then the same locations in a rotated order while making mild head movements. Allow one second to settle at each location before collecting 14 jointly valid observations. Insufficient coverage retries the location. Results include raw and filtered equal-target radial error in macOS logical pixels, fraction within 20 px and measured small-motion subset coverage. Attempt counts cover the accepted target visits. Report small-motion error with its target and frame counts. Block order and a single participant limit interpretation.
+
+Before live acquisition, both networks produced finite outputs on three repeated presentations of the same local public fixture, and an empty frame produced no prediction. This verifies the inference path only.

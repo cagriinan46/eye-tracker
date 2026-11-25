@@ -12,7 +12,7 @@ from .wire import receive, send
 
 
 class PairedExtractor:
-    def __init__(self):
+    def __init__(self, comparison=None):
         self.sock = None
         self.worker = None
         self.last_id = -1
@@ -20,7 +20,7 @@ class PairedExtractor:
         self.last_timing = {}
         self.vision_cpu = None
         try:
-            self.candidate = Candidate()
+            self.candidate = Candidate(comparison=comparison)
             self.provenance = self.candidate.provenance
             self.sock, child = socket.socketpair()
             self.sock.settimeout(30)

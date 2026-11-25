@@ -8,7 +8,6 @@ from pathlib import Path
 import numpy as np
 
 from experiments.unigaze.mapping import Ridge
-from experiments.unigaze.smoothing import StreamFilter
 
 FITTED = (
     "angles",
@@ -104,6 +103,8 @@ def small_motion(row, center, rotation):
 
 
 def replay(folder):
+    from experiments.unigaze.smoothing import StreamFilter
+
     training = calibration_rows(folder)
     center, rotation = pose_reference(training)
     size = np.asarray(json.loads((folder / "session.json").read_text())["screen_size"])

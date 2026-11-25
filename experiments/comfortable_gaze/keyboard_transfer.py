@@ -4,6 +4,8 @@ import argparse
 import json
 import multiprocessing
 import os
+import queue
+import threading
 import time
 from collections import defaultdict
 from pathlib import Path
@@ -73,6 +75,8 @@ def panel_process(pipe, editor_pid):
             return
         AppHelper.callLater(0.1, poll)
 
+    app.finishLaunching()
+    pipe.send("ready")
     AppHelper.callAfter(poll)
     AppHelper.runEventLoop()
 
@@ -153,7 +157,48 @@ class Editor:
         self.overlay.display()
 
 
-def calibrate(ui, camera):
+class CameraFeed:
+    """Keep the editor's Cocoa event loop responsive to native AX requests."""
+
+    def __init__(self, camera):
+        self.camera = camera
+        self.stop = threading.Event()
+        self.frames = queue.Queue(maxsize=2)
+        self.thread = threading.Thread(target=self.collect, daemon=True)
+        self.thread.start()
+
+    def collect(self):
+        while not self.stop.is_set():
+            try:
+                frame = self.camera.read()
+            except Exception as error:
+                frame = error
+            while not self.stop.is_set():
+                try:
+                    self.frames.put(frame, timeout=0.1)
+                    break
+                except queue.Full:
+                    continue
+            if isinstance(frame, Exception):
+                return
+
+    def read(self, ui):
+        while True:
+            ui.pump()
+            try:
+                frame = self.frames.get(timeout=0.008)
+            except queue.Empty:
+                continue
+            if isinstance(frame, Exception):
+                raise frame
+            return frame
+
+    def close(self):
+        self.stop.set()
+        self.thread.join(timeout=2)
+
+
+def calibrate(ui, camera, checkpoint):
     x, y = [], []
     for target in UNIGAZE_POINTS:
         ui.fixation(np.array(target))
@@ -161,7 +206,7 @@ def calibrate(ui, camera):
         start = len(x)
         while len(x) - start < 16:
             ui.pump()
-            stamp, angles, _, _ = camera.read()
+            stamp, angles, _, _ = camera.read(ui)
             if not ui.app.isActive():
                 raise RuntimeError("Pencere odağı değişti. Kalibrasyonu yeniden başlat.")
             if stamp > onset + 12:
@@ -169,8 +214,16 @@ def calibrate(ui, camera):
             if angles is not None and stamp >= onset + 1 and time.monotonic() - stamp <= 0.3:
                 x.append(angles)
                 y.append(target)
+    checkpoint.write_text(json.dumps(dict(size=ui.size.tolist(), x=x, y=y)))
+    return fit_calibration(ui, checkpoint)
+
+
+def fit_calibration(ui, checkpoint):
+    data = json.loads(checkpoint.read_text())
+    if data["size"] != ui.size.tolist():
+        raise ValueError("Ekran boyutu değişti. Yeni kalibrasyon gerekiyor.")
     model = Ridge(standardize=True)
-    x, y = np.asarray(x), np.asarray(y)
+    x, y = np.asarray(data["x"]), np.asarray(data["y"])
     model.fit(x, y)
     correction = PersonalCorrection(model, x, y)
     ui.overlay.orderOut_(None)
@@ -178,6 +231,13 @@ def calibrate(ui, camera):
 
 
 def measure(ui, camera, pipe, rows, model, correction):
+    until = time.monotonic() + 10
+    while not pipe.poll(0.015):
+        ui.pump()
+        if time.monotonic() > until:
+            raise RuntimeError("Klavye işlemi açılamadı.")
+    if pipe.recv() != "ready":
+        raise RuntimeError("Klavye bağlantısı kurulamadı.")
     ui.window.makeKeyAndOrderFront_(None)
     ui.app.activateIgnoringOtherApps_(True)
     ui.window.makeFirstResponder_(ui.field)
@@ -193,8 +253,12 @@ def measure(ui, camera, pipe, rows, model, correction):
         while True:
             ui.pump()
             if time.monotonic() > deadline:
-                raise RuntimeError("Hedef tuş veya yeterli güncel bakış verisi alınamadı.")
-            stamp, angles, _, _ = camera.read()
+                raise RuntimeError(
+                    f"{key.upper()} tuşu için klavye odağı bulunamadı."
+                    if bounds is None
+                    else f"{key.upper()} tuşunda yeterli güncel bakış verisi alınamadı."
+                )
+            stamp, angles, _, _ = camera.read(ui)
             # Discard evidence whenever the highlighted key or its rectangle changes.
             while pipe.poll():
                 observation = pipe.recv()
@@ -256,10 +320,13 @@ def summarize(rows):
     return result
 
 
-def run(output):
+def run(output, resume=None):
     ui = Editor()
     output.mkdir(parents=True, exist_ok=True)
     path = output / f"keyboard-transfer-{uuid4().hex[:12]}.json"
+    checkpoint = resume or path.with_suffix(".calibration.json")
+    if resume:
+        ui.label.setStringValue_("Kalibrasyon yüklendi. İşaretli 10 tuşun ortasına bak.")
     rows = []
     status = "interrupted"
     try:
@@ -272,8 +339,11 @@ def run(output):
         ui.label.setStringValue_("Kamera hazırlanıyor…")
         ui.window.display()
         camera = CameraModel()
+        feed = CameraFeed(camera)
         try:
-            model, correction = calibrate(ui, camera)
+            model, correction = (
+                fit_calibration(ui, resume) if resume else calibrate(ui, feed, checkpoint)
+            )
             parent, child = multiprocessing.Pipe()
             helper = multiprocessing.get_context("spawn").Process(
                 target=panel_process, args=(child, os.getpid())
@@ -281,7 +351,7 @@ def run(output):
             helper.start()
             child.close()
             try:
-                measure(ui, camera, parent, rows, model, correction)
+                measure(ui, feed, parent, rows, model, correction)
                 status = "completed"
             finally:
                 parent.close()
@@ -290,6 +360,7 @@ def run(output):
                     helper.terminate()
                     helper.join()
         finally:
+            feed.close()
             camera.close()
     except KeyboardInterrupt:
         pass
@@ -325,4 +396,6 @@ def run(output):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, default=ROOT / "validation/results")
-    run(parser.parse_args().output)
+    parser.add_argument("--resume-calibration", type=Path)
+    args = parser.parse_args()
+    run(args.output, args.resume_calibration)

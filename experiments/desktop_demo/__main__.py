@@ -58,17 +58,19 @@ def main():
     if sys.platform == "darwin":
         from eye_tracker.platform_adapters.macos_window_pointer import MacOSWindowPointer
 
-        from .macos_desktop_dwell import DesktopDwell
-        from .macos_keyboard import AX, FocusKeyboard
+        from .macos_keyboard import FocusKeyboard
 
         keyboard = FocusKeyboard()
+        window.events.closed += keyboard.close
+        pointer = MacOSWindowPointer(window, api.pointer_sample, api.request_pointer_pause)
+        window.events.closed += pointer.close
+
+        from .macos_desktop_dwell import AX, DesktopDwell
+
         desktop = DesktopDwell(window, api, keyboard)
         api._desktop_supported = True
         api._desktop_permission = AX.AXIsProcessTrusted
         window.events.closed += desktop.close
-        window.events.closed += keyboard.close
-        pointer = MacOSWindowPointer(window, api.pointer_sample, api.request_pointer_pause)
-        window.events.closed += pointer.close
     window.events.closing += api.close
     window.events.moved += lambda *args: pause_for_window_move(api, *args)
     window.events.resized += lambda *args: pause_for_window_move(api, *args)

@@ -57,6 +57,19 @@ class DesktopAPI:
         self._perf = perf.PerfRecorder(self._output, model_name) if perf_diagnostics else None
         self._suggester = None
 
+    def _keyboard_suggester(self):
+        with self._lock:
+            if self._suggester is None:
+                path = self._preferences_path.with_name("keyboard-words.sqlite3")
+                try:
+                    self._suggester = Suggester.from_file(personal_path=path)
+                except OSError:
+                    self._suggester = Suggester([], personal_path=path)
+            return self._suggester
+
+    def _word_suggestions_enabled(self):
+        return self._preferences["word_suggestions"]
+
     def request_pointer_pause(self):
         self._pointer_pause.set()
 
@@ -214,13 +227,7 @@ class DesktopAPI:
                 elif action == "keyboard":
                     if s.phase == "results" or len(s.trials) == 12:
                         self._save("completed")
-                    if self._suggester is None:
-                        # Local word list only; a missing file leaves suggestions empty.
-                        try:
-                            self._suggester = Suggester.from_file()
-                        except OSError:
-                            self._suggester = Suggester([])
-                    s.start_keyboard(self._suggester)
+                    s.start_keyboard(self._keyboard_suggester())
                     s.keyboard.suggestions_on = self._preferences["word_suggestions"]
                     self._reset_filter = True
                 elif action == "key":

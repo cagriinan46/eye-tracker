@@ -285,9 +285,11 @@ word suggestions now, although FR-021 places them in a later stage.
 - **Suggestions:** four slots above the letters complete the current word from a
   local list of 20,000 word forms ranked by corpus frequency
   ([source and license](data/README.md)); with no word started they show the most
-  frequent words. Choosing one replaces the partial word and adds a space, which
+  frequent words. Personal word counts take precedence over corpus frequency. Up to
+  1,024 completed words are kept in the OS user’s ~/.eye-tracker/keyboard-words.sqlite3.
+  Choosing one replaces the partial word and adds a space, which
   gives way to closing punctuation. There is no language model, next-word
-  prediction, learning from the user or network access. The row is switched in
+  prediction or network access. Switching suggestions off also pauses learning. The row is switched in
   Settings ("Kelime önerisi"); when off, the letter rows use its space.
 - **Case:** shift applies to one letter and turns on at the start of the text and
   after `.`, `!` or `?`. Turkish pairs are kept apart (ı/I, i/İ).
@@ -297,7 +299,7 @@ word suggestions now, although FR-021 places them in a later stage.
   loss, stale gaze and heartbeat loss stop selection as elsewhere.
 - **Without calibration:** the keyboard opens with the camera off and keys can be
   clicked. Clicks are counted as `manual`, gaze selections as `gaze`.
-- **Records:** the typed text stays in memory and is never written. If a calibration
+- **Records:** the complete text stays in memory. The personal dictionary stores individual words and counts. If a calibration
   record is open, `session.json` gains a `keyboard` object with counts, elapsed time,
   words per minute (five characters per word) and the time to complete the fixed
   sentence "Bugün hava çok güzel."; a record that only used the keyboard is saved

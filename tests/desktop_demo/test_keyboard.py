@@ -253,3 +253,27 @@ def test_word_suggestions_follow_the_saved_setting_and_dark_theme_is_accepted(tm
     other = DesktopAPI(model_name="mgaze", output=tmp_path, preferences_path=path)
     assert other.snapshot()["preferences"]["theme"] == "dark"
     other.close()
+
+
+def test_personal_words_rank_and_survive_restart(tmp_path):
+    path = tmp_path / "keyboard-words.sqlite3"
+    keyboard = Keyboard(Suggester(WORDS, personal_path=path))
+    type_text(keyboard, "Merve. Meyve me")
+    assert keyboard.press("sug0", 20)
+    type_text(keyboard, "Merve merve ")
+    reopened = Keyboard(Suggester(WORDS, personal_path=path))
+    assert reopened.suggestions[0] == "Merve"
+    type_text(reopened, "Me")
+    assert reopened.suggestions[:2] == ["Merve", "Meyve"]
+    assert reopened.suggester.personal == {"merve": 3, "meyve": 2}
+    assert Suggester(WORDS, tmp_path / "other.sqlite3").suggest("me")[0] == "merhaba"
+
+
+def test_disabled_suggestions_and_unfinished_words_do_not_enter_dictionary(tmp_path):
+    path = tmp_path / "keyboard-words.sqlite3"
+    keyboard = Keyboard(Suggester(WORDS, personal_path=path))
+    keyboard.suggestions_on = False
+    type_text(keyboard, "Gizli ")
+    keyboard.suggestions_on = True
+    type_text(keyboard, "Yarım")
+    assert not path.exists()

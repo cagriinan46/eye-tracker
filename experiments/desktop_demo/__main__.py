@@ -61,7 +61,7 @@ def main():
 
         from .macos_keyboard import FocusKeyboard
 
-        keyboard = FocusKeyboard()
+        keyboard = FocusKeyboard(api._keyboard_suggester(), api._word_suggestions_enabled)
         window.events.closed += keyboard.close
         pointer = MacOSWindowPointer(window, api.pointer_sample, api.request_pointer_pause)
         window.events.closed += pointer.close

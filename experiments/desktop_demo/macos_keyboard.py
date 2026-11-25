@@ -7,7 +7,7 @@ import ApplicationServices as AX
 import Quartz
 from PyObjCTools import AppHelper
 
-from .keyboard import LETTER_ROWS, SYMBOL_ROWS, turkish_upper
+from .keyboard import LETTER_ROWS, SYMBOL_ROWS, is_word_character, turkish_upper
 
 
 def attribute(element, name):
@@ -79,7 +79,11 @@ class KeyboardPanel(UI.NSPanel):
 
 
 class FocusKeyboard:
-    def __init__(self):
+    def __init__(self, suggester, suggestions_enabled):
+        self.suggester = suggester
+        self.suggestions_enabled = suggestions_enabled
+        self.prefix = ""
+        self.options = []
         self.system = AX.AXUIElementCreateSystemWide()
         AX.AXUIElementSetMessagingTimeout(self.system, 0.1)
         self.panel = self.target = None
@@ -106,12 +110,41 @@ class FocusKeyboard:
             return None
         return pid, element
 
+    def prefix_at_caret(self):
+        """Check only the panel's typed prefix and the character before it."""
+        selected = attribute(self.target[1], "AXSelectedTextRange")
+        caret = ax_geometry(selected, AX.kAXValueCFRangeType)
+        if caret is None:
+            return False
+        location, length = caret
+        if length or location < len(self.prefix):
+            return False
+        start = max(0, location - len(self.prefix) - 1)
+        if location == 0:
+            return not self.prefix
+        span = AX.AXValueCreate(AX.kAXValueCFRangeType, (start, location - start))
+        error, value = AX.AXUIElementCopyParameterizedAttributeValue(
+            self.target[1], "AXStringForRange", span, None
+        )
+        if error or value is None or not value.endswith(self.prefix):
+            return False
+        return len(value) == len(self.prefix) or not is_word_character(value[0])
+
+    def suggestions(self):
+        if not self.suggestions_enabled() or not self.prefix_at_caret():
+            return []
+        options = self.suggester.suggest(self.prefix)
+        if self.prefix[:1].isupper() or (not self.prefix and self.shift):
+            return [turkish_upper(word[0]) + word[1:] for word in options]
+        return options
+
     def tick(self):
         if self.stopped:
             return
         target = self.focused()
         if target != self.target:
             self.target = target
+            self.prefix = ""
             self.shift = self.symbols = False
             if self.panel:
                 self.panel.orderOut_(None)
@@ -120,7 +153,7 @@ class FocusKeyboard:
                 self.build()
         elif target and self.panel and self.panel.isVisible():
             rect = panel_rect(target[1], self.fallback)
-            if not UI.NSEqualRects(rect, self.panel.frame()):
+            if not UI.NSEqualRects(rect, self.panel.frame()) or self.options != self.suggestions():
                 self.build(rect)
         AppHelper.callLater(0.25, self.tick)
 
@@ -156,8 +189,13 @@ class FocusKeyboard:
                 ("hide", "Kapat", 1),
             ]
         )
-        step = (height - 12) / 4
+        self.options = self.suggestions()
+        if self.options:
+            lines.insert(0, [(f"sug{i}", word, 1) for i, word in enumerate(self.options)])
+        step = (height - 12) / len(lines)
         for index, row in enumerate(lines):
+            if not row:
+                continue
             unit = (width - 16) / sum(weight for _, _, weight in row)
             x = 8
             for key, label, weight in row:
@@ -191,18 +229,37 @@ class FocusKeyboard:
             return
         # Send a normal editing event to the still-focused application. Its editor
         # owns caret position, selection replacement, undo, and deletion.
+        if key.startswith("sug"):
+            slot = int(key[3:])
+            if self.options != self.suggestions() or slot >= len(self.options):
+                self.build()
+                return
+            word = self.options[slot]
+            char = word[len(self.prefix) :] + " "
+            self.suggester.remember(word)
+            self.prefix = ""
+        elif key == "backspace":
+            char = ""
+            self.prefix = self.prefix[:-1] if self.prefix_at_caret() else ""
+        else:
+            char = {"space": " ", "period": "."}.get(key, key)
+            char = turkish_upper(char) if self.shift else char
+            if not self.suggestions_enabled() or not self.prefix_at_caret():
+                self.prefix = ""
+            elif is_word_character(char):
+                self.prefix += char
+            else:
+                self.suggester.remember(self.prefix)
+                self.prefix = ""
         pid, _ = self.target
         for down in (True, False):
             event = Quartz.CGEventCreateKeyboardEvent(None, 51 if key == "backspace" else 0, down)
             Quartz.CGEventSetFlags(event, 0)
             if key != "backspace":
-                char = {"space": " ", "period": "."}.get(key, key)
-                char = turkish_upper(char) if self.shift else char
                 Quartz.CGEventKeyboardSetUnicodeString(event, len(char), char)
             Quartz.CGEventPostToPid(pid, event)
-        if self.shift:
-            self.shift = False
-            self.build()
+        self.shift = False
+        self.build()
 
     def start(self):
         AppHelper.callAfter(self.tick)

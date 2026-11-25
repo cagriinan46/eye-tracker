@@ -105,7 +105,7 @@ class Display:
         self.font = pygame.font.SysFont("Helvetica", 24)
         self.size = self.screen.get_size()
 
-    def poll(self):
+    def poll(self, button=None):
         start = False
         for event in self.pg.event.get():
             if event.type == self.pg.QUIT or (
@@ -114,9 +114,16 @@ class Display:
                 raise KeyboardInterrupt
             if event.type == self.pg.KEYDOWN and event.key == self.pg.K_SPACE:
                 start = True
+            if (
+                button is not None
+                and event.type == self.pg.MOUSEBUTTONUP
+                and event.button == 1
+                and button.collidepoint(event.pos)
+            ):
+                start = True
         return start
 
-    def draw(self, lines, target=None):
+    def draw(self, lines, target=None, action=None):
         self.screen.fill((25, 29, 41))
         w, h = self.size
         for i, line in enumerate(lines):
@@ -127,11 +134,19 @@ class Display:
             point = (round(target[0] * w), round(target[1] * h))
             self.pg.draw.circle(self.screen, (110, 201, 254), point, 13, 3)
             self.pg.draw.circle(self.screen, (255, 255, 255), point, 4)
+        button = None
+        if action:
+            button = self.pg.Rect(0, 0, 240, 54)
+            button.midtop = (w // 2, h // 2 + len(lines) * 40 - 36)
+            self.pg.draw.rect(self.screen, (110, 201, 254), button, border_radius=8)
+            label = self.font.render(action, True, (25, 29, 41))
+            self.screen.blit(label, label.get_rect(center=button.center))
         self.pg.display.flip()
+        return button
 
-    def wait(self, lines):
-        self.draw([*lines, "Başlamak için boşluk tuşu   ·   Çıkmak için Esc"])
-        while not self.poll():
+    def wait(self, lines, action="Devam et"):
+        button = self.draw([*lines, "Boşluk ile devam   ·   Esc ile çıkış"], action=action)
+        while not self.poll(button):
             self.pg.time.wait(30)
 
 
@@ -193,7 +208,8 @@ def run(output, camera_index):
             [
                 "UniGaze ve ETH-XGaze aynı anda ölçülecek.",
                 "Rahat otur. Hedefin ortasına bakabilirsin, gözünü kırpabilirsin.",
-            ]
+            ],
+            action="Deneye başla",
         )
         display.draw(["Modeller hazırlanıyor…"])
         with ExitStack() as stack:

@@ -13,6 +13,28 @@ from experiments.unigaze.smoothing import StreamFilter
 from .replay import calibration_rows, features, metrics, pose_reference, small_motion
 
 
+class PersonalCorrection:
+    """Smooth residual of the baseline at the median of each calibration target."""
+
+    def __init__(self, model, x, y):
+        labels = np.asarray(list(dict.fromkeys(map(tuple, y))))
+        anchors = [np.median(x[np.all(y == target, axis=1)], axis=0) for target in labels]
+        self.locations = np.array([model.predict(a) for a in anchors])
+        distances = np.linalg.norm(self.locations[:, None] - self.locations, axis=2)
+        np.fill_diagonal(distances, np.inf)
+        self.width = np.median(distances.min(axis=1))
+        if not np.isfinite(self.width) or self.width <= 0:
+            raise ValueError("Kalibrasyon noktaları birbirinden ayrılamadı.")
+        kernel = self.weights(self.locations[:, None])
+        self.coeff = np.linalg.solve(kernel + 0.25 * np.eye(len(labels)), labels - self.locations)
+
+    def weights(self, point):
+        return np.exp(-np.sum((point - self.locations) ** 2, axis=-1) / (2 * self.width**2))
+
+    def correct(self, predicted):
+        return predicted + self.weights(predicted) @ self.coeff
+
+
 def replay(folder):
     training = calibration_rows(folder)
     center, rotation = pose_reference(training)
@@ -26,15 +48,7 @@ def replay(folder):
         x = np.array([features(r, signal) for r in training])
         model = Ridge(standardize=True)
         model.fit(x, y)
-        anchors = np.median(x.reshape(13, 20, 2), axis=1)
-        locations = np.array([model.predict(a) for a in anchors])
-        residual = y[::20] - locations
-        distances = np.linalg.norm(locations[:, None] - locations, axis=2)
-        np.fill_diagonal(distances, np.inf)
-        width = np.median(distances.min(axis=1))
-        kernel = np.exp(-np.sum((locations[:, None] - locations) ** 2, axis=2) / (2 * width**2))
-        coeff = np.linalg.solve(kernel + 0.25 * np.eye(len(kernel)), residual)
-        fits[signal] = model, locations, width, coeff
+        fits[signal] = model, PersonalCorrection(model, x, y)
 
     filters = {key: StreamFilter() for key in fits}
     errors = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
@@ -49,10 +63,9 @@ def replay(folder):
         groups = [condition]
         if condition == "normal" and small_motion(row, center, rotation):
             groups.append("small_motion")
-        for signal, (model, locations, width, coeff) in fits.items():
+        for signal, (model, correction) in fits.items():
             predicted = model.predict(features(row, signal))
-            weights = np.exp(-np.sum((predicted - locations) ** 2, axis=1) / (2 * width**2))
-            point, _ = filters[signal].update(predicted + weights @ coeff, row["timestamp_ns"])
+            point, _ = filters[signal].update(correction.correct(predicted), row["timestamp_ns"])
             if row["scored"] and target not in labels:
                 for group in groups:
                     errors[group][signal][target].append((point - np.asarray(target)) * size)

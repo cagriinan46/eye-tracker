@@ -1,0 +1,328 @@
+"""Paired, read-only gaze scoring on the real focus keyboard and a separate editor."""
+
+import argparse
+import json
+import multiprocessing
+import os
+import time
+from collections import defaultdict
+from pathlib import Path
+from uuid import uuid4
+
+import AppKit as UI
+import numpy as np
+from Foundation import NSDate, NSDefaultRunLoopMode
+from PyObjCTools import AppHelper
+
+from experiments.desktop_demo.macos_keyboard import AX, FocusKeyboard, panel_rect, turkish_upper
+from experiments.desktop_demo.protocol import UNIGAZE_POINTS
+from experiments.desktop_demo.unigaze_model import CameraModel
+from experiments.unigaze.mapping import Ridge
+from experiments.unigaze.settings import ROOT
+from experiments.unigaze.smoothing import StreamFilter
+
+from .local_residual import PersonalCorrection
+from .replay import metrics
+
+KEYS = ("ç", "e", "k", "z", "ü", "a", "m", "ı", "s", "g")
+
+
+def panel_process(pipe, editor_pid):
+    app = UI.NSApplication.sharedApplication()
+    app.setActivationPolicy_(UI.NSApplicationActivationPolicyAccessory)
+    kb = FocusKeyboard()
+    key = None
+
+    def poll():
+        nonlocal key
+        try:
+            if pipe.poll():
+                key = pipe.recv()
+                if key is None:
+                    AppHelper.stopEventLoop()
+                    return
+            if key is None:
+                AppHelper.callLater(0.1, poll)
+                return
+            focus = kb.focused()
+            if not focus or focus[0] != editor_pid:
+                kb.target = None
+                if kb.panel:
+                    kb.panel.orderOut_(None)
+                pipe.send((time.monotonic(), None, None))
+            else:
+                if focus != kb.target:
+                    kb.target = focus
+                    kb.fallback = UI.NSEvent.mouseLocation()
+                    kb.build()
+                rect = panel_rect(focus[1], kb.fallback)
+                if not UI.NSEqualRects(rect, kb.panel.frame()):
+                    kb.build(rect)
+                bounds = None
+                for button in kb.panel.contentView().subviews():
+                    selected = button.identifier() == key
+                    button.setBezelColor_(UI.NSColor.systemYellowColor() if selected else None)
+                    if selected:
+                        r = kb.panel.convertRectToScreen_(button.frame())
+                        h = UI.NSScreen.screens()[0].frame().size.height
+                        bounds = [r.origin.x, h - UI.NSMaxY(r), r.size.width, r.size.height]
+                kb.panel.displayIfNeeded()
+                pipe.send((time.monotonic(), key, bounds))
+        except (EOFError, BrokenPipeError):
+            AppHelper.stopEventLoop()
+            return
+        AppHelper.callLater(0.1, poll)
+
+    AppHelper.callAfter(poll)
+    AppHelper.runEventLoop()
+
+
+class Controls(UI.NSObject):
+    def begin_(self, sender):
+        self.started = True
+
+    def windowShouldClose_(self, window):
+        self.cancelled = True
+        return False
+
+
+class Editor:
+    def __init__(self):
+        self.app = UI.NSApplication.sharedApplication()
+        self.app.setActivationPolicy_(UI.NSApplicationActivationPolicyRegular)
+        self.controls = Controls.alloc().init()
+        self.controls.started = self.controls.cancelled = False
+        self.window = UI.NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
+            ((100, 200), (700, 200)),
+            UI.NSWindowStyleMaskTitled | UI.NSWindowStyleMaskClosable,
+            UI.NSBackingStoreBuffered,
+            False,
+        )
+        self.window.setTitle_("Masaüstü klavyesi · Bakış ölçümü")
+        self.window.setDelegate_(self.controls)
+        self.label = UI.NSTextField.wrappingLabelWithString_(
+            "Önce 13 noktaya, sonra klavyede sırayla işaretlenen 10 tuşa bak. Rahatça oturabilirsin."
+        )
+        self.label.setFont_(UI.NSFont.systemFontOfSize_(19))
+        self.label.setFrame_(((20, 112), (660, 65)))
+        self.window.contentView().addSubview_(self.label)
+        self.field = UI.NSTextField.alloc().initWithFrame_(((20, 65), (660, 34)))
+        self.field.setPlaceholderString_("Klavye ölçüm alanı")
+        self.window.contentView().addSubview_(self.field)
+        self.button = UI.NSButton.buttonWithTitle_target_action_(
+            "Deneye başla", self.controls, "begin:"
+        )
+        self.button.setFrame_(((255, 12), (190, 40)))
+        self.button.setKeyEquivalent_(" ")
+        self.window.contentView().addSubview_(self.button)
+        self.window.center()
+        self.app.finishLaunching()
+        self.window.makeKeyAndOrderFront_(None)
+        self.app.activateIgnoringOtherApps_(True)
+        frame = UI.NSScreen.screens()[0].frame()
+        self.size = np.array(tuple(frame.size))
+        self.overlay = UI.NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
+            frame, UI.NSWindowStyleMaskBorderless, UI.NSBackingStoreBuffered, False
+        )
+        self.overlay.setLevel_(UI.NSStatusWindowLevel)
+        self.overlay.setBackgroundColor_(UI.NSColor.darkGrayColor())
+        self.dot = UI.NSView.alloc().initWithFrame_(((0, 0), (10, 10)))
+        self.dot.setWantsLayer_(True)
+        self.dot.layer().setCornerRadius_(5)
+        self.dot.layer().setBackgroundColor_(UI.NSColor.whiteColor().CGColor())
+        self.overlay.contentView().addSubview_(self.dot)
+
+    def pump(self):
+        for _ in range(32):
+            event = self.app.nextEventMatchingMask_untilDate_inMode_dequeue_(
+                UI.NSEventMaskAny, NSDate.date(), NSDefaultRunLoopMode, True
+            )
+            if event is None:
+                break
+            if event.type() == UI.NSEventTypeKeyDown and event.keyCode() == 53:
+                self.controls.cancelled = True
+            self.app.sendEvent_(event)
+        if self.controls.cancelled:
+            raise KeyboardInterrupt
+        self.app.updateWindows()
+
+    def fixation(self, target):
+        x, y = target * self.size
+        self.dot.setFrameOrigin_((x - 5, self.size[1] - y - 5))
+        self.overlay.orderFrontRegardless()
+        self.overlay.display()
+
+
+def calibrate(ui, camera):
+    x, y = [], []
+    for target in UNIGAZE_POINTS:
+        ui.fixation(np.array(target))
+        onset = time.monotonic()
+        start = len(x)
+        while len(x) - start < 16:
+            ui.pump()
+            stamp, angles, _, _ = camera.read()
+            if not ui.app.isActive():
+                raise RuntimeError("Pencere odağı değişti. Kalibrasyonu yeniden başlat.")
+            if stamp > onset + 12:
+                raise RuntimeError("Kalibrasyon noktasında yeterli göz verisi alınamadı.")
+            if angles is not None and stamp >= onset + 1 and time.monotonic() - stamp <= 0.3:
+                x.append(angles)
+                y.append(target)
+    model = Ridge(standardize=True)
+    x, y = np.asarray(x), np.asarray(y)
+    model.fit(x, y)
+    correction = PersonalCorrection(model, x, y)
+    ui.overlay.orderOut_(None)
+    return model, correction
+
+
+def measure(ui, camera, pipe, rows, model, correction):
+    ui.window.makeKeyAndOrderFront_(None)
+    ui.app.activateIgnoringOtherApps_(True)
+    ui.window.makeFirstResponder_(ui.field)
+    for key in KEYS:
+        ui.label.setStringValue_(f"İşaretli {turkish_upper(key)} tuşunun ortasına bak.")
+        ui.window.display()
+        pipe.send(key)
+        deadline = time.monotonic() + 30
+        onset = bounds = None
+        observation = (0, None, None)
+        filters = [StreamFilter(), StreamFilter()]
+        trial = []
+        while True:
+            ui.pump()
+            if time.monotonic() > deadline:
+                raise RuntimeError("Hedef tuş veya yeterli güncel bakış verisi alınamadı.")
+            stamp, angles, _, _ = camera.read()
+            # Discard evidence whenever the highlighted key or its rectangle changes.
+            while pipe.poll():
+                observation = pipe.recv()
+                seen, selected, rect = observation
+                if selected != key or rect != bounds:
+                    onset = seen
+                    bounds = rect if selected == key else None
+                    trial.clear()
+                    for stream in filters:
+                        stream.reset()
+            seen, selected, rect = observation
+            if not bounds or onset is None or stamp < onset or time.monotonic() - seen > 0.4:
+                continue
+            raw = (
+                model.predict(angles)
+                if angles is not None and time.monotonic() - stamp <= 0.3
+                else None
+            )
+            points = [
+                stream.update(value, int(stamp * 1e9))[0]
+                for stream, value in zip(
+                    filters,
+                    (raw, correction.correct(raw) if raw is not None else None),
+                    strict=True,
+                )
+            ]
+            if stamp - onset >= 1:
+                trial.append(
+                    dict(
+                        key=key,
+                        rect=bounds,
+                        stamp=stamp,
+                        points=[
+                            (np.asarray(v) * ui.size).tolist() if v is not None else None
+                            for v in points
+                        ],
+                    )
+                )
+            if stamp - onset >= 3 and sum(r["points"][0] is not None for r in trial) >= 5:
+                rows.extend(trial)
+                break
+
+
+def summarize(rows):
+    result = {}
+    for index, name in enumerate(("baseline", "personal")):
+        errors, hits = defaultdict(list), defaultdict(list)
+        for row in rows:
+            point = row["points"][index]
+            if point is None:
+                continue
+            x, y, w, h = row["rect"]
+            errors[row["key"]].append(np.asarray(point) - [x + w / 2, y + h / 2])
+            hits[row["key"]].append(x <= point[0] < x + w and y <= point[1] < y + h)
+        if hits:
+            result[name] = dict(
+                metrics(errors), correct_key=float(np.mean([np.mean(v) for v in hits.values()]))
+            )
+    return result
+
+
+def run(output):
+    ui = Editor()
+    output.mkdir(parents=True, exist_ok=True)
+    path = output / f"keyboard-transfer-{uuid4().hex[:12]}.json"
+    rows = []
+    status = "interrupted"
+    try:
+        while not ui.controls.started:
+            ui.pump()
+            time.sleep(0.02)
+        if not AX.AXIsProcessTrusted():
+            raise RuntimeError("Masaüstü klavyesi için macOS Erişilebilirlik izni gerekiyor.")
+        ui.button.setHidden_(True)
+        ui.label.setStringValue_("Kamera hazırlanıyor…")
+        ui.window.display()
+        camera = CameraModel()
+        try:
+            model, correction = calibrate(ui, camera)
+            parent, child = multiprocessing.Pipe()
+            helper = multiprocessing.get_context("spawn").Process(
+                target=panel_process, args=(child, os.getpid())
+            )
+            helper.start()
+            child.close()
+            try:
+                measure(ui, camera, parent, rows, model, correction)
+                status = "completed"
+            finally:
+                parent.close()
+                helper.join(timeout=2)
+                if helper.is_alive():
+                    helper.terminate()
+                    helper.join()
+        finally:
+            camera.close()
+    except KeyboardInterrupt:
+        pass
+    except Exception as error:
+        status = str(error)
+    finally:
+        ui.overlay.orderOut_(None)
+    report = summarize(rows)
+    path.write_text(
+        json.dumps(
+            dict(status=status, screen_size=ui.size.tolist(), keys=KEYS, rows=rows, report=report),
+            allow_nan=False,
+        )
+    )
+    print(path, status, flush=True)
+    if status != "interrupted":
+        ui.controls.started = False
+        if status == "completed":
+            base, personal = report["baseline"], report["personal"]
+            ui.label.setStringValue_(
+                f"Doğru tuş: %{100 * base['correct_key']:.0f} → %{100 * personal['correct_key']:.0f}  ·  "
+                f"Merkeze uzaklık: {base['mean_px']:.1f} → {personal['mean_px']:.1f} px"
+            )
+        else:
+            ui.label.setStringValue_(status)
+        ui.button.setTitle_("Kapat")
+        ui.button.setHidden_(False)
+        while not ui.controls.started and not ui.controls.cancelled:
+            ui.pump()
+            time.sleep(0.03)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--output", type=Path, default=ROOT / "validation/results")
+    run(parser.parse_args().output)

@@ -76,7 +76,7 @@ function render(s){
   state=s;document.title='Eye Tracker · '+(s.model_name==='mgaze'?'MGaze':'UniGaze');const phase=s.phase;const measurement=['calibration','calibration_retry','check','fitting'].includes(phase);
   if(lastToken!==s.token){
     lastToken=s.token;acknowledged=null;
-    show(phase.startsWith('desktop_')?'desktop':measurement?'measurement':['ready','demo','results','keyboard'].includes(phase)?phase:'preparation');
+    show(phase==='desktop_click'?'desktop':measurement?'measurement':['ready','demo','results','keyboard'].includes(phase)?phase:'preparation');
     if(phase==='results')results(s);
     if(phase==='error'){page('calibration');}
     if(['ready','results'].includes(phase))activePage='practice';
@@ -120,13 +120,6 @@ function render(s){
   if(s.trials.length<appliedTrial)appliedTrial=0;
   while(appliedTrial<s.trials.length){const trial=s.trials[appliedTrial++];if(trial.selected)activateControl(trial.selected);}
   $('startDesktop').classList.toggle('hidden',!s.desktop_supported);
-  if(phase.startsWith('desktop_')){
-    const preview=phase==='desktop_preview';
-    $('desktopTitle').textContent=preview?'Masaüstü önizlemesi':'Masaüstü tıklaması açık';
-    $('desktopHelp').textContent=preview?'Başka bir uygulamaya geç. Bir düğmeye veya metin alanına 1,2 saniye bak. Yeşil halkayı görünce buraya dönüp tıklamayı açabilirsin.':'Başka bir uygulamaya geç. Halka dolunca bir kez sol tıklanır. Yeni seçim için bakışını hedeften ayır.';
-    $('enableClick').classList.toggle('hidden',!preview);
-    $('enableClick').disabled=!s.desktop_previewed;
-  }
   if(phase==='ready')$('checkError').textContent=Math.round(s.checks.reduce((v,r)=>v+r.mean_px,0)/s.checks.length)+' px';
   if(phase==='demo'){
     $('instruction').textContent=s.paused?'Mola veriyoruz.':s.instruction||'“'+names[s.expected]+'” öğesini seç.';
@@ -228,8 +221,7 @@ $('webSearch').addEventListener('input',()=>{
 $('cameraStart').onclick=()=>act(['ready','loading'].includes(state?.camera)?'stop_camera':'camera');
 const calibrate=()=>act('calibrate',{geometry:geometry()});
 for(const id of ['calibrate','recalibrateReady','recalibrateResult'])$(id).onclick=calibrate;
-$('startDesktop').onclick=()=>act('desktop_preview');
-$('enableClick').onclick=()=>act('desktop_click');
+$('startDesktop').onclick=()=>act('desktop_click');
 $('endDesktop').onclick=()=>act('pause');
 for(const id of ['startDemo','again','practiceStart'])$(id).onclick=()=>act('demo');
 for(const id of ['homeDemo','homeReady','homeResult'])$(id).onclick=()=>navigate('home');

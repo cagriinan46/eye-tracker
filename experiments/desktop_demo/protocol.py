@@ -294,7 +294,7 @@ class Session:
         self.stabilizer.reset()
         if self.phase in ("demo", "keyboard") and self.paused_at is None:
             self.paused_at = now
-        elif self.phase in ("desktop_preview", "desktop_click"):
+        elif self.phase == "desktop_click":
             self.transition("ready")
         elif self.phase in ("calibration", "calibration_retry", "check", "fitting"):
             self.calibrated = False

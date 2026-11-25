@@ -6,18 +6,15 @@ import pytest
 from experiments.desktop_demo.runtime import DesktopAPI
 
 
-def test_desktop_preview_requires_calibration_and_click_requires_preview(tmp_path):
+def test_desktop_click_starts_directly_after_calibration(tmp_path):
     api = DesktopAPI(output=tmp_path)
     api._desktop_supported = True
     api._desktop_permission = lambda: True
-    assert not api.command("desktop_preview")["ok"]
+    assert not api.command("desktop_click")["ok"]
     s = api._session
     s.calibrated = True
     s.transition("ready")
     api._camera = "ready"
-    assert api.command("desktop_preview")["ok"]
-    assert not api.command("desktop_click")["ok"]
-    api._desktop_preview_complete(s.token)
     assert api.command("desktop_click")["ok"]
     api.command("focus", {"active": False})
     s.last_point = [0.3, 0.4]
@@ -31,7 +28,7 @@ def test_desktop_preview_requires_calibration_and_click_requires_preview(tmp_pat
     api.close()
 
 
-def test_preview_and_native_click_once_per_visit(monkeypatch):
+def test_native_click_once_per_visit(monkeypatch):
     mac = pytest.importorskip("experiments.desktop_demo.macos_desktop_dwell")
     rect = mac.UI.NSMakeRect(0, 0, 400, 400)
     window = Mock()
@@ -54,11 +51,12 @@ def test_preview_and_native_click_once_per_visit(monkeypatch):
         api._desktop_frame.return_value = frame
         controller.observe(frame)
 
-    for _ in range(24):
-        sample("desktop_preview", 1, [0.1, 0.2])
-    api._desktop_preview_complete.assert_called_once_with(1)
+    for _ in range(12):
+        sample("desktop_click", 2, [0.1, 0.2])
     post.assert_not_called()
-    for _ in range(34):
+    sample("desktop_click", 2, [0.1, 0.2])
+    assert post.call_count == 2
+    for _ in range(22):
         sample("desktop_click", 2, [0.1, 0.2])
     assert post.call_count == 2
     for _ in range(12):

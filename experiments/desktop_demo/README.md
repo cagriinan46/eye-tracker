@@ -404,11 +404,9 @@ python -m pip install pyobjc-framework-ApplicationServices==12.2.2 pyobjc-framew
 ### Desktop dwell on macOS
 
 After calibration, choose **Masaüstünde dene** or **12 hedefli testi başlat**.
-For desktop preview, switch to another application and look at an enabled
-button or editable field. The ring fills over 1.2 seconds of observed time
-on that control. After one completed preview, return to Eye Tracker and choose
-**Sol tıklamayı aç** to enable one left click per visit. Esc ends either mode
-and returns to the calibration choices. Focusing an external editable field
+In desktop mode, look at an enabled button or editable field in another application.
+The ring fills over 1.2 seconds on that control and immediately triggers one left
+click. Esc returns to the calibration choices. Focusing an external editable field
 opens the compact keyboard. Its keys participate in the same dwell mode.
 
 Desktop mode uses the calibrated window's content rectangle in screen coordinates.

@@ -181,7 +181,7 @@ class DesktopDwell:
         return ((pid, node), rect) if UI.NSPointInRect(cocoa, rect) else None
 
     def observe(self, frame):
-        mode, token, captured, gaze = frame
+        _, token, captured, gaze = frame
         if token != self.token:
             self.reset(token)
         if not AX.AXIsProcessTrusted() or self.escape_down():
@@ -223,10 +223,7 @@ class DesktopDwell:
         self.ring.orderFrontRegardless()
         if not fired or self.latched_rect:
             return
-        if mode == "desktop_preview":
-            self.latched_rect = target[1]
-            self.api._desktop_preview_complete(token)
-        elif self.hit(point, cocoa) == target:
+        if self.hit(point, cocoa) == target:
             # Revalidate after AX IPC, immediately before posting the mouse pair.
             current = self.api._desktop_frame()
             if (

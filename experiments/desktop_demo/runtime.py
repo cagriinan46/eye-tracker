@@ -58,7 +58,6 @@ class DesktopAPI:
         self._suggester = None
         self._desktop_supported = False
         self._desktop_permission = lambda: False
-        self._desktop_previewed = False
         self._desktop_heartbeat = 0.0
 
     def _desktop_frame(self):
@@ -66,7 +65,7 @@ class DesktopAPI:
         with self._lock:
             s = self._session
             now = time.monotonic()
-            if s.phase not in ("desktop_preview", "desktop_click") or self._closed:
+            if s.phase != "desktop_click" or self._closed:
                 return None
             self._desktop_heartbeat = now
             valid = (
@@ -78,11 +77,6 @@ class DesktopAPI:
                 and 0 <= now - self._pointer_captured <= 0.3
             )
             return (s.phase, s.token, self._pointer_captured, s.last_point if valid else None)
-
-    def _desktop_preview_complete(self, token):
-        with self._lock:
-            if self._session.phase == "desktop_preview" and self._session.token == token:
-                self._desktop_previewed = True
 
     def request_pointer_pause(self):
         self._pointer_pause.set()
@@ -136,7 +130,6 @@ class DesktopAPI:
                 preview=self._preview,
                 tracking=self._tracking,
                 desktop_supported=self._desktop_supported,
-                desktop_previewed=self._desktop_previewed,
                 signal_status=self._signal_status,
                 record_path=str(self._folder) if self._folder else None,
                 preferences=dict(self._preferences),
@@ -226,21 +219,17 @@ class DesktopAPI:
                     s.set_regions(payload["regions"])
                 elif action == "geometry":
                     s.geometry_changed(payload["geometry"])
-                elif action in ("desktop_preview", "desktop_click"):
-                    required = "ready" if action == "desktop_preview" else "desktop_preview"
+                elif action == "desktop_click":
                     if (
                         not self._desktop_supported
                         or not self._focused
                         or self._camera != "ready"
                         or not s.calibrated
-                        or s.phase != required
+                        or s.phase != "ready"
                     ):
                         raise ValueError("Masaüstü denemesi için göz ayarını tamamla.")
                     if not self._desktop_permission():
                         raise ValueError("Sistem Ayarları’nda Erişilebilirlik iznini aç.")
-                    if action == "desktop_click" and not self._desktop_previewed:
-                        raise ValueError("Önce masaüstünde bir hedefin halkasını doldur.")
-                    self._desktop_previewed = False
                     self._desktop_heartbeat = now
                     self._pointer_captured = 0
                     s.transition(action)
@@ -282,7 +271,7 @@ class DesktopAPI:
                         self._reset_filter = True
                 elif action == "focus":
                     self._focused = bool(payload["active"])
-                    if not self._focused and s.phase not in ("desktop_preview", "desktop_click"):
+                    if not self._focused and s.phase != "desktop_click":
                         s.pause(now)
                         self._reset_filter = True
                 else:
@@ -434,7 +423,7 @@ class DesktopAPI:
                         )
                     if jpeg is not None:
                         self._preview = jpeg
-                    desktop = s.phase in ("desktop_preview", "desktop_click")
+                    desktop = s.phase == "desktop_click"
                     if (desktop and now - self._desktop_heartbeat > 0.8) or (
                         not desktop and (now - self._last_ui > 0.8 or not self._focused)
                     ):

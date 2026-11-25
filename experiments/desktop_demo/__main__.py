@@ -46,6 +46,7 @@ def main():
         html=html(),
         js_api=api,
         width=1280,
+        maximized=sys.platform == "darwin",
         height=800,
         min_size=(960, 640),
         resizable=True,
@@ -57,9 +58,14 @@ def main():
     if sys.platform == "darwin":
         from eye_tracker.platform_adapters.macos_window_pointer import MacOSWindowPointer
 
-        from .macos_keyboard import FocusKeyboard
+        from .macos_desktop_dwell import DesktopDwell
+        from .macos_keyboard import AX, FocusKeyboard
 
         keyboard = FocusKeyboard()
+        desktop = DesktopDwell(window, api, keyboard)
+        api._desktop_supported = True
+        api._desktop_permission = AX.AXIsProcessTrusted
+        window.events.closed += desktop.close
         window.events.closed += keyboard.close
         pointer = MacOSWindowPointer(window, api.pointer_sample, api.request_pointer_pause)
         window.events.closed += pointer.close
@@ -71,6 +77,7 @@ def main():
         if pointer:
             pointer.start()
             keyboard.start()
+            desktop.start()
 
     try:
         webview.start(

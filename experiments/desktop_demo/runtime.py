@@ -56,6 +56,33 @@ class DesktopAPI:
         # Opt-in timing aggregates (issue #145); None keeps normal runs unchanged.
         self._perf = perf.PerfRecorder(self._output, model_name) if perf_diagnostics else None
         self._suggester = None
+        self._desktop_supported = False
+        self._desktop_permission = lambda: False
+        self._desktop_previewed = False
+        self._desktop_heartbeat = 0.0
+
+    def _desktop_frame(self):
+        """Native heartbeat stays active when the WebView is behind another app."""
+        with self._lock:
+            s = self._session
+            now = time.monotonic()
+            if s.phase not in ("desktop_preview", "desktop_click") or self._closed:
+                return None
+            self._desktop_heartbeat = now
+            valid = (
+                s.calibrated
+                and self._tracking
+                and self._camera == "ready"
+                and not self._stop.is_set()
+                and not self._pointer_pause.is_set()
+                and 0 <= now - self._pointer_captured <= 0.3
+            )
+            return (s.phase, s.token, self._pointer_captured, s.last_point if valid else None)
+
+    def _desktop_preview_complete(self, token):
+        with self._lock:
+            if self._session.phase == "desktop_preview" and self._session.token == token:
+                self._desktop_previewed = True
 
     def request_pointer_pause(self):
         self._pointer_pause.set()
@@ -108,6 +135,8 @@ class DesktopAPI:
                 model_name=self._model_name,
                 preview=self._preview,
                 tracking=self._tracking,
+                desktop_supported=self._desktop_supported,
+                desktop_previewed=self._desktop_previewed,
                 signal_status=self._signal_status,
                 record_path=str(self._folder) if self._folder else None,
                 preferences=dict(self._preferences),
@@ -197,6 +226,24 @@ class DesktopAPI:
                     s.set_regions(payload["regions"])
                 elif action == "geometry":
                     s.geometry_changed(payload["geometry"])
+                elif action in ("desktop_preview", "desktop_click"):
+                    required = "ready" if action == "desktop_preview" else "desktop_preview"
+                    if (
+                        not self._desktop_supported
+                        or not self._focused
+                        or self._camera != "ready"
+                        or not s.calibrated
+                        or s.phase != required
+                    ):
+                        raise ValueError("Masaüstü denemesi için göz ayarını tamamla.")
+                    if not self._desktop_permission():
+                        raise ValueError("Sistem Ayarları’nda Erişilebilirlik iznini aç.")
+                    if action == "desktop_click" and not self._desktop_previewed:
+                        raise ValueError("Önce masaüstünde bir hedefin halkasını doldur.")
+                    self._desktop_previewed = False
+                    self._desktop_heartbeat = now
+                    self._pointer_captured = 0
+                    s.transition(action)
                 elif action == "demo":
                     if not self._focused:
                         raise ValueError("Önce uygulama penceresine dön.")
@@ -235,7 +282,7 @@ class DesktopAPI:
                         self._reset_filter = True
                 elif action == "focus":
                     self._focused = bool(payload["active"])
-                    if not self._focused:
+                    if not self._focused and s.phase not in ("desktop_preview", "desktop_click"):
                         s.pause(now)
                         self._reset_filter = True
                 else:
@@ -387,7 +434,10 @@ class DesktopAPI:
                         )
                     if jpeg is not None:
                         self._preview = jpeg
-                    if now - self._last_ui > 0.8 or not self._focused:
+                    desktop = s.phase in ("desktop_preview", "desktop_click")
+                    if (desktop and now - self._desktop_heartbeat > 0.8) or (
+                        not desktop and (now - self._last_ui > 0.8 or not self._focused)
+                    ):
                         s.pause(now)
                         self._reset_filter = True
                     if token != s.token or self._reset_filter:

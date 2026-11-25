@@ -400,3 +400,19 @@ the additional bridge in the same Python environment as pywebview:
 ```sh
 python -m pip install pyobjc-framework-ApplicationServices==12.2.2 pyobjc-framework-CoreText==12.2.2 pyobjc-framework-FSEvents==12.2.2 pyobjc-core==12.2.2
 ```
+
+### Desktop dwell on macOS
+
+After calibration, choose **Masaüstünde dene** or **12 hedefli testi başlat**.
+For desktop preview, switch to another application and look at an enabled
+button or editable field. The ring fills over 1.2 seconds of observed time
+on that control. After one completed preview, return to Eye Tracker and choose
+**Sol tıklamayı aç** to enable one left click per visit. Esc ends either mode
+and returns to the calibration choices. Focusing an external editable field
+opens the compact keyboard. Its keys participate in the same dwell mode.
+
+Desktop mode uses the calibrated window's content rectangle in screen coordinates.
+The macOS window starts maximized. Moving or resizing it requires recalibration.
+Desktop targeting uses an accessibility hit at the gaze point. Unverified controls,
+secure fields and empty space receive no click. Tracking gaps accrue no dwell,
+and staying on a clicked control cannot repeat the click after a blink.

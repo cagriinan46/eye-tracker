@@ -1,0 +1,54 @@
+# Comfortable-posture gaze replay, 2026-11-25
+
+The working target is ≤20 logical screen pixels of mean radial error during comfortable posture, including small head movements. The four archived sessions come from one participant on one day at 1512 × 982 logical pixels. None establishes that target. The desktop application and the personal calibration procedure were not modified.
+
+## Procedure
+
+Each session supplies 13 personal calibration targets, with 20 evenly spaced jointly valid frames from the successful attempt at each. Evaluation uses the original scored frames on eight other locations, with equal weight for each target and session. All candidates use the same causal replay of the upstream look-ahead filter with three samples of history lag once warmed up. The entire recorded evaluation stream, including transitions, reaches the filter. Invalid observations reset it. The script also reports raw results and availability.
+
+The small-motion subset is an exploratory proxy inside normal-posture blocks. Relative to the calibration median, the estimated 3D face-center displacement is at most 4% of calibration depth and the head rotation at most 7°. At least one lower bound must also be reached (0.5% of depth or 1°). These thresholds describe displacement from calibration, not physical millimeters, head speed or verified participant comfort. It includes 1,030 of 1,101 eligible unseen-target frames across the normal blocks, covering all eight targets per session. Deliberate tilt and lateral shift each have just one block and are reported separately.
+
+## Filtered results
+
+Mean radial error in logical pixels. Columns average sessions equally except for the single deliberate movement blocks.
+
+| Mapping | Normal | Small motion | Deliberate tilt | Deliberate lateral shift |
+|---|---:|---:|---:|---:|
+| UniGaze angles, linear baseline | 39.2 | 39.5 | 97.4 | 330.1 |
+| MGaze, replay from its recorded predictions | 83.0 | 82.9 | 468.8 | 159.8 |
+| Face center + ray projected to camera-depth zero | 40.6 | 40.9 | 126.1 | 58.6 |
+| Projected ray, quadratic mapping | 37.5 | 37.7 | 132.4 | 59.5 |
+| Projected ray + four iris coordinates | 44.5 | 44.9 | 188.0 | 51.3 |
+| Equal blend of projected ray and MGaze | 47.4 | 47.6 | 285.0 | 95.1 |
+| UniGaze angles, quadratic mapping | 36.2 | 36.5 | 99.0 | 329.0 |
+| Quadratic angles, median features per calibration target | 36.4 | 36.7 | 97.8 | 326.6 |
+| Quadratic projected ray, median features per target | 38.2 | 38.5 | 132.7 | 61.8 |
+
+The first round compared the two baselines, projected ray, quadratic projected ray, iris augmentation and equal model blend. The second round added quadratic angle features and the two calibration-median variants. Calibration labels, target order, clicks and trial identifiers never enter the prediction features. This retrospective exploration informed round two, so the archived sessions are not a prospective confirmation set.
+
+## Across sessions and the 20 px target
+
+For each held session, rank the nine mappings on the other three sessions by the average of normal and small-motion mean error. Fit the chosen mapping on the held session's own calibration and score its separate targets. This selects quadratic angles twice and the median variant twice. Small-motion error goes from **39.5 to 37.5 px**, but the equal-target fraction of samples within 20 px goes from **29.7% to 27.7%**. The improvement in mean does not translate into more observations inside the desired radius. No production change is justified.
+
+| Held session | Baseline small-motion mean | Selected small-motion mean |
+|---|---:|---:|
+| c3275f969f8a | 46.3 | 37.4 |
+| d069108b792e | 35.7 | 34.0 |
+| 8e67745ab828 | 35.4 | 36.3 |
+| ddd92abcda8c | 40.5 | 42.2 |
+
+For the baseline, the distance from each target to its mean predicted position averages **34.9 px** on the small-motion subset. Even perfectly averaging the existing predictions for each fixation would leave substantial spatial bias. Investigate whether this bias is repeatable across fresh sessions and whether it changes direction with natural head movement. A prospective comparison should use unseen spatial locations, comfortable motion during fixation, and both mean error and fraction within 20 px. Keep the substantial deliberate movements as separate stress tests.
+
+## Replay
+
+Use the prepared local research environment containing NumPy and the original pinned GazeFollower filter. Supply the four archived session directories, each containing session.json, training-selection.json, samples.jsonl and filter-stream.jsonl.
+
+```sh
+PYTHONPATH=src:. python -m experiments.comfortable_gaze.replay \
+  "$RESULTS/unigaze-paired-unseen-c3275f969f8a" \
+  "$RESULTS/unigaze-paired-unseen-d069108b792e" \
+  "$RESULTS/unigaze-posture-8e67745ab828" \
+  "$RESULTS/unigaze-posture-ddd92abcda8c"
+```
+
+The JSON output includes per-session sample and target counts, filtered and raw mean radial error, average per-target bias magnitude, average per-target 90th percentile error and fraction within 20 px.

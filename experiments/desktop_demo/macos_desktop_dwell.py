@@ -188,7 +188,7 @@ class DesktopDwell:
             self.api.command("pause")
             self.reset(None)
             return
-        if gaze is None:
+        if gaze is None or not 0 <= time.monotonic() - captured <= 0.3:
             self.dwell.missing(time.monotonic())
             if self.ring:
                 self.ring.orderOut_(None)
@@ -205,6 +205,8 @@ class DesktopDwell:
             if self.ring:
                 self.ring.orderOut_(None)
             return
+        # Free pointing also covers blank space between actionable controls.
+        Quartz.CGWarpMouseCursorPosition(point)
         cocoa = UI.NSMakePoint(point[0], height - point[1])
         if self.latched_rect and not UI.NSPointInRect(cocoa, self.latched_rect):
             self.latched_rect = None

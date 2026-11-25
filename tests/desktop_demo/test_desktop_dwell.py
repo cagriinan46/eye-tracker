@@ -40,6 +40,8 @@ def test_native_click_once_per_visit(monkeypatch):
     monkeypatch.setattr(controller, "escape_down", lambda: False)
     key_rect = mac.UI.NSMakeRect(0, 0, 200, 400)
     monkeypatch.setattr(controller, "hit", lambda p, _: ("key", key_rect) if p[0] < 200 else None)
+    move = Mock()
+    monkeypatch.setattr(mac.Quartz, "CGWarpMouseCursorPosition", move)
     post = Mock()
     monkeypatch.setattr(mac.Quartz, "CGEventPost", post)
     clock = [0.0]
@@ -65,6 +67,13 @@ def test_native_click_once_per_visit(monkeypatch):
         sample("desktop_click", 2, [0.1, 0.2])
     assert post.call_count == 2
     sample("desktop_click", 2, [0.8, 0.2])
+    blank_point = move.call_args.args[0]
+    assert blank_point[0] == 320
+    move.reset_mock()
+    controller.observe(("desktop_click", 2, clock[0] - 1, [0.1, 0.2]))
+    sample("desktop_click", 2, None)
+    move.assert_not_called()
     for _ in range(24):
         sample("desktop_click", 2, [0.1, 0.2])
+    assert move.call_args.args[0][0] == 40
     assert post.call_count == 4

@@ -30,15 +30,46 @@ KEYS = ("ç", "e", "k", "z", "ü", "a", "m", "ı", "s", "g")
 SETTLE_SECONDS = 3
 
 
+class GazeTarget(UI.NSView):
+    """Draw the same fixation mark in calibration and above the active key."""
+
+    progress = 0
+
+    def place_on(self, button, progress):
+        view = button.superview()
+        if self.superview() != view:
+            self.removeFromSuperview()
+            view.addSubview_positioned_relativeTo_(self, UI.NSWindowAbove, button)
+        self.setFrame_(button.frame())
+        self.progress = progress
+        self.setHidden_(False)
+        self.setNeedsDisplay_(True)
+
+    def hitTest_(self, point):
+        return None
+
+    def drawRect_(self, dirty):
+        rect = self.bounds()
+        w, h = rect.size
+        color = UI.NSColor.colorWithSRGBRed_green_blue_alpha_(
+            1, 0.55 if self.progress < 0 else 0.87, 0, 1
+        )
+        color.setFill()
+        UI.NSBezierPath.bezierPathWithRoundedRect_xRadius_yRadius_(rect, 7, 7).fill()
+        UI.NSColor.blackColor().setFill()
+        UI.NSBezierPath.bezierPathWithOvalInRect_(((w / 2 - 12, h / 2 - 12), (24, 24))).fill()
+        UI.NSRectFill(((4, 3), ((w - 8) * max(0, self.progress) / 100, 3)))
+        UI.NSColor.whiteColor().setFill()
+        UI.NSBezierPath.bezierPathWithOvalInRect_(((w / 2 - 4, h / 2 - 4), (8, 8))).fill()
+
+
 def panel_process(pipe, editor_pid):
     app = UI.NSApplication.sharedApplication()
     app.setActivationPolicy_(UI.NSApplicationActivationPolicyAccessory)
     kb = FocusKeyboard()
     key = None
     progress = 0
-    bar = UI.NSView.alloc().initWithFrame_(UI.NSZeroRect)
-    bar.setWantsLayer_(True)
-    bar.layer().setBackgroundColor_(UI.NSColor.labelColor().CGColor())
+    marker = GazeTarget.alloc().initWithFrame_(UI.NSZeroRect)
 
     def poll():
         nonlocal key, progress
@@ -67,17 +98,11 @@ def panel_process(pipe, editor_pid):
                 if not UI.NSEqualRects(rect, kb.panel.frame()):
                     kb.build(rect)
                 bounds = None
-                for button in kb.panel.contentView().subviews():
-                    selected = button.identifier() == key
-                    button.setBezelColor_(UI.NSColor.systemYellowColor() if selected else None)
-                    if selected:
-                        if bar.superview() != button:
-                            bar.removeFromSuperview()
-                            button.addSubview_(bar)
-                        width = button.bounds().size.width - 8
-                        bar.setFrame_(((4, 4), (width * max(0, progress) / 100, 3)))
-                        if progress < 0:
-                            button.setBezelColor_(UI.NSColor.systemOrangeColor())
+                view = kb.panel.contentView()
+                marker.setHidden_(True)
+                for button in view.subviews():
+                    if button.identifier() == key:
+                        marker.place_on(button, progress)
                         r = kb.panel.convertRectToScreen_(button.frame())
                         h = UI.NSScreen.screens()[0].frame().size.height
                         bounds = [r.origin.x, h - UI.NSMaxY(r), r.size.width, r.size.height]
@@ -118,10 +143,13 @@ class Editor:
         self.window.setTitle_("Masaüstü klavyesi · Bakış ölçümü")
         self.window.setDelegate_(self.controls)
         self.label = UI.NSTextField.wrappingLabelWithString_(
-            "Önce 13 beyaz noktayı takip et. Klavye açılınca sarı tuşun ortasına bak. Çizgi dolunca sıradaki tuş yanar. Turuncu, kameranın göz verisi beklediğini gösterir."
+            "Yanındaki sarı işaretin ortasındaki beyaz noktaya bak. Aynı işaret önce ekranda, sonra klavye üzerinde yer değiştirecek."
         )
         self.label.setFont_(UI.NSFont.systemFontOfSize_(19))
-        self.label.setFrame_(((20, 112), (660, 65)))
+        self.label.setFrame_(((88, 112), (590, 65)))
+        preview = GazeTarget.alloc().initWithFrame_(((20, 125), (48, 48)))
+        self.window.contentView().addSubview_(preview)
+        self.preview = preview
         self.window.contentView().addSubview_(self.label)
         self.field = UI.NSTextField.alloc().initWithFrame_(((20, 65), (660, 34)))
         self.field.setPlaceholderString_("Klavye ölçüm alanı")
@@ -143,10 +171,7 @@ class Editor:
         )
         self.overlay.setLevel_(UI.NSStatusWindowLevel)
         self.overlay.setBackgroundColor_(UI.NSColor.darkGrayColor())
-        self.dot = UI.NSView.alloc().initWithFrame_(((0, 0), (10, 10)))
-        self.dot.setWantsLayer_(True)
-        self.dot.layer().setCornerRadius_(5)
-        self.dot.layer().setBackgroundColor_(UI.NSColor.whiteColor().CGColor())
+        self.dot = GazeTarget.alloc().initWithFrame_(((0, 0), (48, 48)))
         self.overlay.contentView().addSubview_(self.dot)
         self.caption = UI.NSTextField.labelWithString_("")
         self.caption.setTextColor_(UI.NSColor.whiteColor())
@@ -169,7 +194,7 @@ class Editor:
 
     def fixation(self, target):
         x, y = target * self.size
-        self.dot.setFrameOrigin_((x - 5, self.size[1] - y - 5))
+        self.dot.setFrameOrigin_((x - 24, self.size[1] - y - 24))
         self.overlay.orderFrontRegardless()
         self.overlay.display()
 
@@ -380,6 +405,7 @@ def run(output):
             time.sleep(0.02)
         if not AX.AXIsProcessTrusted():
             raise RuntimeError("Masaüstü klavyesi için macOS Erişilebilirlik izni gerekiyor.")
+        ui.preview.setHidden_(True)
         ui.button.setHidden_(True)
         ui.label.setStringValue_("Kamera hazırlanıyor…")
         ui.window.display()

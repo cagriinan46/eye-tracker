@@ -34,15 +34,17 @@ def panel_process(pipe, editor_pid):
     app.setActivationPolicy_(UI.NSApplicationActivationPolicyAccessory)
     kb = FocusKeyboard()
     key = None
+    feedback = ""
 
     def poll():
-        nonlocal key
+        nonlocal key, feedback
         try:
-            if pipe.poll():
-                key = pipe.recv()
-                if key is None:
+            while pipe.poll():
+                message = pipe.recv()
+                if message is None:
                     AppHelper.stopEventLoop()
                     return
+                key, feedback = message
             if key is None:
                 AppHelper.callLater(0.1, poll)
                 return
@@ -64,6 +66,8 @@ def panel_process(pipe, editor_pid):
                 for button in kb.panel.contentView().subviews():
                     selected = button.identifier() == key
                     button.setBezelColor_(UI.NSColor.systemYellowColor() if selected else None)
+                    if button.identifier() == "space":
+                        button.setTitle_(feedback)
                     if selected:
                         r = kb.panel.convertRectToScreen_(button.frame())
                         h = UI.NSScreen.screens()[0].frame().size.height
@@ -135,6 +139,10 @@ class Editor:
         self.dot.layer().setCornerRadius_(5)
         self.dot.layer().setBackgroundColor_(UI.NSColor.whiteColor().CGColor())
         self.overlay.contentView().addSubview_(self.dot)
+        self.caption = UI.NSTextField.labelWithString_("")
+        self.caption.setTextColor_(UI.NSColor.whiteColor())
+        self.caption.setFrame_(((18, 10), (680, 24)))
+        self.overlay.contentView().addSubview_(self.caption)
 
     def pump(self):
         for _ in range(32):
@@ -200,7 +208,7 @@ class CameraFeed:
 
 def calibrate(ui, camera, checkpoint):
     x, y = [], []
-    for target in UNIGAZE_POINTS:
+    for index, target in enumerate(UNIGAZE_POINTS, 1):
         ui.fixation(np.array(target))
         onset = time.monotonic()
         start = len(x)
@@ -208,12 +216,28 @@ def calibrate(ui, camera, checkpoint):
             ui.pump()
             stamp, angles, _, _ = camera.read(ui)
             if not ui.app.isActive():
-                raise RuntimeError("Pencere odağı değişti. Kalibrasyonu yeniden başlat.")
-            if stamp > onset + 12:
-                raise RuntimeError("Kalibrasyon noktasında yeterli göz verisi alınamadı.")
+                ui.overlay.orderOut_(None)
+                ui.label.setStringValue_("Kalibrasyona devam etmek için bu pencereye tıkla.")
+                del x[start:]
+                del y[start:]
+                while not ui.app.isActive():
+                    camera.read(ui)
+                ui.fixation(np.array(target))
+                onset = time.monotonic()
+                continue
             if angles is not None and stamp >= onset + 1 and time.monotonic() - stamp <= 0.3:
                 x.append(angles)
                 y.append(target)
+            note = (
+                "Beyaz noktaya bak"
+                if len(x) > start or time.monotonic() - onset < 2
+                else "Yüzünü kameraya çevir"
+            )
+            if angles is None or time.monotonic() - stamp > 0.3:
+                note = "Güncel göz verisi bekleniyor"
+            ui.caption.setStringValue_(
+                f"Kalibrasyon {index}/{len(UNIGAZE_POINTS)}   ·   {len(x) - start}/16   ·   {note}"
+            )
     checkpoint.write_text(json.dumps(dict(size=ui.size.tolist(), x=x, y=y)))
     return fit_calibration(ui, checkpoint)
 
@@ -241,23 +265,29 @@ def measure(ui, camera, pipe, rows, model, correction):
     ui.window.makeKeyAndOrderFront_(None)
     ui.app.activateIgnoringOtherApps_(True)
     ui.window.makeFirstResponder_(ui.field)
-    for key in KEYS:
+    for index, key in enumerate(KEYS, 1):
         ui.label.setStringValue_(f"İşaretli {turkish_upper(key)} tuşunun ortasına bak.")
         ui.window.display()
-        pipe.send(key)
-        deadline = time.monotonic() + 30
+        last_message = None
+
+        def show(note):
+            nonlocal last_message
+            message = (key, f"{index}/{len(KEYS)} · {note}")
+            if message != last_message:
+                pipe.send(message)
+                ui.label.setStringValue_(
+                    f"{turkish_upper(key)} tuşunun ortasına bak.   {message[1]}"
+                )
+                last_message = message
+
+        show("Hazırlanıyor")
         onset = bounds = None
         observation = (0, None, None)
         filters = [StreamFilter(), StreamFilter()]
         trial = []
+        valid = 0
         while True:
             ui.pump()
-            if time.monotonic() > deadline:
-                raise RuntimeError(
-                    f"{key.upper()} tuşu için klavye odağı bulunamadı."
-                    if bounds is None
-                    else f"{key.upper()} tuşunda yeterli güncel bakış verisi alınamadı."
-                )
             stamp, angles, _, _ = camera.read(ui)
             # Discard evidence whenever the highlighted key or its rectangle changes.
             while pipe.poll():
@@ -267,10 +297,12 @@ def measure(ui, camera, pipe, rows, model, correction):
                     onset = seen
                     bounds = rect if selected == key else None
                     trial.clear()
+                    valid = 0
                     for stream in filters:
                         stream.reset()
             seen, selected, rect = observation
             if not bounds or onset is None or stamp < onset or time.monotonic() - seen > 0.4:
+                show("Ölçüm alanına tıkla" if not bounds else "Klavye bekleniyor")
                 continue
             raw = (
                 model.predict(angles)
@@ -285,7 +317,15 @@ def measure(ui, camera, pipe, rows, model, correction):
                     strict=True,
                 )
             ]
-            if stamp - onset >= 1:
+            if raw is None:
+                show("Göz verisi bekleniyor")
+                continue
+            if stamp - onset < 1:
+                show("Hedefe bak")
+            else:
+                valid += 1
+                progress = min((stamp - onset - 1) / 2, valid / 5, 1)
+                show(f"Ölçülüyor %{int(progress * 100)}")
                 trial.append(
                     dict(
                         key=key,
@@ -297,7 +337,7 @@ def measure(ui, camera, pipe, rows, model, correction):
                         ],
                     )
                 )
-            if stamp - onset >= 3 and sum(r["points"][0] is not None for r in trial) >= 5:
+            if stamp - onset >= 3 and valid >= 5:
                 rows.extend(trial)
                 break
 
@@ -320,13 +360,11 @@ def summarize(rows):
     return result
 
 
-def run(output, resume=None):
+def run(output):
     ui = Editor()
     output.mkdir(parents=True, exist_ok=True)
     path = output / f"keyboard-transfer-{uuid4().hex[:12]}.json"
-    checkpoint = resume or path.with_suffix(".calibration.json")
-    if resume:
-        ui.label.setStringValue_("Kalibrasyon yüklendi. İşaretli 10 tuşun ortasına bak.")
+    checkpoint = path.with_suffix(".calibration.json")
     rows = []
     status = "interrupted"
     try:
@@ -341,9 +379,7 @@ def run(output, resume=None):
         camera = CameraModel()
         feed = CameraFeed(camera)
         try:
-            model, correction = (
-                fit_calibration(ui, resume) if resume else calibrate(ui, feed, checkpoint)
-            )
+            model, correction = calibrate(ui, feed, checkpoint)
             parent, child = multiprocessing.Pipe()
             helper = multiprocessing.get_context("spawn").Process(
                 target=panel_process, args=(child, os.getpid())
@@ -396,6 +432,5 @@ def run(output, resume=None):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, default=ROOT / "validation/results")
-    parser.add_argument("--resume-calibration", type=Path)
     args = parser.parse_args()
-    run(args.output, args.resume_calibration)
+    run(args.output)

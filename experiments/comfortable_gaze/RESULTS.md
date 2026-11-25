@@ -52,3 +52,23 @@ PYTHONPATH=src:. python -m experiments.comfortable_gaze.replay \
 ```
 
 The JSON output includes per-session sample and target counts, filtered and raw mean radial error, average per-target bias magnitude, average per-target 90th percentile error and fraction within 20 px.
+
+## Follow-up: transfer of bias and personal calibration residuals
+
+The baseline is the archived filtered UniGaze prediction. The small-motion subset, personal calibrations and metrics are identical to the preceding experiment. For each of the 32 session/location combinations, compare the mean signed error with the mean error at the same location in the other three sessions. The vectors pointed into the same half-plane (positive dot product) in **16/32** cases. These are dependent observations from one participant.
+
+For predictive transfer, leave out the entire test session and exclude its evaluated spatial location from all donor fixations. Average donor errors locally using predicted screen positions and a Gaussian width of 0.25 normalized units. Separately estimate how error changes within a fixation as face translation and rotation change, using centered donor fixations with equal weight and ridge shrinkage. Apply the fitted slope relative to the held session's calibration pose. Labels are used for fitting, fold assignment and scoring. No held evaluation label enters the prediction. Within-target RMS deviation changed from **21.09 to 21.03 px** after donor pose correction. This tests a transferable linear relationship and does not rule out an individual or nonlinear effect.
+
+| Small-motion method | Mean radial error, px | Within 20 px |
+|---|---:|---:|
+| Baseline | 39.47 | 29.72% |
+| Donor spatial correction | 43.69 | 18.96% |
+| Donor pose correction | 39.97 | 26.44% |
+| Both donor corrections | 44.28 | 19.62% |
+| Personal local correction on angles | 36.46 | 26.97% |
+| Personal local correction on projected ray | 37.73 | 25.39% |
+
+In the personal correction experiment, derive 13 anchor positions from the median calibration features, then fit a smooth Gaussian residual on top of the original linear mapping. Kernel width is the median nearest-anchor distance and ridge penalty is 0.25. The same stream filter runs after correction. The angle variant reduced small-motion mean error in each session (46.29→39.0, 35.74→32.6, 35.36→35.1, 40.49→39.1 px), but fewer observations landed within 20 px overall. In the deliberate lateral-shift block its error was 328.0 px. The ray variant scored 60.3 px there, but 136.5 px in the tilt block. These results do not justify changing the desktop model.
+
+Run the same command and four session paths above with module names
+`experiments.comfortable_gaze.bias_transfer` and `experiments.comfortable_gaze.local_residual` to reproduce the two follow-ups.

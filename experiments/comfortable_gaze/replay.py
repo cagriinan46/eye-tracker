@@ -65,7 +65,7 @@ def metrics(targets):
     }
 
 
-def replay(folder):
+def calibration_rows(folder):
     def read(name):
         return json.loads((folder / name).read_text())
 
@@ -81,16 +81,32 @@ def replay(folder):
             calibration[row["trial"]].append(row)
     if len(calibration) != 13 or min(map(len, calibration.values())) < 20:
         raise ValueError(f"Incomplete calibration in {folder}")
-    training = [
+    return [
         rows[i]
         for _, rows in sorted(calibration.items())
         for i in np.linspace(0, len(rows) - 1, 20, dtype=int)
     ]
+
+
+def pose_reference(training):
     center = np.median([r["unigaze_face_center"] for r in training], axis=0)
     rotation = rotation_vector_quaternion(
         np.median([r["unigaze_head_rotation"] for r in training], axis=0)
     )
-    size = np.asarray(read("session.json")["screen_size"])
+    return center, rotation
+
+
+def small_motion(row, center, rotation):
+    distance = np.linalg.norm(np.asarray(row["unigaze_face_center"]) - center) / center[2]
+    q = rotation_vector_quaternion(row["unigaze_head_rotation"])
+    degrees = np.rad2deg(2 * np.arccos(np.clip(abs(q @ rotation), 0, 1)))
+    return distance <= 0.04 and degrees <= 7 and (distance >= 0.005 or degrees >= 1)
+
+
+def replay(folder):
+    training = calibration_rows(folder)
+    center, rotation = pose_reference(training)
+    size = np.asarray(json.loads((folder / "session.json").read_text())["screen_size"])
     fits = {}
     for name in FITTED:
         x = np.asarray([features(r, name) for r in training])
@@ -123,17 +139,7 @@ def replay(folder):
         groups = [condition]
         if score:
             eligible[condition] += 1
-            translation = (
-                np.linalg.norm(np.asarray(row["unigaze_face_center"]) - center) / center[2]
-            )
-            q = rotation_vector_quaternion(row["unigaze_head_rotation"])
-            degrees = np.rad2deg(2 * np.arccos(np.clip(abs(q @ rotation), 0, 1)))
-            if (
-                condition == "normal"
-                and translation <= 0.04
-                and degrees <= 7
-                and (translation >= 0.005 or degrees >= 1)
-            ):
+            if condition == "normal" and small_motion(row, center, rotation):
                 groups.append("small_motion")
         for name, prediction in predictions.items():
             filtered, _ = filters[name].update(prediction, row["timestamp_ns"])

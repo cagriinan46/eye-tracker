@@ -139,3 +139,30 @@ def test_gaze_check_separates_bias_and_tremor():
         "bias_px": [20, 10],
         "jitter_rms_px": 2.0,
     }
+
+
+def test_two_fast_closures_survive_brief_uncertain_frames():
+    c = Confirmation()
+    for i in range(14):
+        c.update(i / 10, "target", False)
+    assert c.phase == "armed"
+    for stamp, closed in (
+        (1.36, True),
+        (1.39, None),
+        (1.41, False),
+        (1.49, False),
+        (1.56, True),
+    ):
+        assert c.update(stamp, "target", closed) == "armed"
+    assert c.update(1.60, "target", False) == "confirmed"
+
+
+def test_lost_face_does_not_confirm_or_bridge_blinks():
+    c = Confirmation()
+    for i in range(14):
+        c.update(i / 10, "target", False)
+    assert c.update(1.39, "target", True) == "armed"
+    assert c.update(1.48, "target", False) == "armed"
+    assert c.update(1.72, "target", None) == "idle"
+    for stamp, closed in ((1.75, True), (1.81, False)):
+        assert c.update(stamp, "target", closed) != "confirmed"

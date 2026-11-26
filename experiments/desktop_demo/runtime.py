@@ -37,7 +37,7 @@ class DesktopAPI:
         self._active_model = None
         self._pointer_captured = 0
         self._desktop_active = False
-        self._desktop_frame = (0, None, None)
+        self._desktop_frame = (0, None, None, None)
         self._native_page = None
         self._desktop_error = None
         self._pointer_pause = threading.Event()
@@ -191,7 +191,7 @@ class DesktopAPI:
                         raise ValueError("Önce mevcut denemeden çık.")
                     if not self._focused or s.geometry is None:
                         raise ValueError("Eye Tracker penceresine dön.")
-                    self._desktop_frame = (0, None, None)
+                    self._desktop_frame = (0, None, None, None)
                     self._desktop_error = None
                     self._desktop_active = True
                 elif action == "desktop_stop":
@@ -426,6 +426,8 @@ class DesktopAPI:
             while not self._stop.is_set():
                 with self._lock:
                     token = self._session.token
+                    if hasattr(model, "desktop_blink"):
+                        model.desktop_blink = self._desktop_active
                     reset_filter = self._reset_filter
                     self._reset_filter = False
                     preview = not self._desktop_active and self._session.phase in (
@@ -502,7 +504,12 @@ class DesktopAPI:
                         closed = getattr(model, "eyes_closed", None)
                         if self._model_name == "mgaze" and self._tracking:
                             closed = False
-                        self._desktop_frame = (captured, raw_point, closed)
+                        self._desktop_frame = (
+                            captured,
+                            raw_point,
+                            closed,
+                            getattr(model, "blink_samples", None),
+                        )
                     if s.phase == "fitting":
                         x, y = s.calibration_arrays()
                         self._meta["training_fit_normalized"] = model.fit(x, y)

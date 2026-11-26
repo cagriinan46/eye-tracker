@@ -98,6 +98,7 @@ def test_worker_error_propagates_without_silent_fallback(monkeypatch):
 
     model = unigaze_model.CameraModel.__new__(unigaze_model.CameraModel)
     model.sock = object()
+    model.desktop_blink = False
     import threading
 
     model.stop_event = threading.Event()

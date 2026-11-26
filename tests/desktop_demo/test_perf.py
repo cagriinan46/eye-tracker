@@ -166,6 +166,7 @@ def test_engine_timing_reports_skipped_frames_and_stage_times(monkeypatch):
     from experiments.unigaze.desktop_worker import Engine
 
     e = Engine.__new__(Engine)
+    e.blinks = SimpleNamespace(enable=lambda enabled: None)
     e.last_capture = 4
     e.cpu_seconds = None
     e.stream = SimpleNamespace(

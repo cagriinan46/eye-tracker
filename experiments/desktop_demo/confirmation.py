@@ -12,8 +12,12 @@ class Confirmation:
         self.phase = "idle"
 
     def update(self, stamp, target, closed):
-        if target is None or closed is None or not isfinite(stamp):
+        if target is None or not isfinite(stamp):
             self.reset()
+            return self.phase
+        if closed is None:
+            if target != self.target or self.last is None or stamp - self.last > 0.22:
+                self.reset()
             return self.phase
         if target != self.target or self.last is None or not 0 < stamp - self.last <= 0.3:
             self.reset()
@@ -34,18 +38,18 @@ class Confirmation:
         if closed:
             if self.closed_at is None:
                 self.closed_at = stamp
-            elif stamp - self.closed_at > 0.35:
+            elif stamp - self.closed_at > 0.45:
                 self.reset()
             return self.phase
         if self.closed_at is None:
-            if self.first is not None and stamp - self.first > 0.55:
+            if self.first is not None and stamp - self.first > 0.75:
                 self.first = None
             return self.phase
         duration = stamp - self.closed_at
         open_gap = None if self.first is None else self.closed_at - self.first
         self.closed_at = None
-        if 0.055 <= duration <= 0.35:
-            if open_gap is not None and 0.07 <= open_gap <= 0.55:
+        if 0.028 <= duration <= 0.45:
+            if open_gap is not None and 0.07 <= open_gap <= 0.75:
                 self.phase = "confirmed"
             else:
                 self.first = stamp

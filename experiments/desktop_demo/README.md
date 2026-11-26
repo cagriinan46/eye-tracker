@@ -86,6 +86,15 @@ and keyboard hit testing, and an armed click keeps its position while you blink.
 Verified nearby controls can attract the pointer. The calibration record stores
 per-target signed bias and RMS jitter for raw, model-filtered and desktop-stabilized points.
 
+The camera label shows the actual capture size and measured rate. Eye close-ups
+are display-only crops of the current camera format. The gaze model still uses
+the accepted 640×480 optical calibration. Desktop blink confirmation can use
+the prepared local MediaPipe Face Landmarker on the same captured frames. The
+model path defaults to `.venv/models/face_landmarker.task` and may be set with
+`EYE_TRACKER_BLINK_MODEL`. When unavailable, the worker uses gaze-frame eyelid
+observations.
+
+
 ## Privacy and records
 
 Preview JPEGs exist only in memory. No images or video are written or uploaded.

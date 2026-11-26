@@ -29,3 +29,22 @@ def test_prefix_rechecked_before_completion(monkeypatch, prefix, caret, precedin
         panel.AX, "AXUIElementCopyParameterizedAttributeValue", Mock(return_value=(0, preceding))
     )
     assert keyboard.prefix_at_caret() is expected
+
+
+def test_precision_panel_shows_dictation_without_a_text_label(monkeypatch):
+    import queue
+    from types import SimpleNamespace
+
+    from experiments.desktop_demo.macos_toolbar import Toolbar
+
+    toolbar = Toolbar.__new__(Toolbar)
+    toolbar.visible = True
+    toolbar.paused = False
+    toolbar.status = None
+    toolbar.results = queue.Queue()
+    toolbar.keyboard = SimpleNamespace(focused=lambda: None)
+    toolbar.results.put(((1, object()), None, "Dikte sonucu"))
+    hints = []
+    monkeypatch.setattr(toolbar, "show_hint", hints.append)
+    toolbar.process_results()
+    assert hints == ["Dikte sonucu"]

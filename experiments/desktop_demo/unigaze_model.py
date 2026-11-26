@@ -22,6 +22,8 @@ class CameraModel:
         self.preview_lock = threading.Lock()
         self.latest_preview = {}
         self.raw_point = None
+        self.desktop_blink = False
+        self.blink_samples = None
         self.filter_history_ms = None
         self.collect_timing = False  # Set by --perf-diagnostics (issue #145).
         self.last_timing = None
@@ -111,12 +113,16 @@ class CameraModel:
 
     def read(self, preview=False):
         r = self._request(
-            "read", preview=bool(preview), timing=bool(getattr(self, "collect_timing", False))
+            "read",
+            preview=bool(preview),
+            timing=bool(getattr(self, "collect_timing", False)),
+            blink=self.desktop_blink,
         )
         self.last_timing = r.get("timing")
         self.eligibility_reason = r.get("eligibility_reason", "unknown")
         self.raw_point = r["raw_point"]
         self.eyes_closed = r.get("eyes_closed")
+        self.blink_samples = r.get("blink_samples")
         self.filter_history_ms = r["filter_history_ms"]
         return r["captured"], r["features"], r["point"], r["preview"]
 

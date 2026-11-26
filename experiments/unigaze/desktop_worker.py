@@ -11,6 +11,7 @@ from collections import deque
 
 import numpy as np
 
+from .blink_stream import BlinkStream
 from .mapping import Ridge
 from .wire import receive, send
 
@@ -59,7 +60,7 @@ class Engine:
     model_id = "unigaze"
 
     def __init__(self, camera_index):
-        self.cap = self.pair = self.stream = None
+        self.cap = self.pair = self.stream = self.blinks = None
         self.last_capture = -1
         self.eye_preview = None
         self.eye_captured = 0
@@ -101,9 +102,8 @@ class Engine:
             from .camera_stream import LatestCamera
             from .preview import jpeg_url
 
-            self.stream = LatestCamera(
-                self.cap, lambda frame: jpeg_url(cv2, cv2.resize(frame, (640, 480))[:, ::-1])
-            )
+            self.stream = LatestCamera(self.cap, lambda frame: jpeg_url(cv2, frame[:, ::-1]))
+            self.blinks = BlinkStream(self.stream, cv2)
         except BaseException:
             self.close()
             raise
@@ -165,7 +165,10 @@ class Engine:
             preview=jpeg,
         )
 
-    def read(self, preview=False, timing=False):
+    def read(self, preview=False, timing=False, blink=False):
+        if preview:
+            self.blinks.start()
+        self.blinks.enable(blink)
         self.stream.enabled = bool(preview)
         requested = time.perf_counter()
         sequence, captured, frame = self.stream.read_after(self.last_capture)
@@ -174,6 +177,7 @@ class Engine:
         self.last_capture = sequence
         # Both estimators still see exactly this capture; old captures never queue.
         response = self.process_frame(frame, captured, preview)
+        response["blink_samples"] = self.blinks.drain() if blink else None
         if timing:
             response["timing"] = self.timing(
                 requested, received, received_ns, captured, sequence, skipped
@@ -226,6 +230,8 @@ class Engine:
         )
 
     def close(self):
+        if self.blinks is not None:
+            self.blinks.close()
         if self.stream is not None:
             self.stream.close()
             self.stream = None
@@ -292,7 +298,11 @@ def main(fd, camera_index, preview_fd=None, model_name="unigaze"):
             if command == "close":
                 break
             if command == "read":
-                response = engine.read(request.get("preview", False), request.get("timing", False))
+                response = engine.read(
+                    request.get("preview", False),
+                    request.get("timing", False),
+                    request.get("blink", False),
+                )
             elif command == "fit":
                 response = dict(
                     status="ok", error=engine.fit(request["features"], request["labels"])

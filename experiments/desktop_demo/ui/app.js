@@ -109,6 +109,9 @@ function render(s){
   $('stepCamera').className=s.camera==='ready'?'done':'current';
   $('stepCalibration').className=s.can_demo?'done':s.camera==='ready'?'current':'';
   $('stepPractice').className=s.can_demo?'current':'';
+  $('cameraFormat').textContent=s.preview&&s.capture_size
+    ? s.capture_size.join(' × ')+(Number.isFinite(s.capture_fps)?' · '+Math.round(s.capture_fps)+' FPS':'')
+    : 'Kamera';
   if(s.preview){if($('preview').src!==s.preview)$('preview').src=s.preview;$('preview').classList.remove('hidden');$('cameraPlaceholder').classList.add('hidden');}
   else{$('preview').classList.add('hidden');$('cameraPlaceholder').classList.remove('hidden');}
   $('eyeLabel').textContent=s.eye_preview&&(s.eye_age_ms>500||s.eye_detected===false)?'Göz takibi · Son ölçüm':'Göz takibi';

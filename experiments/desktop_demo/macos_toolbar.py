@@ -184,6 +184,7 @@ class Toolbar:
         self.keyboard = keyboard
         self.keyboard.dictate = self.dictate
         self.visible = self.paused = self.tools_ready = False
+        self.status = None
         self.active_mode = self.anchor = self.aim_since = self.front_pid = None
         self.last_keyboard_poll = 0
         self.last_stamp = self.last_action_stamp = self.last_frame = None
@@ -372,6 +373,7 @@ class Toolbar:
         self.direction.reset()
         self.blocked_rect = None
         self.panel.orderOut_(None)
+        self.status = None
         if caption:
             self.show_hint(caption)
 
@@ -472,9 +474,9 @@ class Toolbar:
         )
 
     def message(self, text):
-        if self.visible:
+        if self.visible and self.status is not None:
             self.status.setStringValue_(text)
-        elif not self.active_mode and not self.paused:
+        elif not self.paused:
             self.show_hint(text)
 
     def dictate(self):
@@ -572,6 +574,7 @@ class Toolbar:
         self.hide(caption)
 
     def render_precision(self):
+        self.status = None
         tile, gap, pad = 78, 9, 10
         pitch = tile + gap
         width, height = pitch * 3 + 11, pitch * 4 + 11
@@ -681,7 +684,7 @@ class Toolbar:
                 self.home()
                 self.hide()
             else:
-                self.status.setStringValue_("Bu uygulama açılamadı.")
+                self.message("Bu uygulama açılamadı.")
         elif key.startswith("fine-click-") and self.tools_ready:
             point = self.anchor
             self.cancel_mode()
@@ -794,8 +797,12 @@ class Toolbar:
                     self.command(key)
         return inside or self.tools_ready
 
-    def desktop_gaze(self, stamp, point, closed, valid, assisted):
-        if not valid:
+    def desktop_gaze(self, stamp, point, closed, valid, assisted, blink_samples=None):
+        fast_armed = self.confirm.phase == "armed" and blink_samples is not None
+        if fast_armed and time.monotonic() - self.confirm.last > 0.40:
+            fast_armed = False
+            valid = False
+        if not valid and not fast_armed:
             self.keyboard_owned = False
             if self.confirm.phase == "armed":
                 self.show_hint("Hedefe tekrar bak.")
@@ -823,7 +830,7 @@ class Toolbar:
 
         if not self.center_left:
             return False
-        if not closed and point is None:
+        if not closed and point is None and not fast_armed:
             self.confirm.reset()
             self.anchor = self.aim_since = None
             self.mark(None, None)
@@ -863,7 +870,18 @@ class Toolbar:
             return False
 
         old = self.confirm.phase
-        phase = self.confirm.update(stamp, pid if self.anchor is not None else None, closed)
+        previous_blink = self.confirm.first
+        target = pid if self.anchor is not None else None
+        if fast_armed and old == "armed":
+            phase = old
+            for seen_at, observed in blink_samples:
+                if self.confirm.last is not None and seen_at <= self.confirm.last:
+                    continue
+                phase = self.confirm.update(seen_at, target, observed)
+                if phase in ("confirmed", "idle"):
+                    break
+        else:
+            phase = self.confirm.update(stamp, target, closed)
         if phase == "armed" and old != "armed":
             self.click_point = (
                 assisted
@@ -874,6 +892,12 @@ class Toolbar:
             self.mark(self.click_point, "armed")
             self.show_hint("Tık hazır\nŞimdi iki kez kırp.")
             UI.NSBeep()
+        elif phase == "armed" and previous_blink != self.confirm.first:
+            self.show_hint(
+                "1/2 kırpma algılandı."
+                if self.confirm.first is not None
+                else "Tık hazır. İki kez kırp."
+            )
         elif phase == "confirmed":
             self.click(self.active_mode, self.click_point)
             self.cancel_mode()

@@ -164,14 +164,16 @@ class MacOSDesktop:
             self.ring.orderFrontRegardless()
 
     def update(self, now, frame):
-        stamp, normalized, closed = frame
+        stamp, normalized, closed, blink_samples = frame
         valid = 0 <= now - stamp <= 0.3 and closed is not None
         raw = desktop_point(normalized, self.viewport, self.size) if valid and not closed else None
         point = self.fixation.update(stamp, raw)
         owned = self.toolbar.tick(stamp, now, point, closed is True, self.last_cursor)
         pressed = any(Quartz.CGEventSourceButtonState(HID, button) for button in (0, 1, 2))
         if not owned and not pressed:
-            owned = self.toolbar.desktop_gaze(stamp, point, closed is True, valid, self.last_cursor)
+            owned = self.toolbar.desktop_gaze(
+                stamp, point, closed, valid, self.last_cursor, blink_samples=blink_samples
+            )
         if owned or pressed:
             self.cursor.reset()
             self.magnet.reset()

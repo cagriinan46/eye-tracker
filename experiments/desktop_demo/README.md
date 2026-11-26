@@ -57,7 +57,9 @@ A single in-region frame after a long gap cannot finish a previous dwell.
 
 ## macOS desktop control
 
-After calibration or from the 12-task results, choose **Masaüstünü kontrol et**.
+After calibration, on the home page, or from the 12-task results, choose
+**Masaüstünü kontrol et**. Returning home from an unfinished trial preserves
+the current calibration while the camera stays open.
 Desktop control and the
 12-task experiment use the same calibration. Look at the chevron halfway down
 the right edge to open the toolbar. Escape ends desktop control while keeping

@@ -85,3 +85,21 @@ def test_completed_trials_can_open_desktop_without_clearing_results(monkeypatch,
     assert s.phase == "results" and len(s.trials) == 12
     assert s.geometry == geometry and s.calibrated
     api.close()
+
+
+def test_home_after_partial_trial_can_open_desktop(monkeypatch, tmp_path):
+    monkeypatch.setattr("experiments.desktop_demo.runtime.sys.platform", "darwin")
+    api = DesktopAPI(output=tmp_path)
+    s = api._session
+    api._camera = "ready"
+    geometry = [1200, 800, 0, 0, 2]
+    s.start_calibration(geometry)
+    s.calibrated = True
+    s.transition("ready")
+    assert api.command("demo")["ok"]
+    s.finish_trial(s.expected, 2)
+    assert api.command("home")["ok"]
+    assert s.phase == "preparation"
+    assert api.command("desktop_start")["ok"]
+    assert api.desktop_sample()[0] and s.geometry == geometry
+    api.close()

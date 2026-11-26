@@ -85,7 +85,7 @@ class Engine:
                 provenance=self.pair.provenance,
                 filter="HeuristicFilter look_ahead3",
                 filter_source_sha256=SOURCE_HASHES,
-                calibration="13 research targets, 1.5s settle + 6s window, 20 selected samples each",
+                calibration="13 targets with 20 standard or 10 quick samples per target",
                 limitations=[
                     "Lateral head translation can cause large bias; recalibrate after repositioning.",
                     "Windows execution unverified; macOS worker transport only.",
@@ -214,8 +214,11 @@ class Engine:
 
     def fit(self, features, labels):
         x, y = np.asarray(features, float), np.asarray(labels, float)
-        if x.shape != (260, 2) or y.shape != (260, 2):
-            raise ValueError(f"{self.model_id} requires fresh13x20 calibration")
+        if x.shape not in ((130, 2), (260, 2)) or y.shape != x.shape:
+            raise ValueError("Kalibrasyon 13 noktada 10 veya 20 örnek gerektirir.")
+        _, counts = np.unique(y, axis=0, return_counts=True)
+        if len(counts) != 13 or not np.all(counts == len(x) // 13):
+            raise ValueError("Kalibrasyon örnekleri 13 noktaya eşit dağılmalı.")
         self.mapping.fit(x, y)
         self.smoothing.reset()
         return float(

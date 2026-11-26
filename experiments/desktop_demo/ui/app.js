@@ -86,7 +86,7 @@ function render(s){
   wasDesktop=s.desktop_active;
   if(s.desktop_error&&s.desktop_error!==lastDesktopError)notice(s.desktop_error);
   lastDesktopError=s.desktop_error;
-  for(const id of ['desktopReady','desktopPractice','desktopResult']){
+  for(const id of ['desktopHome','desktopReady','desktopPractice','desktopResult']){
     $(id).hidden=!s.desktop_available;
     $(id).disabled=s.camera!=='ready'||!s.can_demo;
     $(id).textContent=s.desktop_active?'Masaüstü kontrolünü bitir':'Masaüstünü kontrol et';
@@ -248,7 +248,7 @@ const calibrate=variant=>act('calibrate',{geometry:geometry(),variant});
 $('calibrate').onclick=()=>calibrate('standard');
 $('quickCalibrate').onclick=()=>calibrate('quick');
 for(const id of ['recalibrateReady','recalibrateResult'])$(id).onclick=()=>calibrate(state?.calibration_variant||'standard');
-for(const id of ['desktopReady','desktopPractice','desktopResult'])$(id).onclick=()=>act(state?.desktop_active?'desktop_stop':'desktop_start');
+for(const id of ['desktopHome','desktopReady','desktopPractice','desktopResult'])$(id).onclick=()=>act(state?.desktop_active?'desktop_stop':'desktop_start');
 for(const id of ['startDemo','again','practiceStart'])$(id).onclick=()=>act('demo');
 for(const id of ['homeDemo','homeReady','homeResult'])$(id).onclick=()=>navigate('home');
 for(const el of document.querySelectorAll('[data-page]'))el.onclick=()=>navigate(el.dataset.page);

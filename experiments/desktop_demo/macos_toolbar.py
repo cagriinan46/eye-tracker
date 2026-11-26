@@ -17,12 +17,13 @@ import Quartz
 from eye_tracker.intent.region_dwell import RegionDwell
 
 from .confirmation import Confirmation
+from .desktop_gaze_filter import HeldDirection
 from .dictation import Dictation
 from .macos_keyboard import attribute
 
 COMMANDS = (
     ("left", "Sol tık", "cursorarrow.click"),
-    ("right", "Sağ tık", "computermouse"),
+    ("right", "Sağ tık", "contextualmenu.and.cursorarrow"),
     ("precise", "Hassas imleç", "scope"),
     ("scroll", "Kaydır", "arrow.up.and.down"),
     ("keyboard", "Klavye", "keyboard"),
@@ -64,6 +65,10 @@ def nonactivating_panel(size):
     panel.setFloatingPanel_(True)
     panel.setAppearance_(UI.NSAppearance.appearanceNamed_(UI.NSAppearanceNameDarkAqua))
     panel.setHidesOnDeactivate_(False)
+    panel.setCollectionBehavior_(
+        UI.NSWindowCollectionBehaviorCanJoinAllSpaces
+        | UI.NSWindowCollectionBehaviorFullScreenAuxiliary
+    )
     panel.setLevel_(UI.NSStatusWindowLevel)
     panel.setReleasedWhenClosed_(False)
     panel.setOpaque_(False)
@@ -143,17 +148,18 @@ class ScrollRepeat:
 
 
 class Toolbar:
-    def __init__(self, size, recalibrate, open_settings, keyboard, reduced_motion=False):
+    def __init__(self, size, recalibrate, open_settings, keyboard):
         self.width, self.height = size
         self.recalibrate = recalibrate
         self.open_settings = open_settings
-        self.system_reduced_motion = reduced_motion
-        self.reduced_motion = False
         self.scroll_multiplier = 1
         self.panel = nonactivating_panel((WIDTH, 500))
         self.panel.setTitle_("Göz kontrolü")
-        self.tab = nonactivating_panel((54, 96))
-        self.tab.setTitle_("Göz kontrolü oku")
+        self.rail = nonactivating_panel((200, 500))
+        self.rail.setTitle_("Masaüstü komutları")
+        self.hint = nonactivating_panel((260, 62))
+        self.hint.setIgnoresMouseEvents_(True)
+        self.hint_until = 0
         self.reticle = nonactivating_panel((44, 44))
         self.reticle.setIgnoresMouseEvents_(True)
         self.background = color(0.07, 0.09, 0.13)
@@ -165,7 +171,8 @@ class Toolbar:
         self.delegate = BarItem.alloc().init()
         self.delegate.callback = self.command
         self.dwell = RegionDwell(seconds=0.88)
-        self.edge_dwell = RegionDwell(seconds=0.42)
+        self.rail_dwell = RegionDwell(seconds=0.72)
+        self.direction = HeldDirection()
         self.key_dwell = RegionDwell(seconds=1.0)
         self.confirm = Confirmation()
         self.scrolling = ScrollRepeat()
@@ -178,14 +185,14 @@ class Toolbar:
         self.keyboard.dictate = self.dictate
         self.visible = self.paused = self.tools_ready = False
         self.active_mode = self.anchor = self.aim_since = self.front_pid = None
-        self.activity = self.animation = self.last_keyboard_poll = 0
+        self.last_keyboard_poll = 0
         self.last_stamp = self.last_action_stamp = self.last_frame = None
         self.progress_mark = -1
         self.latest_point = self.mode_origin = self.blocked_rect = None
+        self.keyboard_owned = False
         self.hover = self.marker_state = None
         self.center_left = False
         self.home()
-        self.show_tab()
         marker = UI.NSView.alloc().initWithFrame_(((0, 0), (44, 44)))
         for x, y, w, h in ((20, 0, 4, 14), (20, 30, 4, 14), (0, 20, 14, 4), (30, 20, 14, 4)):
             line = self.surface((w, h), self.accent, 2)
@@ -241,23 +248,63 @@ class Toolbar:
         parent.addSubview_(label)
         return label
 
-    def show_tab(self, caption=None):
-        mode = self.active_mode
-        icon = "play.fill" if self.paused else ("xmark" if mode else "chevron.left")
-        tab_width = 232 if caption else 54
-        size = (tab_width, 88)
-        view = self.surface(size, self.background, 17)
-        label = caption or ("Devam et" if self.paused else "Göz kontrolünü aç")
-        button = self.button("edge", "", icon, ((tab_width - 49, 6), (43, 76)))
-        button.setAccessibilityLabel_(label)
-        view.addSubview_(button)
-        if caption:
-            self.label(view, caption, ((13, 11), (tab_width - 72, 65)), 14, self.ink)
-        self.tab.setContentView_(view)
-        self.tab.setFrame_display_(
-            ((self.width - tab_width, (self.height - size[1]) / 2), size), False
+    def render_rail(self):
+        tile = math.floor(min(90, (self.height - 105) / 5))
+        gap = 7
+        width = 2 * tile + gap + 18
+        height = 5 * (tile + gap) + 11
+        view = self.surface((width, height), color(0.07, 0.09, 0.13, 0.96), 23)
+        view.layer().setBorderWidth_(1)
+        view.layer().setBorderColor_(self.hover_card.CGColor())
+        self.rail_origin = (self.width - width - 10, round((self.height - height) / 2))
+        self.rail_size = (width, height)
+        self.rail_items = {}
+        self.rail_rects = {}
+        self.rail_hover = None
+        self.rail_progress = self.surface((0, 4), self.accent, 2)
+        for i, (key, label, icon) in enumerate(COMMANDS):
+            y, x = divmod(i, 2)
+            rect = ((9 + x * (tile + gap), height - 9 - tile - y * (tile + gap)), (tile, tile))
+            if self.paused and key == "pause":
+                label, icon = "Devam et", "play.fill"
+            button = self.button(key, "", icon, rect)
+            button.setAccessibilityLabel_(label)
+            button.setToolTip_(label)
+            button.setEnabled_(not self.paused or key == "pause")
+            if not button.isEnabled():
+                button.setAlphaValue_(0.38)
+            view.addSubview_(button)
+            self.rail_items[key] = (rect, button)
+            self.rail_rects[key] = rect
+        view.addSubview_(self.rail_progress)
+        self.rail.setContentView_(view)
+        self.rail.setFrame_display_((self.rail_origin, self.rail_size), False)
+        self.rail.orderFrontRegardless()
+
+    def show_hint(self, text):
+        size = (260, 56)
+        view = self.surface(size, self.background, 14)
+        self.label(view, text, ((12, 5), (236, 46)), 14, self.ink)
+        self.hint.setContentView_(view)
+        self.hint.setFrame_display_(
+            ((self.rail_origin[0] - size[0] - 12, self.rail_origin[1]), size), False
         )
-        self.tab.orderFrontRegardless()
+        self.hint.orderFrontRegardless()
+        self.hint_until = time.monotonic() + 3
+
+    def rail_feedback(self, key):
+        if key != self.rail_hover:
+            if self.rail_hover in self.rail_items:
+                self.rail_items[self.rail_hover][1].layer().setBackgroundColor_(self.card.CGColor())
+            if key in self.rail_items:
+                self.rail_items[key][1].layer().setBackgroundColor_(self.hover_card.CGColor())
+            self.rail_hover = key
+        if key:
+            (x, y), (width, _) = self.rail_items[key][0]
+            self.rail_progress.setFrame_(
+                ((x + 8, y + 6), ((width - 16) * self.rail_dwell.progress, 4))
+            )
+        self.rail_progress.setHidden_(not key)
 
     def render(self, title, subtitle, commands, icons=None):
         self.hover = None
@@ -299,48 +346,34 @@ class Toolbar:
         view.addSubview_(self.progress)
         self.panel.setContentView_(view)
         if self.visible:
-            self.position(time.monotonic())
+            self.position()
 
-    def render_home(self):
-        if self.paused:
-            self.render(
-                "Duraklatıldı",
-                "Devam etmek için oynat simgesine bak.",
-                (("pause", "Devam et", "play.fill"),),
-            )
+    def position(self):
+        if self.tools_ready and self.active_mode == "precise":
+            frame = self.precision_frame
         else:
-            self.render("Göz kontrolü", "Seçmek için simgeye bak.", COMMANDS)
-
-    def position(self, now):
-        t = min(1, max(0, (now - self.animation) / 0.33))
-        if self.system_reduced_motion or self.reduced_motion or self.tools_ready:
-            t = 1
-        eased = 1 - (1 - t) ** 3
-        spring = 10 * math.sin(math.pi * t) * eased
-        x = self.width - (WIDTH + 14) * eased - spring
-        if self.tools_ready and self.tools_on_left:
-            x = 14
-        x, y = round(x), round(max(9, (self.height - self.panel_height) / 2))
-        frame = ((x, y), (WIDTH, self.panel_height))
+            x = self.rail_origin[0] - WIDTH - 10
+            origin = (max(8, x), round(max(9, (self.height - self.panel_height) / 2)))
+            frame = (origin, (WIDTH, self.panel_height))
         if frame != self.last_frame:
             self.last_frame = frame
             self.panel.setFrame_display_(frame, False)
 
-    def open(self, now):
+    def open(self):
         self.visible = True
-        self.activity = self.animation = now
         self.last_frame = None
-        self.position(now)
-        self.tab.orderOut_(None)
+        self.position()
         self.panel.orderFrontRegardless()
+        self.rail.orderFrontRegardless()
 
     def hide(self, caption=None):
         self.visible = False
         self.dwell.reset()
-        self.edge_dwell.reset()
+        self.direction.reset()
         self.blocked_rect = None
         self.panel.orderOut_(None)
-        self.show_tab(caption)
+        if caption:
+            self.show_hint(caption)
 
     def mark(self, point, state):
         if point is None:
@@ -442,7 +475,7 @@ class Toolbar:
         if self.visible:
             self.status.setStringValue_(text)
         elif not self.active_mode and not self.paused:
-            self.show_tab(text)
+            self.show_hint(text)
 
     def dictate(self):
         target = self.keyboard.focused()
@@ -520,6 +553,7 @@ class Toolbar:
         self.tools_ready = self.center_left = False
         self.confirm.reset()
         self.scrolling.reset()
+        self.direction.reset()
         self.mark(None, None)
 
     def start_mode(self, key):
@@ -537,42 +571,78 @@ class Toolbar:
         }[key]
         self.hide(caption)
 
+    def render_precision(self):
+        tile, gap, pad = 78, 9, 10
+        pitch = tile + gap
+        width, height = pitch * 3 + 11, pitch * 4 + 11
+        x, y = self.anchor
+        self.precision_frame = (
+            (
+                round(max(8, min(self.rail_origin[0] - width - 8, x - width / 2))),
+                round(max(8, min(self.height - height - 8, self.height - y - (2 * pitch + 39)))),
+            ),
+            (width, height),
+        )
+        view = UI.NSView.alloc().initWithFrame_(((0, 0), (width, height)))
+        self.hover = None
+        self.progress_mark = -1
+        self.rows, self.rects = {}, {}
+        controls = [
+            ("precise-up", "Yukarı", "arrow.up", 1, 3),
+            ("precise-left", "Sola", "arrow.left", 0, 2),
+            ("precise-right", "Sağa", "arrow.right", 2, 2),
+            ("precise-down", "Aşağı", "arrow.down", 1, 1),
+            ("fine-click-left", "Sol tık", "cursorarrow.click", 0, 0),
+            ("fine-click-right", "Sağ tık", "contextualmenu.and.cursorarrow", 1, 0),
+            ("cancel", "Kapat", "xmark", 2, 0),
+        ]
+        for key, label, icon, col, row in controls:
+            rect = ((pad + pitch * col, pad + pitch * row), (tile, tile))
+            button = self.button(key, "", icon, rect)
+            button.setAccessibilityLabel_(label)
+            button.setToolTip_(label)
+            view.addSubview_(button)
+            self.rects[key], self.rows[key] = rect, button
+        self.progress = self.surface((0, 3), self.accent, 1.5)
+        view.addSubview_(self.progress)
+        self.panel.setContentView_(view)
+
+    def move_precisely(self, now, direction):
+        delta = self.direction.step(now, direction)
+        if not delta:
+            return
+        dx, dy = VECTORS[direction]
+        x, y = self.anchor
+        self.anchor = (
+            max(0, min(self.width - 1, x + dx * delta)),
+            max(0, min(self.height - 1, y + dy * delta)),
+        )
+        Quartz.CGWarpMouseCursorPosition(self.anchor)
+        self.mark(self.anchor, "armed")
+
     def render_tools(self):
         mode = self.active_mode
+        if mode == "precise":
+            self.render_precision()
+            return
         commands = tuple((f"{mode}-{key}", title, icon) for key, title, icon in DIRECTIONS)
-        if mode == "precise":
-            commands += (
-                ("fine-click-left", "Buraya sol tık", "cursorarrow.click"),
-                ("fine-click-right", "Buraya sağ tık", "computermouse"),
-            )
-        commands += (("cancel", "Bitir", "xmark"),)
-        if mode == "precise":
-            self.render(
-                "Hassas imleç", "Artıyı oklarla 12 piksel taşı. Sonra tık türünü seç.", commands
-            )
-        else:
-            self.render(
-                "Kaydır", "Oka bakılı tuttukça hızlanır. Bakışını ayırınca durur.", commands
-            )
+        self.render(
+            "Kaydır", "Bir yön okuna bakılı tut.", commands + (("cancel", "Bitir", "xmark"),)
+        )
 
     def home(self):
         self.page = "home"
-        self.render_home()
+        self.hide()
+        self.render_rail()
 
     def command(self, key):
-        self.activity = time.monotonic()
-        if self.visible and key in self.rects:
+        if self.visible and key in self.rects and not key.startswith("precise-"):
             (left, bottom), (width, height) = self.rects[key]
             origin, _ = self.last_frame
             self.blocked_rect = ((origin[0] + left, origin[1] + bottom), (width, height))
-        if self.paused and key not in ("edge", "pause"):
+        if self.paused and key != "pause":
             return
-        if key == "edge":
-            if self.active_mode:
-                self.cancel_mode()
-            self.home()
-            self.open(self.activity)
-        elif key in ("left", "right", "precise", "scroll"):
+        if key in ("left", "right", "precise", "scroll"):
             self.start_mode(key)
         elif key == "pause":
             self.paused = not self.paused
@@ -583,14 +653,18 @@ class Toolbar:
             self.home()
             self.hide()
         elif key == "keyboard":
+            self.cancel_mode()
             if self.keyboard.reveal():
                 self.hide()
             else:
-                self.status.setStringValue_("Önce yazılabilir bir metin alanına tıkla.")
+                self.show_hint("Önce yazılabilir bir metin alanına tıkla.")
         elif key == "dictation":
+            self.cancel_mode()
             self.dictate()
         elif key == "dock":
+            self.cancel_mode()
             self.load_dock()
+            self.open()
         elif key in ("dock-next", "dock-previous"):
             self.dock_page += 1 if key == "dock-next" else -1
             self.render_dock()
@@ -608,15 +682,6 @@ class Toolbar:
                 self.hide()
             else:
                 self.status.setStringValue_("Bu uygulama açılamadı.")
-        elif key.startswith("precise-") and self.tools_ready:
-            dx, dy = VECTORS[key.removeprefix("precise-")]
-            x, y = self.anchor
-            self.anchor = (
-                max(0, min(self.width - 1, x + dx * 12)),
-                max(0, min(self.height - 1, y + dy * 12)),
-            )
-            Quartz.CGWarpMouseCursorPosition(self.anchor)
-            self.mark(self.anchor, "armed")
         elif key.startswith("fine-click-") and self.tools_ready:
             point = self.anchor
             self.cancel_mode()
@@ -627,8 +692,10 @@ class Toolbar:
         elif key == "calibrate":
             self.recalibrate()
         elif key == "settings":
+            self.cancel_mode()
             self.page = "settings"
             self.render_settings()
+            self.open()
             self.open_settings()
         elif key == "speed":
             self.scroll_multiplier = 1.6 if self.scroll_multiplier == 1 else 1
@@ -639,95 +706,108 @@ class Toolbar:
             self.cancel_mode()
             self.hide()
 
+    def hit_test(self, point, frame, controls):
+        if point is None:
+            return False, None
+        (origin_x, origin_y), (width, height) = frame
+        x, y = point[0] - origin_x, self.height - point[1] - origin_y
+        inside = 0 <= x < width and 0 <= y < height
+        if inside:
+            for key, ((left, bottom), (w, h)) in controls.items():
+                if left <= x < left + w and bottom <= y < bottom + h:
+                    return True, key
+        return inside, None
+
     def tick(self, stamp, now, point, closed, assisted=None):
         self.process_results()
         self.latest_point = point
-        if self.blocked_rect is not None and point is not None:
-            (x, y), (w, h) = self.blocked_rect
-            if x <= point[0] < x + w and y <= self.height - point[1] < y + h:
-                return True
-            self.blocked_rect = None
-            self.dwell.reset()
+        if self.hint_until and now >= self.hint_until:
+            self.hint.orderOut_(None)
+            self.hint_until = 0
         fresh = stamp != self.last_stamp
         if fresh:
             self.last_stamp = stamp
-        if self.visible:
-            self.position(now)
-            (origin_x, origin_y), (width, height) = self.last_frame
-            inside = False
-            key = None
-            if point is not None:
-                x = point[0] - origin_x
-                y = self.height - point[1] - origin_y
-                inside = 0 <= x < width and 0 <= y < height
-                if inside:
-                    self.activity = now
-                    for name, ((left, bottom), (w, h)) in self.rects.items():
-                        if left <= x < left + w and bottom <= y < bottom + h:
-                            key = name
-                            break
-            else:
-                self.dwell.missing(now)
-                self.scrolling.reset()
-                if self.dwell.target is None:
-                    self.set_hover(None)
-            recording = self.dictation.thread is not None and self.dictation.thread.is_alive()
-            if not self.tools_ready and self.page != "settings" and not recording:
-                if now - self.activity > 3:
-                    self.hide()
-                    return self.paused
-            if fresh and point is not None:
-                settled = now - self.animation >= 0.24
-                if key and key.startswith("scroll-") and settled:
-                    amount = self.scrolling.update(stamp, key)
-                    if amount:
-                        self.scroll(key.removeprefix("scroll-"), amount)
-                    self.dwell.reset()
-                    progress = min(1, (stamp - self.scrolling.started) / 0.32)
-                    self.set_hover(key, progress)
-                else:
-                    self.scrolling.reset()
-                    fired = self.dwell.update(stamp, key if settled else None)
-                    self.set_hover(key, self.dwell.progress)
-                    if fired:
-                        self.command(key)
-            return inside or self.tools_ready or self.paused
 
-        edge = self.at_edge(point)
-        if edge:
-            if self.active_mode and not self.center_left:
-                return False
-            if fresh and self.edge_dwell.update(stamp, "edge"):
-                self.command("edge")
-                return True
-            return self.active_mode is None
-        if point is not None:
-            self.edge_dwell.reset()
-            if self.active_mode and not self.center_left:
-                self.center_left = math.dist(point, self.mode_origin) >= 64
-        else:
-            self.edge_dwell.missing(now)
-        return self.paused
-
-    def at_edge(self, point):
-        return (
-            point is not None
-            and point[0] >= self.width - 96
-            and abs(point[1] - self.height / 2) <= 73
+        on_rail, rail_key = self.hit_test(
+            point, (self.rail_origin, self.rail_size), self.rail_rects
         )
+        if self.paused and rail_key != "pause":
+            rail_key = None
+        if point is None:
+            self.rail_dwell.missing(now)
+        elif fresh:
+            fired = self.rail_dwell.update(stamp, rail_key)
+            self.rail_feedback(rail_key)
+            if fired:
+                self.command(rail_key)
+                return True
+        if on_rail or self.paused:
+            self.direction.reset()
+            self.scrolling.reset()
+            if on_rail and fresh:
+                self.confirm.reset()
+                if self.active_mode in ("left", "right"):
+                    self.anchor = self.aim_since = None
+                    self.mark(None, None)
+            return True
+
+        if point is not None and self.active_mode and not self.center_left:
+            self.center_left = math.dist(point, self.mode_origin) >= 64
+        if not self.visible:
+            return False
+
+        inside, key = self.hit_test(point, self.last_frame, self.rects)
+        if self.blocked_rect is not None and point is not None:
+            blocked, _ = self.hit_test(point, self.blocked_rect, {})
+            if blocked:
+                return True
+            self.blocked_rect = None
+            self.dwell.reset()
+        if self.active_mode == "precise":
+            direction = (
+                key.removeprefix("precise-")
+                if key and key.startswith("precise-") and now - stamp <= 0.30
+                else None
+            )
+            self.move_precisely(now, direction)
+        if point is None:
+            self.dwell.missing(now)
+            self.scrolling.reset()
+            if self.dwell.target is None:
+                self.set_hover(None)
+        elif fresh:
+            if key and key.startswith("scroll-"):
+                amount = self.scrolling.update(stamp, key)
+                if amount:
+                    self.scroll(key.removeprefix("scroll-"), amount)
+                self.dwell.reset()
+                self.set_hover(key, min(1, (stamp - self.scrolling.started) / 0.32))
+            elif key and key.startswith("precise-"):
+                self.dwell.reset()
+                elapsed = now - self.direction.since if self.direction.since is not None else 0
+                self.set_hover(key, min(1, elapsed / 0.30))
+            else:
+                self.scrolling.reset()
+                fired = self.dwell.update(stamp, key)
+                self.set_hover(key, self.dwell.progress)
+                if fired:
+                    self.command(key)
+        return inside or self.tools_ready
 
     def desktop_gaze(self, stamp, point, closed, valid, assisted):
         if not valid:
+            self.keyboard_owned = False
             if self.confirm.phase == "armed":
-                self.show_tab("Hedefe tekrar bak.")
+                self.show_hint("Hedefe tekrar bak.")
             self.confirm.reset()
             self.anchor = self.aim_since = None
             self.key_dwell.missing(time.monotonic())
             self.mark(None, None)
             return False
         if stamp == self.last_action_stamp:
-            return False
+            return self.confirm.phase == "armed" or self.keyboard_owned
         self.last_action_stamp = stamp
+        self.keyboard_owned = False
         if self.keyboard.target and stamp - self.last_keyboard_poll >= 0.2:
             self.last_keyboard_poll = stamp
             self.keyboard.refresh()
@@ -738,18 +818,11 @@ class Toolbar:
             key = self.keyboard.key_at(*point, self.height)
             if self.key_dwell.update(stamp, key):
                 self.keyboard.press(key)
-            return key is not None
+            self.keyboard_owned = key is not None
+            return self.keyboard_owned
 
-        if self.at_edge(point):
-            if self.confirm.phase == "armed":
-                self.show_tab("Hedefe tekrar bak.")
-            self.confirm.reset()
-            self.anchor = self.aim_since = None
-            self.mark(None, None)
-            return False
         if not self.center_left:
             return False
-        now = time.monotonic()
         if not closed and point is None:
             self.confirm.reset()
             self.anchor = self.aim_since = None
@@ -764,7 +837,7 @@ class Toolbar:
             and math.dist(point, self.anchor) > distance
         ):
             if self.confirm.phase == "armed":
-                self.show_tab("Hedefe tekrar bak.")
+                self.show_hint("Hedefe tekrar bak.")
             self.anchor = self.aim_since = None
             self.confirm.reset()
             self.mark(None, None)
@@ -781,21 +854,25 @@ class Toolbar:
                     0.65 * self.anchor[0] + 0.35 * point[0],
                     0.65 * self.anchor[1] + 0.35 * point[1],
                 )
-                self.tools_on_left = self.anchor[0] >= self.width / 2
                 self.tools_ready = True
                 Quartz.CGWarpMouseCursorPosition(self.anchor)
                 self.mark(self.anchor if self.active_mode == "precise" else None, "armed")
                 self.render_tools()
-                self.open(now)
+                self.open()
                 return True
             return False
 
         old = self.confirm.phase
         phase = self.confirm.update(stamp, pid if self.anchor is not None else None, closed)
         if phase == "armed" and old != "armed":
-            self.click_point = assisted or self.anchor
+            self.click_point = (
+                assisted
+                if assisted is not None and math.dist(assisted, self.anchor) <= 45
+                else self.anchor
+            )
+            Quartz.CGWarpMouseCursorPosition(self.click_point)
             self.mark(self.click_point, "armed")
-            self.show_tab("Tık hazır\nŞimdi iki kez kırp.")
+            self.show_hint("Tık hazır\nŞimdi iki kez kırp.")
             UI.NSBeep()
         elif phase == "confirmed":
             self.click(self.active_mode, self.click_point)
@@ -803,11 +880,11 @@ class Toolbar:
             self.hide()
         elif phase != "armed" and old == "armed":
             self.mark(None, None)
-            self.show_tab("Hedefe tekrar bak.")
-        return False
+            self.show_hint("Hedefe tekrar bak.")
+        return phase == "armed"
 
     def close(self):
         self.dictation.close()
         self.keyboard.dispose()
-        for panel in (self.reticle, self.tab, self.panel):
+        for panel in (self.reticle, self.hint, self.rail, self.panel):
             panel.close()

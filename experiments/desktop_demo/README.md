@@ -61,13 +61,13 @@ After calibration, on the home page, or from the 12-task results, choose
 **Masaüstünü kontrol et**. Returning home from an unfinished trial preserves
 the current calibration while the camera stays open.
 Desktop control and the
-12-task experiment use the same calibration. Look at the chevron halfway down
-the right edge to open the toolbar. Escape ends desktop control while keeping
+12-task experiment use the same calibration. The icon toolbar stays visible on the right edge. Look at a command icon to select it. Escape ends desktop control while keeping
 the window and camera session available.
 
 - **Sol tık / Sağ tık**: look at the target until the crosshair and tone appear,
   then blink twice. **Hassas imleç** instead lets you adjust the crosshair with
-  arrow buttons before selecting a click.
+  directional controls near the target before selecting a click. Hold your gaze
+  on an arrow to move continuously and look away to stop.
 - **Kaydır**: look at the content first. Hold a gaze on an arrow to scroll
   continuously and accelerate.
 - **Klavye / Türkçe dikte**: focus an editable field in another app, then
@@ -81,8 +81,10 @@ the window and camera session available.
   remains active. **Duraklat** leaves only the resume affordance.
 
 Desktop control uses macOS Accessibility permission and supports one display.
-The white ring follows unassisted gaze. Verified nearby controls can attract
-the pointer without activating the control.
+The white ring follows stabilized gaze. The same stabilization drives toolbar
+and keyboard hit testing, and an armed click keeps its position while you blink.
+Verified nearby controls can attract the pointer. The calibration record stores
+per-target signed bias and RMS jitter for raw, model-filtered and desktop-stabilized points.
 
 ## Privacy and records
 

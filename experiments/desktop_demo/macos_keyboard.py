@@ -27,10 +27,12 @@ def panel_rect(element, fallback, size="medium"):
     screens = UI.NSScreen.screens()
     top = UI.NSMaxY(screens[0].frame())
     position = ax_geometry(attribute(element, "AXPosition"), AX.kAXValueCGPointType)
-    size = ax_geometry(attribute(element, "AXSize"), AX.kAXValueCGSizeType)
+    field_size = ax_geometry(attribute(element, "AXSize"), AX.kAXValueCGSizeType)
     field = caret = None
-    if position is not None and size is not None:
-        field = UI.NSMakeRect(position.x, top - position.y - size.height, size.width, size.height)
+    if position is not None and field_size is not None:
+        field = UI.NSMakeRect(
+            position.x, top - position.y - field_size.height, field_size.width, field_size.height
+        )
     selected = attribute(element, "AXSelectedTextRange")
     if selected is not None:
         err, value = AX.AXUIElementCopyParameterizedAttributeValue(
@@ -52,10 +54,10 @@ def panel_rect(element, fallback, size="medium"):
 
     screen = max(screens, key=lambda screen: area(screen.frame(), anchor))
     v = screen.visibleFrame()
-    scale = {"small": 0.91, "medium": 1.0, "large": 1.10}[size]
-    width = min(836 * scale, v.size.width - 24)
-    height = min(294 * scale, v.size.height * 0.40)
-    xs = (UI.NSMidX(v) - width / 2, UI.NSMinX(v) + 8, UI.NSMaxX(v) - width - 8)
+    scale = {"small": 0.88, "medium": 0.96, "large": 1.0}[size]
+    width = (v.size.width - 238) * scale
+    height = v.size.height * (0.38 + 0.10 * scale)
+    xs = (UI.NSMinX(v) + 12,)
     ys = (UI.NSMinY(v) + 8, UI.NSMaxY(v) - height - 8)
     candidates = [UI.NSMakeRect(x, y, width, height) for y in ys for x in xs]
     return min(
@@ -265,7 +267,7 @@ class FocusKeyboard:
                         {
                             UI.NSForegroundColorAttributeName: UI.NSColor.whiteColor(),
                             UI.NSFontAttributeName: UI.NSFont.systemFontOfSize_weight_(
-                                17 if len(label) > 2 else 21, UI.NSFontWeightSemibold
+                                20 if len(label) > 2 else 28, UI.NSFontWeightSemibold
                             ),
                         },
                     )

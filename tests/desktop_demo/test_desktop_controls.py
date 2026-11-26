@@ -103,3 +103,39 @@ def test_home_after_partial_trial_can_open_desktop(monkeypatch, tmp_path):
     assert api.command("desktop_start")["ok"]
     assert api.desktop_sample()[0] and s.geometry == geometry
     api.close()
+
+
+def test_desktop_fixation_holds_against_noise_and_allows_a_deliberate_shift():
+    from experiments.desktop_demo.desktop_gaze_filter import DesktopGazeFilter
+
+    gaze = DesktopGazeFilter()
+    center = (400, 300)
+    assert gaze.update(1.0, center) == center
+    assert gaze.update(1.1, (411, 293)) == center
+    assert gaze.update(1.2, (620, 610)) == center
+    assert gaze.update(1.3, (403, 309)) == center
+    assert gaze.update(1.4, (550, 400)) == center
+    assert gaze.update(1.5, (552, 401)) == (550, 400)
+    assert gaze.update(1.5, (100, 100)) == (550, 400)
+    assert gaze.update(2.0, center) == center
+
+
+def test_held_direction_glides_and_stops_when_gaze_leaves():
+    from experiments.desktop_demo.desktop_gaze_filter import HeldDirection
+
+    direction = HeldDirection()
+    steps = [direction.step(i / 60, "right") for i in range(121)]
+    assert not any(steps[:18])
+    assert 100 < sum(steps) < 240
+    assert 0 < steps[30] < steps[-1] < 3
+    assert direction.step(2.01, None) == 0
+    assert direction.step(2.02, "left") == 0
+
+
+def test_gaze_check_separates_bias_and_tremor():
+    from experiments.desktop_demo.protocol import fixation_errors
+
+    assert fixation_errors([(18, 10), (22, 10)]) == {
+        "bias_px": [20, 10],
+        "jitter_rms_px": 2.0,
+    }

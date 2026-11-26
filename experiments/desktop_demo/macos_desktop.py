@@ -17,6 +17,7 @@ from eye_tracker.intent.targets import TargetRect
 from eye_tracker.platform_adapters.macos_accessibility import MacOSAccessibility
 from eye_tracker.platform_adapters.macos_outline import _screen_matches
 
+from .desktop_gaze_filter import DesktopGazeFilter
 from .macos_keyboard import FocusKeyboard
 from .macos_targets import Dock, window_targets
 from .macos_toolbar import Toolbar, nonactivating_panel
@@ -43,6 +44,7 @@ class MacOSDesktop:
         self.closed = False
         self.escape_down = False
         self.magnet = RingMagnet()
+        self.fixation = DesktopGazeFilter()
         self.aim = PointerSmoother(fast=0.065, slow=0.16)
         self.cursor = PointerSmoother(fast=0.055, slow=0.12)
 
@@ -95,7 +97,6 @@ class MacOSDesktop:
             lambda: self.native_page("calibration"),
             lambda: self.native_page("settings"),
             keyboard,
-            bool(UI.NSWorkspace.sharedWorkspace().accessibilityDisplayShouldReduceMotion()),
         )
         self.feed = PreviewFeed(MacOSAccessibility())
         self.dock_stop = threading.Event()
@@ -136,6 +137,7 @@ class MacOSDesktop:
         if self.ring:
             self.ring.close()
         self.toolbar = self.ring = self.feed = None
+        self.fixation.reset()
         self.aim.reset()
         self.cursor.reset()
         self.magnet.reset()
@@ -161,31 +163,30 @@ class MacOSDesktop:
         if not self.ring.isVisible():
             self.ring.orderFrontRegardless()
 
-    def update(self, now, frame, reduced_motion):
+    def update(self, now, frame):
         stamp, normalized, closed = frame
         valid = 0 <= now - stamp <= 0.3 and closed is not None
         raw = desktop_point(normalized, self.viewport, self.size) if valid and not closed else None
-        self.toolbar.reduced_motion = reduced_motion
-        owned = self.toolbar.tick(stamp, now, raw, closed is True, self.last_cursor)
+        point = self.fixation.update(stamp, raw)
+        owned = self.toolbar.tick(stamp, now, point, closed is True, self.last_cursor)
         pressed = any(Quartz.CGEventSourceButtonState(HID, button) for button in (0, 1, 2))
         if not owned and not pressed:
-            owned = self.toolbar.desktop_gaze(stamp, raw, closed is True, valid, self.last_cursor)
+            owned = self.toolbar.desktop_gaze(stamp, point, closed is True, valid, self.last_cursor)
         if owned or pressed:
             self.cursor.reset()
-            self.aim.reset()
             self.magnet.reset()
             self.last_sample = None
             self.last_cursor = None
             if self.ring.isVisible():
                 self.ring.orderOut_(None)
-        elif raw is not None:
-            aim = self.aim.update(now, raw)
+        elif point is not None:
+            aim = self.aim.update(now, point)
             if stamp != self.last_sample or self.assisted is None:
                 targets = window_targets(self.feed, self.desktop_rect, now)
                 dock = self.dock_values[:]
                 if dock and now - dock[0][0] <= 0.38:
                     targets.extend(dock[0][1])
-                self.assisted = self.magnet.update(stamp, raw, targets)
+                self.assisted = self.magnet.update(stamp, point, targets)
                 self.last_sample = stamp
             self.display(now, aim, self.assisted if self.magnet.locked else aim)
         elif not valid:
@@ -202,7 +203,7 @@ class MacOSDesktop:
         try:
             reading = self.api.desktop_sample()
             if reading is not None:
-                active, frame, reduced = reading
+                active, frame, _ = reading
                 if active:
                     escape = Quartz.CGEventSourceKeyState(HID, 53)
                     if escape and not self.escape_down:
@@ -216,7 +217,7 @@ class MacOSDesktop:
                             self.next_screen_check = now + 0.4
                             if not _screen_matches(UI, self.size):
                                 raise RuntimeError("Ekran değişti. Kalibrasyonu yenile.")
-                        self.update(now, frame, reduced)
+                        self.update(now, frame)
                     self.escape_down = escape
                 elif self.toolbar is not None:
                     self.stop()

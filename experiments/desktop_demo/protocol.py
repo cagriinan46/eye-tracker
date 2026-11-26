@@ -8,6 +8,7 @@ from eye_tracker.intent.gaze_stabilizer import GazeStabilizer
 from eye_tracker.intent.region_dwell import RegionDwell
 from eye_tracker.intent.region_magnet import RegionMagnet
 
+from .desktop_gaze_filter import DesktopGazeFilter
 from .keyboard import KEY_IDS, Keyboard
 
 DWELL_SECONDS = 1.2
@@ -87,6 +88,17 @@ def finite_pair(value):
     return value is not None and len(value) == 2 and all(math.isfinite(v) for v in value)
 
 
+def fixation_errors(offsets):
+    if not offsets:
+        return None
+    values = np.asarray(offsets, dtype=float)
+    bias = values.mean(axis=0)
+    return dict(
+        bias_px=bias.tolist(),
+        jitter_rms_px=float(np.sqrt(np.mean(np.sum((values - bias) ** 2, axis=1)))),
+    )
+
+
 UNIGAZE_POINTS = [
     (0.5, 0.5),
     (0.1, 0.1),
@@ -121,6 +133,8 @@ class Session:
         self.calibration_sample_start = None
         self.calibration_points = UNIGAZE_POINTS if model_name != "mgaze" else CALIBRATION_POINTS
         self.raw_check_samples = []
+        self.check_offsets, self.raw_check_offsets, self.stabilized_check_offsets = [], [], []
+        self.check_gaze = DesktopGazeFilter()
         self.phase = "preparation"
         self.calibrated = False
         self.message = ""
@@ -146,6 +160,8 @@ class Session:
         self.phase = phase
         self.calibration_sample_start = None
         self.raw_check_samples = []
+        self.check_offsets, self.raw_check_offsets, self.stabilized_check_offsets = [], [], []
+        self.check_gaze.reset()
         self.trial_errors = []
         self.token += 1
         self.onset = None
@@ -409,15 +425,14 @@ class Session:
                 self.transition("fitting" if final else "calibration")
         elif self.phase == "check":
             if 1 <= elapsed < 3 and finite_pair(point):
-                self.samples.append(
-                    float(np.linalg.norm((np.array(point) - self.point) * self.geometry[:2]))
-                )
+                offset = (np.asarray(point) - self.point) * self.geometry[:2]
+                self.check_offsets.append(offset)
+                self.samples.append(float(np.linalg.norm(offset)))
                 if finite_pair(raw_point):
-                    self.raw_check_samples.append(
-                        float(
-                            np.linalg.norm((np.array(raw_point) - self.point) * self.geometry[:2])
-                        )
-                    )
+                    raw_offset = (np.asarray(raw_point) - self.point) * self.geometry[:2]
+                    self.raw_check_offsets.append(raw_offset)
+                    self.raw_check_samples.append(float(np.linalg.norm(raw_offset)))
+                    self.stabilized_check_offsets.append(self.check_gaze.update(now, raw_offset))
             if elapsed >= 3:
                 if len(self.samples) < 5:
                     self.fail("Kısa kontrolde göz verisi yetersiz. Yeniden kalibre et.")
@@ -427,6 +442,9 @@ class Session:
                         target=list(self.point),
                         n=len(self.samples),
                         mean_px=float(np.mean(self.samples)),
+                        filtered_fixation=fixation_errors(self.check_offsets),
+                        raw_fixation=fixation_errors(self.raw_check_offsets),
+                        desktop_fixation=fixation_errors(self.stabilized_check_offsets),
                         raw_n=len(self.raw_check_samples),
                         raw_mean_px=float(np.mean(self.raw_check_samples))
                         if self.raw_check_samples

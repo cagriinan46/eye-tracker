@@ -494,7 +494,10 @@ class DesktopAPI:
                     self._filter_history_ms = getattr(model, "filter_history_ms", None)
                     self._pointer_captured = captured
                     if not self._desktop_active:
+                        phase_before_sample = s.phase
                         s.sample(captured, features, point, raw_point=raw_point)
+                        if phase_before_sample == "check" and s.phase == "ready":
+                            self._save("in_progress")
                     else:
                         closed = getattr(model, "eyes_closed", None)
                         if self._model_name == "mgaze" and self._tracking:

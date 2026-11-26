@@ -399,3 +399,41 @@ def test_delayed_valid_features_train_but_never_drive_live_pointer(monkeypatch, 
     assert rows == [expected[phase]]
     assert not api.snapshot()["tracking"]
     assert api.pointer_sample() is None
+
+
+def test_quick_mode_keeps_all_targets_and_uses_ten_samples_after_settling():
+    s = Session(model_name="mpiifacegaze")
+    geometry = [1000, 800, 0, 0, 1]
+    s.start_calibration(geometry, "quick")
+    for index in range(13):
+        now = index * 2.2
+        s.ack(s.token, now)
+        s.sample(now + 0.9, [99, 99], None)
+        for j in range(10):
+            s.sample(now + 1.01 + j * 0.08, [index, j], None)
+        assert s.phase == "calibration" and s.index == index
+        s.sample(now + 2.02, [index, 10], None)
+    assert s.phase == "fitting"
+    x, y = s.calibration_arrays()
+    assert x.shape == (130, 2) and y.shape == (130, 2)
+    assert x[0, 1] == 0 and x[9, 1] == 10 and np.max(x) < 99
+    assert len(np.unique(y, axis=0)) == 13
+    assert s.calibration_seconds == pytest.approx(12 * 2.2 + 2.02)
+    s.start_calibration(geometry)
+    assert s.sample_count == 20 and s.calibration_seconds is None
+
+
+def test_quick_mode_retries_insufficient_target_without_losing_previous_samples():
+    s = Session(model_name="mpiifacegaze")
+    s.start_calibration([1000, 800, 0, 0, 1], "quick")
+    s.ack(s.token, 0)
+    for j in range(10):
+        s.sample(1 + 0.1 * j, [j, j], None)
+    s.sample(2.02, [10, 10], None)
+    s.ack(s.token, 3)
+    s.sample(4.2, [1, 2], None)
+    s.sample(8.1, None, None)
+    assert s.phase == "calibration_retry"
+    s.retry_calibration()
+    assert s.phase == "calibration" and s.index == 1
+    assert len(s.training) == 1 and not s.samples

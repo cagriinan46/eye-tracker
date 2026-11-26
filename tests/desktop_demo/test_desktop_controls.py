@@ -65,3 +65,23 @@ def test_magnet_locks_nearby_verified_target_and_releases():
     other = TargetRect(95, 80, 24, 24)
     assert magnet.update(10.4, gaze, [("near", near, True), ("other", other, True)]) == gaze
     assert magnet.status == "ambiguous"
+
+
+def test_completed_trials_can_open_desktop_without_clearing_results(monkeypatch, tmp_path):
+    monkeypatch.setattr("experiments.desktop_demo.runtime.sys.platform", "darwin")
+    api = DesktopAPI(output=tmp_path)
+    s = api._session
+    api._camera = "ready"
+    geometry = [1200, 800, 0, 0, 2]
+    s.start_calibration(geometry)
+    s.calibrated = True
+    s.transition("ready")
+    s.start_demo()
+    for _ in range(12):
+        s.finish_trial(s.expected, 2)
+    assert s.phase == "results"
+    assert api.command("desktop_start")["ok"]
+    assert api.desktop_sample()[0]
+    assert s.phase == "results" and len(s.trials) == 12
+    assert s.geometry == geometry and s.calibrated
+    api.close()

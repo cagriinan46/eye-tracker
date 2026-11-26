@@ -116,6 +116,9 @@ class Session:
         self.model_name = model_name
         self.feature_count = 2 if model_name != "mgaze" else 258
         self.sample_count = 20 if model_name != "mgaze" else 45
+        self.calibration_variant = "standard"
+        self.calibration_started = self.calibration_seconds = None
+        self.calibration_sample_start = None
         self.calibration_points = UNIGAZE_POINTS if model_name != "mgaze" else CALIBRATION_POINTS
         self.raw_check_samples = []
         self.phase = "preparation"
@@ -141,6 +144,7 @@ class Session:
 
     def transition(self, phase):
         self.phase = phase
+        self.calibration_sample_start = None
         self.raw_check_samples = []
         self.trial_errors = []
         self.token += 1
@@ -177,7 +181,11 @@ class Session:
             return None
         return WEB_INSTRUCTIONS[self.index]
 
-    def start_calibration(self, geometry):
+    def start_calibration(self, geometry, variant="standard"):
+        if variant not in ("standard", "quick") or (
+            variant == "quick" and self.model_name == "mgaze"
+        ):
+            raise ValueError("Bu kalibrasyon seçeneği seçili model için kullanılamıyor.")
         if (
             len(geometry) != 5
             or not all(math.isfinite(x) for x in geometry)
@@ -188,6 +196,9 @@ class Session:
             raise ValueError("Invalid window geometry")
         self.calibrated = False
         self.geometry = list(geometry)
+        self.calibration_variant = variant
+        self.calibration_started = self.calibration_seconds = None
+        self.sample_count = 45 if self.model_name == "mgaze" else 10 if variant == "quick" else 20
         self.samples, self.training, self.check_results, self.trials = [], [], [], []
         self.index, self.paused_at = 0, None
         self.message = ""
@@ -196,6 +207,8 @@ class Session:
     def ack(self, token, now):
         if token == self.token and self.onset is None and self.paused_at is None:
             self.onset = now
+            if self.phase == "calibration" and self.calibration_started is None:
+                self.calibration_started = now
 
     def fail(self, message):
         self.message = message
@@ -363,24 +376,37 @@ class Session:
         self.last_sample = now
         elapsed = now - self.onset
         if self.phase == "calibration":
-            if elapsed > 15:
+            quick = self.calibration_variant == "quick"
+            timed = self.model_name != "mgaze" and not quick
+            settle = 1.0 if quick else 1.5
+            if elapsed > (5.0 if quick else 15.0):
                 self.insufficient_calibration()
+                return
+            accepted = False
+            if elapsed >= settle and (not timed or elapsed < 7.5) and features is not None:
+                a = np.asarray(features, dtype=np.float32)
+                if a.shape == (self.feature_count,) and np.isfinite(a).all():
+                    accepted = True
+                    self.samples.append(a.copy())
+                    if self.calibration_sample_start is None:
+                        self.calibration_sample_start = now
+            enough = len(self.samples) >= self.sample_count
+            if quick:
+                finished = enough and accepted and now - self.calibration_sample_start >= 1.0
             else:
-                timed = self.model_name != "mgaze"
-                if elapsed >= 1.5 and (not timed or elapsed < 7.5) and features is not None:
-                    a = np.asarray(features, dtype=np.float32)
-                    if a.shape == (self.feature_count,) and np.isfinite(a).all():
-                        self.samples.append(a.copy())
-                finished = elapsed >= 7.5 if timed else len(self.samples) >= self.sample_count
-                if finished:
-                    if len(self.samples) < self.sample_count:
-                        self.insufficient_calibration()
-                        return
-                    indices = np.linspace(0, len(self.samples) - 1, self.sample_count, dtype=int)
-                    self.training.append(np.array(self.samples)[indices])
-                    self.samples = []
-                    self.index += 1
-                    self.transition("fitting" if self.index == 13 else "calibration")
+                finished = elapsed >= 7.5 if timed else enough
+            if finished:
+                if not enough:
+                    self.insufficient_calibration()
+                    return
+                indices = np.linspace(0, len(self.samples) - 1, self.sample_count, dtype=int)
+                self.training.append(np.array(self.samples)[indices])
+                self.samples = []
+                self.index += 1
+                final = self.index == len(self.calibration_points)
+                if final and self.calibration_started is not None:
+                    self.calibration_seconds = now - self.calibration_started
+                self.transition("fitting" if final else "calibration")
         elif self.phase == "check":
             if 1 <= elapsed < 3 and finite_pair(point):
                 self.samples.append(
@@ -460,18 +486,25 @@ class Session:
     def measurement_progress(self, now):
         if self.phase not in ("calibration", "check"):
             return None
-        duration = 7.5 if self.phase == "calibration" else 3.0
-        settle = 1.5 if self.phase == "calibration" else 1.0
+        calibrating = self.phase == "calibration"
+        quick = self.calibration_variant == "quick"
+        sample_based = calibrating and (quick or self.model_name == "mgaze")
+        duration = (5.0 if quick else 7.5) if calibrating else 3.0
+        settle = 1.5 if calibrating and not quick else 1.0
         elapsed = max(0, now - self.onset) if self.onset is not None else 0
         fraction = max(0, 1 - elapsed / duration)
-        if self.phase == "calibration" and self.model_name == "mgaze":
-            fraction = max(0, 1 - len(self.samples) / self.sample_count)
+        samples = len(self.samples)
+        if sample_based:
+            samples = min(samples, self.sample_count)
+            fraction = 1 - samples / self.sample_count
+            if quick and self.calibration_sample_start is not None:
+                fraction = max(fraction, 1 - (self.last_sample - self.calibration_sample_start))
         return dict(
             index=self.index + 1,
-            total=13 if self.phase == "calibration" else 5,
+            total=len(self.calibration_points) if calibrating else len(CHECK_POINTS),
             remaining_s=max(0, duration - elapsed),
-            sample_based=self.phase == "calibration" and self.model_name == "mgaze",
-            samples=len(self.samples),
+            sample_based=sample_based,
+            samples=samples,
             required_samples=self.sample_count,
             remaining_fraction=fraction,
             settling=elapsed < settle,
@@ -481,6 +514,8 @@ class Session:
     def snapshot(self):
         return dict(
             phase=self.phase,
+            calibration_variant=self.calibration_variant,
+            calibration_seconds=self.calibration_seconds,
             scenario=self.scenario,
             can_demo=self.calibrated or self.phase in ("ready", "results"),
             message=self.message,

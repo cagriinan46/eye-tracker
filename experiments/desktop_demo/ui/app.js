@@ -86,7 +86,7 @@ function render(s){
   wasDesktop=s.desktop_active;
   if(s.desktop_error&&s.desktop_error!==lastDesktopError)notice(s.desktop_error);
   lastDesktopError=s.desktop_error;
-  for(const id of ['desktopReady','desktopPractice']){
+  for(const id of ['desktopReady','desktopPractice','desktopResult']){
     $(id).hidden=!s.desktop_available;
     $(id).disabled=s.camera!=='ready'||!s.can_demo;
     $(id).textContent=s.desktop_active?'Masaüstü kontrolünü bitir':'Masaüstünü kontrol et';
@@ -102,6 +102,8 @@ function render(s){
   $('practiceStatus').textContent=s.can_demo&&s.camera==='ready'?'Göz ayarın hazır. İstediğinde başlayabilirsin.':'Önce kamerayı açıp kalibrasyonu tamamla.';
   $('cameraStart').textContent=s.camera==='loading'?'Vazgeç':s.camera==='stopping'?'Kapatılıyor…':s.camera==='ready'?'Kamerayı kapat':'Kamerayı aç';
   $('calibrate').disabled=s.camera!=='ready'||(!s.tracking&&s.signal_status!=='processing_delayed');
+  $('quickCalibrate').hidden=s.model_name==='mgaze';
+  $('quickCalibrate').disabled=$('calibrate').disabled;
   $('cameraStart').className=s.camera==='ready'?'quiet':'primary';
   $('calibrate').className=s.camera==='ready'?'primary':'quiet';
   $('stepCamera').className=s.camera==='ready'?'done':'current';
@@ -160,7 +162,7 @@ async function applyNativePage(name){
     page(name);
     if(name==='calibration'){
       await command('focus',{active:true});
-      await command('calibrate',{geometry:geometry()});
+      await command('calibrate',{geometry:geometry(),variant:state?.calibration_variant||'standard'});
     }
     await command('native_page_ready',{page:name});
   }finally{nativePageBusy=false;}
@@ -242,9 +244,11 @@ $('webSearch').addEventListener('input',()=>{
   $('webCount').textContent=match?'1 not':'Eşleşme yok';
 });
 $('cameraStart').onclick=()=>act(['ready','loading'].includes(state?.camera)?'stop_camera':'camera');
-const calibrate=()=>act('calibrate',{geometry:geometry()});
-for(const id of ['calibrate','recalibrateReady','recalibrateResult'])$(id).onclick=calibrate;
-for(const id of ['desktopReady','desktopPractice'])$(id).onclick=()=>act(state?.desktop_active?'desktop_stop':'desktop_start');
+const calibrate=variant=>act('calibrate',{geometry:geometry(),variant});
+$('calibrate').onclick=()=>calibrate('standard');
+$('quickCalibrate').onclick=()=>calibrate('quick');
+for(const id of ['recalibrateReady','recalibrateResult'])$(id).onclick=()=>calibrate(state?.calibration_variant||'standard');
+for(const id of ['desktopReady','desktopPractice','desktopResult'])$(id).onclick=()=>act(state?.desktop_active?'desktop_stop':'desktop_start');
 for(const id of ['startDemo','again','practiceStart'])$(id).onclick=()=>act('demo');
 for(const id of ['homeDemo','homeReady','homeResult'])$(id).onclick=()=>navigate('home');
 for(const el of document.querySelectorAll('[data-page]'))el.onclick=()=>navigate(el.dataset.page);

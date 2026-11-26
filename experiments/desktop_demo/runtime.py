@@ -254,7 +254,7 @@ class DesktopAPI:
                         raise ValueError("Önce kamerayı başlat ve uygulama penceresine dön.")
                     self._save("aborted" if s.phase != "results" else "completed")
                     self._folder = None
-                    s.start_calibration(payload["geometry"])
+                    s.start_calibration(payload["geometry"], payload.get("variant", "standard"))
                     self._signal_counts = {}
                     self._eligibility_counts = {}
                     self._meta.pop("training_fit_normalized", None)
@@ -373,8 +373,16 @@ class DesktopAPI:
             dwell_max_interruption_seconds=s.dwell.max_interruption,
             trial_timeout_seconds=15,
             model=self._meta,
-            protocol=("fresh13x20-window6s" if self._model_name != "mgaze" else "fresh13x45")
+            protocol=(
+                "fresh13x10-quick"
+                if s.calibration_variant == "quick"
+                else "fresh13x20-window6s"
+                if self._model_name != "mgaze"
+                else "fresh13x45"
+            )
             + ";5point-independent-check;12-web-control-trials-v3-magnet",
+            calibration_variant=s.calibration_variant,
+            calibration_seconds=s.calibration_seconds,
             selected_model=self._model_name,
             scenario=self._session.scenario,
             appearance=dict(self._preferences),

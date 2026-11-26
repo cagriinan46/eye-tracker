@@ -57,7 +57,8 @@ A single in-region frame after a long gap cannot finish a previous dwell.
 
 ## macOS desktop control
 
-After calibration, choose **Masaüstünü kontrol et**. Desktop control and the
+After calibration or from the 12-task results, choose **Masaüstünü kontrol et**.
+Desktop control and the
 12-task experiment use the same calibration. Look at the chevron halfway down
 the right edge to open the toolbar. Escape ends desktop control while keeping
 the window and camera session available.
@@ -428,3 +429,11 @@ the additional bridge in the same Python environment as pywebview:
 ```sh
 python -m pip install pyobjc-framework-ApplicationServices==12.2.2 pyobjc-framework-CoreText==12.2.2 pyobjc-framework-FSEvents==12.2.2 pyobjc-core==12.2.2
 ```
+
+
+**Hızlı kalibrasyon (deney)** is an optional MPIIFaceGaze and UniGaze comparison.
+It keeps the same 13 training locations and the same checks. Per location it
+waits one second before accepting samples and advances after at least ten valid
+samples spanning one second. A point without enough samples within five seconds
+can be retried. Standard calibration stays the default. The session records
+the selected variant and calibration time, excluding the five checks.

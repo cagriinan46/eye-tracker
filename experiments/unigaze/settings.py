@@ -51,3 +51,25 @@ def verify_sources():
         if hashlib.sha256((HOME / name).read_bytes()).hexdigest() != expected:
             raise RuntimeError("UniGaze source differs from measured version: " + name)
     return manifest
+
+
+def mpiiface_weights():
+    return Path(
+        os.environ.get(
+            "EYE_TRACKER_MPIIFACEGAZE_WEIGHTS",
+            ROOT / "validation/results/alternative-gaze-20261126/mpiiface.safetensors",
+        )
+    )
+
+
+def validate_mpiiface_assets():
+    paths = (
+        PYTHON,
+        INTRINSICS,
+        mpiiface_weights(),
+        HOME / "support/torch/hub/checkpoints/2DFAN4-11f355bf06.pth.tar",
+        HOME / "support/torch/hub/checkpoints/s3fd-619a316812.pth",
+    )
+    missing = [str(path) for path in paths if not path.is_file()]
+    if missing:
+        raise RuntimeError("MPIIFaceGaze için yerel dosyalar eksik: " + ", ".join(missing))

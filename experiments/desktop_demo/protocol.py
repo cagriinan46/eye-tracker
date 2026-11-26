@@ -106,7 +106,7 @@ UNIGAZE_POINTS = [
 
 class Session:
     def __init__(self, model_name="mgaze", scenario="shapes"):
-        if model_name not in ("unigaze", "mgaze"):
+        if model_name not in ("mpiifacegaze", "unigaze", "mgaze"):
             raise ValueError("Unknown gaze model")
         if scenario not in ("shapes", "web"):
             raise ValueError("Unknown interaction scenario")
@@ -114,9 +114,9 @@ class Session:
         self.targets = WEB_TARGETS if scenario == "web" else SHAPES
         self.trial_order = WEB_ORDER if scenario == "web" else TRIAL_ORDER
         self.model_name = model_name
-        self.feature_count = 2 if model_name == "unigaze" else 258
-        self.sample_count = 20 if model_name == "unigaze" else 45
-        self.calibration_points = UNIGAZE_POINTS if model_name == "unigaze" else CALIBRATION_POINTS
+        self.feature_count = 2 if model_name != "mgaze" else 258
+        self.sample_count = 20 if model_name != "mgaze" else 45
+        self.calibration_points = UNIGAZE_POINTS if model_name != "mgaze" else CALIBRATION_POINTS
         self.raw_check_samples = []
         self.phase = "preparation"
         self.calibrated = False
@@ -366,7 +366,7 @@ class Session:
             if elapsed > 15:
                 self.insufficient_calibration()
             else:
-                timed = self.model_name == "unigaze"
+                timed = self.model_name != "mgaze"
                 if elapsed >= 1.5 and (not timed or elapsed < 7.5) and features is not None:
                     a = np.asarray(features, dtype=np.float32)
                     if a.shape == (self.feature_count,) and np.isfinite(a).all():

@@ -52,10 +52,10 @@ def test_unknown_backend_rejected_without_camera():
         DesktopAPI(model_name="unknown")
 
 
-def test_default_desktop_is_unigaze_and_starts_camera_off(tmp_path):
+def test_explicit_unigaze_starts_camera_off(tmp_path):
     from experiments.desktop_demo.runtime import DesktopAPI
 
-    api = DesktopAPI(output=tmp_path)
+    api = DesktopAPI(model_name="unigaze", output=tmp_path)
     assert api.snapshot()["model_name"] == "unigaze"
     assert api.snapshot()["camera"] == "off"
     assert api._worker is None
@@ -136,7 +136,7 @@ def test_default_worker_uses_unigaze_and_releases_on_stop(monkeypatch, tmp_path)
     monkeypatch.setitem(
         sys.modules, "experiments.desktop_demo.unigaze_model", SimpleNamespace(CameraModel=Model)
     )
-    api = DesktopAPI(output=tmp_path)
+    api = DesktopAPI(model_name="unigaze", output=tmp_path)
     try:
         assert api.command("camera")["ok"]
         assert opened.wait(2)
@@ -187,7 +187,7 @@ def test_socket_wait_is_cancellable_without_camera():
 def test_resume_requests_fresh_filter_history(tmp_path):
     from experiments.desktop_demo.runtime import DesktopAPI
 
-    api = DesktopAPI(output=tmp_path)
+    api = DesktopAPI(model_name="unigaze", output=tmp_path)
     api._session.phase = "ready"
     api._session.start_demo()
     api._session.ack(api._session.token, 0)
@@ -284,7 +284,7 @@ def test_inflight_paused_frame_is_discarded_on_resume(monkeypatch, tmp_path):
     monkeypatch.setitem(
         sys.modules, "experiments.desktop_demo.unigaze_model", SimpleNamespace(CameraModel=Model)
     )
-    api = DesktopAPI(output=tmp_path)
+    api = DesktopAPI(model_name="unigaze", output=tmp_path)
     monkeypatch.setattr(api._session, "sample", lambda *a, **k: samples.append(a))
     try:
         assert api.command("camera")["ok"]
@@ -385,7 +385,7 @@ def test_delayed_valid_features_train_but_never_drive_live_pointer(monkeypatch, 
     monkeypatch.setitem(
         sys.modules, "experiments.desktop_demo.unigaze_model", SimpleNamespace(CameraModel=Model)
     )
-    api = DesktopAPI(output=tmp_path)
+    api = DesktopAPI(model_name="unigaze", output=tmp_path)
     api._session.start_calibration([1000, 800, 0, 0, 1])
     api._session.phase = phase
     rows = []

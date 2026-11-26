@@ -1,4 +1,4 @@
-"""UniGaze process adapter: GUI environment never imports torch or loads weights."""
+"""Angle-model process adapter: GUI environment never imports torch or loads weights."""
 
 import os
 import signal
@@ -8,12 +8,12 @@ import sys
 import threading
 import time
 
-from experiments.unigaze.settings import PYTHON, ROOT, validate_assets
+from experiments.unigaze.settings import PYTHON, ROOT, validate_assets, validate_mpiiface_assets
 from experiments.unigaze.wire import receive, send
 
 
 class CameraModel:
-    def __init__(self, camera_index=None, stop_event=None):
+    def __init__(self, camera_index=None, stop_event=None, model_name="unigaze"):
         self.stop_event = stop_event if stop_event is not None else threading.Event()
         self.sock = self.worker = None
         self.preview_sock = None
@@ -27,9 +27,12 @@ class CameraModel:
         self.last_timing = None
         if sys.platform != "darwin":
             raise RuntimeError(
-                "UniGaze masaüstü bağlantısı şu an macOS için hazır. MGaze için --model mgaze kullan."
+                "Bu bakış modelinin masaüstü bağlantısı şu an macOS için hazır. MGaze için --model mgaze kullan."
             )
-        validate_assets()
+        if model_name == "mpiifacegaze":
+            validate_mpiiface_assets()
+        else:
+            validate_assets()
         if camera_index is None:
             from live_svr_demo import macbook_camera_index
 
@@ -48,6 +51,7 @@ class CameraModel:
                         str(child.fileno()),
                         str(camera_index),
                         str(preview_child.fileno()),
+                        model_name,
                     ],
                     pass_fds=(child.fileno(), preview_child.fileno()),
                     start_new_session=True,
@@ -65,7 +69,7 @@ class CameraModel:
                 preview_child.close()
             ready, _ = receive(self.sock, cancelled=self.stop_event.is_set, timeout=120)
             if ready.get("status") != "ready":
-                raise RuntimeError(ready.get("error", "UniGaze başlatılamadı"))
+                raise RuntimeError(ready.get("error", f"{model_name} başlatılamadı"))
             self._metadata = ready["metadata"]
             self.sock.settimeout(30)
             self.preview_thread = threading.Thread(

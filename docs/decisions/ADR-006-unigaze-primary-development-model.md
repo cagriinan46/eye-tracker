@@ -2,7 +2,8 @@
 
 ## Status
 
-Accepted by the human project owner on 2026-10-29.
+Accepted by the human project owner on 2026-10-29. The desktop default was
+subsequently superseded by [ADR-007](ADR-007-mpiifacegaze-desktop-default.md).
 
 This selects the primary development model. It does not declare a completed
 assistive system or claim that desktop integration is already implemented.

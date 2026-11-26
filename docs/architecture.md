@@ -128,10 +128,9 @@ GazeResult
 - timestamp
 ```
 
-The primary development gaze model is UniGaze, approved on 2026-10-29 in
-[ADR-006](decisions/ADR-006-unigaze-primary-development-model.md). MGazeNet remains
-the comparison baseline and explicit rollback option. This selection does not
-claim a finished system, head-position robustness or completed desktop integration.
+The primary desktop development model is MPIIFaceGaze ResNet-18 under
+[ADR-007](decisions/ADR-007-mpiifacegaze-desktop-default.md). UniGaze is the
+explicit fallback and MGazeNet remains a comparison baseline.
 
 Do not mandate:
 

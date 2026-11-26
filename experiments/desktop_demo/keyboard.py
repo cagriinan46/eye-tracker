@@ -1,11 +1,13 @@
 """Gaze-keyboard text state and Turkish word suggestions.
 
 Independent of camera, GUI and OS APIs: keys arrive as identifiers and the result
-is plain text held in memory. Nothing here saves, sends or types text elsewhere,
-so a later OS text adapter can consume the same state without changing it.
+is plain text held in memory. Only completed words and their counts enter the optional personal dictionary.
 """
 
+import os
+import sqlite3
 from bisect import bisect_left
+from contextlib import closing
 from heapq import nlargest
 from pathlib import Path
 
@@ -41,9 +43,9 @@ def is_word_character(character):
 
 
 class Suggester:
-    """Prefix completion over a local word-frequency list. No network, no learning."""
+    """Rank prefix completions by personal usage, then corpus frequency."""
 
-    def __init__(self, entries):
+    def __init__(self, entries, personal_path=None):
         best = {}
         for word, count in entries:
             word = turkish_lower(word)
@@ -52,23 +54,68 @@ class Suggester:
         self.counts = best
         self.common = nlargest(SUGGESTION_SLOTS, best, key=lambda w: (best[w], w))
 
+        self.personal_path = personal_path
+        self.personal = {}
+        if personal_path is not None and personal_path.is_file():
+            try:
+                with closing(sqlite3.connect(personal_path)) as db:
+                    self.personal = dict(db.execute("SELECT word, uses FROM vocabulary"))
+            except sqlite3.Error:
+                pass
+
+    def remember(self, word):
+        word = turkish_lower(word)
+        if self.personal_path is None or not (1 <= len(word) <= 64):
+            return
+        if not all(part.isalpha() for part in word.split("'")):
+            return
+        try:
+            self.personal_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            os.close(os.open(self.personal_path, os.O_CREAT | os.O_WRONLY, 0o600))
+            with closing(sqlite3.connect(self.personal_path, timeout=0.1)) as db, db:
+                db.execute(
+                    "CREATE TABLE IF NOT EXISTS vocabulary "
+                    "(word TEXT PRIMARY KEY, uses INTEGER NOT NULL)"
+                )
+                db.execute(
+                    "INSERT INTO vocabulary VALUES (?, 1) ON CONFLICT(word) "
+                    "DO UPDATE SET uses = uses + 1",
+                    (word,),
+                )
+                db.execute(
+                    "DELETE FROM vocabulary WHERE word IN (SELECT word FROM vocabulary "
+                    "ORDER BY uses DESC, rowid DESC LIMIT -1 OFFSET 1024)"
+                )
+                counts = dict(db.execute("SELECT word, uses FROM vocabulary"))
+            self.personal = counts
+        except (OSError, sqlite3.Error):
+            # An unavailable dictionary must never interrupt text entry.
+            pass
+
     @classmethod
-    def from_file(cls, path=WORDS_PATH):
+    def from_file(cls, path=WORDS_PATH, personal_path=None):
         entries = []
         for line in path.read_text(encoding="utf-8").splitlines():
             word, _, count = line.partition(" ")
             if word and count.isdigit():
                 entries.append((word, int(count)))
-        return cls(entries)
+        return cls(entries, personal_path)
 
     def suggest(self, prefix, limit=SUGGESTION_SLOTS):
         prefix = turkish_lower(prefix)
+        personal = self.personal
+        learned = [w for w in personal if w.startswith(prefix) and w != prefix]
+        favorites = nlargest(limit, learned, key=lambda w: (personal[w], self.counts.get(w, 0), w))
+        if len(favorites) == limit:
+            return favorites
         if not prefix:
-            return list(self.common[:limit])
+            return (favorites + [w for w in self.common if w not in personal])[:limit]
         start = bisect_left(self.words, prefix)
         end = bisect_left(self.words, prefix + "\U0010ffff")
-        matches = [w for w in self.words[start:end] if w != prefix]
-        return nlargest(limit, matches, key=lambda w: (self.counts[w], w))
+        matches = [w for w in self.words[start:end] if w != prefix and w not in personal]
+        return favorites + nlargest(
+            limit - len(favorites), matches, key=lambda w: (self.counts[w], w)
+        )
 
 
 class Keyboard:
@@ -121,6 +168,7 @@ class Keyboard:
             if slot >= len(options):
                 return False
             self.text = self.text[: len(self.text) - len(self.current_word)] + options[slot] + " "
+            self.suggester.remember(options[slot])
             self.auto_space = True
             self.counts["suggestion"] += 1
         elif key in CHARACTER_KEYS:
@@ -163,6 +211,8 @@ class Keyboard:
         return text[start:]
 
     def _insert(self, character):
+        if not is_word_character(character) and self.suggestions_on and self.suggester:
+            self.suggester.remember(self.current_word)
         # A space added by a suggestion gives way to closing punctuation.
         if self.auto_space and character in CLOSING_PUNCTUATION and self.text.endswith(" "):
             self.text = self.text[:-1]

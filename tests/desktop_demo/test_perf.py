@@ -120,7 +120,7 @@ def test_runtime_records_worker_timing_and_pointer_delivery(monkeypatch, tmp_pat
     monkeypatch.setitem(
         sys.modules, "experiments.desktop_demo.unigaze_model", SimpleNamespace(CameraModel=Model)
     )
-    api = DesktopAPI(output=tmp_path, perf_diagnostics=True)
+    api = DesktopAPI(model_name="unigaze", output=tmp_path, perf_diagnostics=True)
     api._session.phase = "ready"
     api._session.start_demo()
     api._perf_phase(time.monotonic())
@@ -166,6 +166,7 @@ def test_engine_timing_reports_skipped_frames_and_stage_times(monkeypatch):
     from experiments.unigaze.desktop_worker import Engine
 
     e = Engine.__new__(Engine)
+    e.blinks = SimpleNamespace(enable=lambda enabled: None)
     e.last_capture = 4
     e.cpu_seconds = None
     e.stream = SimpleNamespace(

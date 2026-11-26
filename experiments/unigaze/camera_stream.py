@@ -2,6 +2,7 @@
 
 import threading
 import time
+from collections import deque
 
 
 class LatestCamera:
@@ -10,7 +11,9 @@ class LatestCamera:
         self.condition = threading.Condition()
         self.stop = threading.Event()
         self.latest = None
+        self.encoded_sequence = -1
         self.image = None
+        self.timestamps = deque(maxlen=30)
         self.error = None
         self.enabled = True
         self.thread = threading.Thread(target=self._capture, daemon=True, name="camera-capture")
@@ -24,10 +27,9 @@ class LatestCamera:
                 captured = time.monotonic_ns()
                 if not ok:
                     raise RuntimeError("Kamera bağlantısı kesildi. Kamerayı yeniden başlat.")
-                image = self.encode(frame) if self.enabled else None
                 with self.condition:
                     self.latest = (sequence, captured, frame)
-                    self.image = image
+                    self.timestamps.append(captured)
                     sequence += 1
                     self.condition.notify_all()
         except Exception as exc:
@@ -56,17 +58,34 @@ class LatestCamera:
 
     def preview(self):
         with self.condition:
-            sequence, stamp = self.latest[:2] if self.latest is not None else (-1, 0)
-            fresh = (
-                not self.error
-                and not self.stop.is_set()
-                and time.monotonic_ns() - stamp < 500_000_000
-            )
-            return dict(
-                preview=self.image if fresh and self.enabled else None,
-                preview_sequence=sequence,
-                preview_captured=stamp / 1e9,
-            )
+            latest = self.latest
+            timestamps = tuple(self.timestamps)
+            if (
+                self.error
+                or self.stop.is_set()
+                or latest is None
+                or time.monotonic_ns() - latest[1] >= 500_000_000
+            ):
+                return dict(preview=None, preview_sequence=-1, preview_captured=0)
+        sequence, stamp, frame = latest
+        image = None
+        if self.enabled:
+            if self.encoded_sequence != sequence:
+                self.image = self.encode(frame)
+                self.encoded_sequence = sequence
+            image = self.image
+        fps = (
+            (len(timestamps) - 1) * 1e9 / (timestamps[-1] - timestamps[0])
+            if len(timestamps) > 1 and timestamps[-1] > timestamps[0]
+            else None
+        )
+        return dict(
+            preview=image,
+            preview_sequence=sequence,
+            preview_captured=stamp / 1e9,
+            capture_size=list(frame.shape[:2][::-1]),
+            capture_fps=fps,
+        )
 
     def close(self):
         self.stop.set()

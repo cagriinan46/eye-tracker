@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import sys
 import threading
 import time
 from pathlib import Path
@@ -35,6 +36,10 @@ class DesktopAPI:
         self._preview = None
         self._active_model = None
         self._pointer_captured = 0
+        self._desktop_active = False
+        self._desktop_frame = (0, None, None)
+        self._native_page = None
+        self._desktop_error = None
         self._pointer_pause = threading.Event()
         self._tracking = False
         self._signal_status = "waiting"
@@ -70,6 +75,40 @@ class DesktopAPI:
     def _word_suggestions_enabled(self):
         return self._preferences["word_suggestions"]
 
+    def desktop_running(self):
+        with self._lock:
+            return self._desktop_active
+
+    def desktop_sample(self):
+        if not self._lock.acquire(blocking=False):
+            return None
+        try:
+            active = (
+                self._desktop_active
+                and not self._closed
+                and not self._stop.is_set()
+                and self._camera == "ready"
+                and self._session.calibrated
+            )
+            return active, self._desktop_frame, self._preferences["reduced_motion"]
+        finally:
+            self._lock.release()
+
+    def desktop_failed(self, message):
+        with self._lock:
+            self._desktop_active = False
+            self._desktop_error = message
+
+    def request_native_page(self, page):
+        with self._lock:
+            if page == "calibration":
+                self._desktop_active = False
+                self._reset_filter = True
+            self._native_page = page
+
+    def keyboard_size(self):
+        return self._preferences["keyboard_size"]
+
     def request_pointer_pause(self):
         self._pointer_pause.set()
 
@@ -94,6 +133,7 @@ class DesktopAPI:
         s = self._session
         if (
             self._closed
+            or self._desktop_active
             or self._pointer_pause.is_set()
             or self._stop.is_set()
             or self._camera != "ready"
@@ -118,6 +158,10 @@ class DesktopAPI:
             state = self._session.snapshot()
             state.update(
                 camera=self._camera,
+                desktop_active=self._desktop_active,
+                desktop_error=self._desktop_error,
+                desktop_available=sys.platform == "darwin",
+                native_page=self._native_page,
                 model_name=self._model_name,
                 preview=self._preview,
                 tracking=self._tracking,
@@ -140,7 +184,22 @@ class DesktopAPI:
                     raise ValueError("Uygulama kapalı.")
                 now = time.monotonic()
                 s = self._session
-                if action == "preferences":
+                if action == "desktop_start":
+                    if sys.platform != "darwin" or self._camera != "ready" or not s.calibrated:
+                        raise ValueError("Masaüstü kontrolü için kalibrasyonu tamamla.")
+                    if s.phase not in ("ready", "results", "preparation"):
+                        raise ValueError("Önce mevcut denemeden çık.")
+                    if not self._focused or s.geometry is None:
+                        raise ValueError("Eye Tracker penceresine dön.")
+                    self._desktop_frame = (0, None, None)
+                    self._desktop_error = None
+                    self._desktop_active = True
+                elif action == "desktop_stop":
+                    self._desktop_active = False
+                elif action == "native_page_ready":
+                    if payload["page"] == self._native_page:
+                        self._native_page = None
+                elif action == "preferences":
                     if not isinstance(payload, dict):
                         raise ValueError("Geçersiz görünüm ayarı.")
                     values = preferences.validated(self._preferences | payload)
@@ -167,6 +226,7 @@ class DesktopAPI:
                     )
                     self._worker.start()
                 elif action == "stop_camera":
+                    self._desktop_active = False
                     try:
                         self._save("completed" if len(s.trials) == 12 else "aborted")
                     finally:
@@ -181,6 +241,7 @@ class DesktopAPI:
                         s.message = ""
                         s.transition("preparation")
                 elif action == "home":
+                    self._desktop_active = False
                     self._save(
                         "completed" if s.phase == "results" or len(s.trials) == 12 else "aborted"
                     )
@@ -188,6 +249,7 @@ class DesktopAPI:
                     s.paused_at = None
                     s.transition("preparation")
                 elif action == "calibrate":
+                    self._desktop_active = False
                     if self._camera != "ready" or not self._focused:
                         raise ValueError("Önce kamerayı başlat ve uygulama penceresine dön.")
                     self._save("aborted" if s.phase != "results" else "completed")
@@ -200,6 +262,7 @@ class DesktopAPI:
                     self._reset_filter = True
                     self._begin_record()
                 elif action == "retry_calibration":
+                    self._desktop_active = False
                     if self._camera != "ready" or not self._focused:
                         raise ValueError("Önce uygulama penceresine dön.")
                     s.retry_calibration()
@@ -209,8 +272,10 @@ class DesktopAPI:
                 elif action == "regions":
                     s.set_regions(payload["regions"])
                 elif action == "geometry":
-                    s.geometry_changed(payload["geometry"])
+                    if not self._desktop_active:
+                        s.geometry_changed(payload["geometry"])
                 elif action == "demo":
+                    self._desktop_active = False
                     if not self._focused:
                         raise ValueError("Önce uygulama penceresine dön.")
                     retry = s.phase == "results" or bool(s.trials)
@@ -225,6 +290,7 @@ class DesktopAPI:
                     if retry:
                         self._begin_record()
                 elif action == "keyboard":
+                    self._desktop_active = False
                     if s.phase == "results" or len(s.trials) == 12:
                         self._save("completed")
                     s.start_keyboard(self._keyboard_suggester())
@@ -242,7 +308,7 @@ class DesktopAPI:
                         self._reset_filter = True
                 elif action == "focus":
                     self._focused = bool(payload["active"])
-                    if not self._focused:
+                    if not self._focused and not self._desktop_active:
                         s.pause(now)
                         self._reset_filter = True
                 else:
@@ -354,7 +420,12 @@ class DesktopAPI:
                     token = self._session.token
                     reset_filter = self._reset_filter
                     self._reset_filter = False
-                    preview = self._session.phase in ("preparation", "error", "ready", "results")
+                    preview = not self._desktop_active and self._session.phase in (
+                        "preparation",
+                        "error",
+                        "ready",
+                        "results",
+                    )
                 reset_started = time.perf_counter()
                 if reset_filter and hasattr(model, "reset_filter"):
                     model.reset_filter()
@@ -395,7 +466,9 @@ class DesktopAPI:
                         )
                     if jpeg is not None:
                         self._preview = jpeg
-                    if now - self._last_ui > 0.8 or not self._focused:
+                    if not self._desktop_active and (
+                        now - self._last_ui > 0.8 or not self._focused
+                    ):
                         s.pause(now)
                         self._reset_filter = True
                     if token != s.token or self._reset_filter:
@@ -411,8 +484,14 @@ class DesktopAPI:
                             self._reset_filter = True
                     self._last_raw_point = raw_point
                     self._filter_history_ms = getattr(model, "filter_history_ms", None)
-                    s.sample(captured, features, point, raw_point=raw_point)
                     self._pointer_captured = captured
+                    if not self._desktop_active:
+                        s.sample(captured, features, point, raw_point=raw_point)
+                    else:
+                        closed = getattr(model, "eyes_closed", None)
+                        if self._model_name == "mgaze" and self._tracking:
+                            closed = False
+                        self._desktop_frame = (captured, raw_point, closed)
                     if s.phase == "fitting":
                         x, y = s.calibration_arrays()
                         self._meta["training_fit_normalized"] = model.fit(x, y)
@@ -440,6 +519,7 @@ class DesktopAPI:
                 return
             with self._lock:
                 self._camera = "error"
+                self._desktop_active = False
                 self._tracking = False
                 self._session.fail(str(error))
                 try:

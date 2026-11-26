@@ -116,6 +116,7 @@ class CameraModel:
         self.last_timing = r.get("timing")
         self.eligibility_reason = r.get("eligibility_reason", "unknown")
         self.raw_point = r["raw_point"]
+        self.eyes_closed = r.get("eyes_closed")
         self.filter_history_ms = r["filter_history_ms"]
         return r["captured"], r["features"], r["point"], r["preview"]
 

@@ -55,6 +55,32 @@ the last in-region observation; that gap time is never credited, so it can delay
 but never complete or shorten a selection. The1.2s requirement is unchanged.
 A single in-region frame after a long gap cannot finish a previous dwell.
 
+## macOS desktop control
+
+After calibration, choose **Masaüstünü kontrol et**. Desktop control and the
+12-task experiment use the same calibration. Look at the chevron halfway down
+the right edge to open the toolbar. Escape ends desktop control while keeping
+the window and camera session available.
+
+- **Sol tık / Sağ tık**: look at the target until the crosshair and tone appear,
+  then blink twice. **Hassas imleç** instead lets you adjust the crosshair with
+  arrow buttons before selecting a click.
+- **Kaydır**: look at the content first. Hold a gaze on an arrow to scroll
+  continuously and accelerate.
+- **Klavye / Türkçe dikte**: focus an editable field in another app, then
+  explicitly open the keyboard or start dictation. The keyboard uses the same
+  optional local word suggestions as the practice screen. Dictation requires
+  microphone permission, FFmpeg, and the prepared multilingual Whisper Tiny
+  files (`tiny.pt` and `speech-runtime/`) under
+  `~/.eye-tracker/dictation` or `EYE_TRACKER_DICTATION_DIR`. Raw audio stays in memory.
+- **Dock** lists pinned and running apps. **Kalibrasyon** returns to the same
+  app's calibration. **Ayarlar** opens the main settings while desktop control
+  remains active. **Duraklat** leaves only the resume affordance.
+
+Desktop control uses macOS Accessibility permission and supports one display.
+The white ring follows unassisted gaze. Verified nearby controls can attract
+the pointer without activating the control.
+
 ## Privacy and records
 
 Preview JPEGs exist only in memory. No images or video are written or uploaded.

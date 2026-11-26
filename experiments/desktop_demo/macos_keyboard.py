@@ -5,9 +5,8 @@ import os
 import AppKit as UI
 import ApplicationServices as AX
 import Quartz
-from PyObjCTools import AppHelper
 
-from .keyboard import LETTER_ROWS, SYMBOL_ROWS, is_word_character, turkish_upper
+from .keyboard import LETTER_ROWS, SUGGESTION_SLOTS, SYMBOL_ROWS, is_word_character, turkish_upper
 
 
 def attribute(element, name):
@@ -23,7 +22,7 @@ def ax_geometry(value, kind):
     return None
 
 
-def panel_rect(element, fallback):
+def panel_rect(element, fallback, size="medium"):
     # AX uses a top-left origin on the primary display; Cocoa uses bottom-left.
     screens = UI.NSScreen.screens()
     top = UI.NSMaxY(screens[0].frame())
@@ -53,8 +52,9 @@ def panel_rect(element, fallback):
 
     screen = max(screens, key=lambda screen: area(screen.frame(), anchor))
     v = screen.visibleFrame()
-    width = min(760, v.size.width - 24)
-    height = min(235, v.size.height * 0.36)
+    scale = {"small": 0.91, "medium": 1.0, "large": 1.10}[size]
+    width = min(836 * scale, v.size.width - 24)
+    height = min(294 * scale, v.size.height * 0.40)
     xs = (UI.NSMidX(v) - width / 2, UI.NSMinX(v) + 8, UI.NSMaxX(v) - width - 8)
     ys = (UI.NSMinY(v) + 8, UI.NSMaxY(v) - height - 8)
     candidates = [UI.NSMakeRect(x, y, width, height) for y in ys for x in xs]
@@ -79,9 +79,11 @@ class KeyboardPanel(UI.NSPanel):
 
 
 class FocusKeyboard:
-    def __init__(self, suggester, suggestions_enabled):
+    def __init__(self, suggester, suggestions_enabled, size=lambda: "medium"):
         self.suggester = suggester
         self.suggestions_enabled = suggestions_enabled
+        self.size = size
+        self.dictate = None
         self.prefix = ""
         self.options = []
         self.system = AX.AXUIElementCreateSystemWide()
@@ -138,33 +140,68 @@ class FocusKeyboard:
             return [turkish_upper(word[0]) + word[1:] for word in options]
         return options
 
-    def tick(self):
-        if self.stopped:
-            return
+    def reveal(self):
         target = self.focused()
-        if target != self.target:
-            self.target = target
-            self.prefix = ""
-            self.shift = self.symbols = False
-            if self.panel:
-                self.panel.orderOut_(None)
-            if target:
-                self.fallback = UI.NSEvent.mouseLocation()
-                self.build()
-        elif target and self.panel and self.panel.isVisible():
-            rect = panel_rect(target[1], self.fallback)
-            if not UI.NSEqualRects(rect, self.panel.frame()) or self.options != self.suggestions():
-                self.build(rect)
-        AppHelper.callLater(0.25, self.tick)
+        if target is None:
+            return False
+        self.target = target
+        self.prefix = ""
+        self.shift = self.symbols = False
+        self.fallback = UI.NSEvent.mouseLocation()
+        self.build()
+        return True
 
-    def build(self, rect=None):
-        rect = rect or panel_rect(self.target[1], self.fallback)
+    def stow(self):
+        self.target = None
+        self.prefix = ""
+        if self.panel is not None:
+            self.panel.orderOut_(None)
+
+    def refresh(self):
+        if not self.target:
+            return
+        if self.focused() != self.target:
+            self.stow()
+            return
+        size, show = self.size(), self.suggestions_enabled()
+        options = self.suggestions()
+        if size != self.panel_size or show != self.show_suggestions or self.options != options:
+            self.build(options=options)
+
+    def key_at(self, x, y, height):
+        if self.target is None or not self.panel or not self.panel.isVisible():
+            return None
+        frame = self.panel.frame()
+        x -= frame.origin.x
+        y = height - y - frame.origin.y
+        for button in self.panel.contentView().subviews():
+            r = button.frame()
+            if (
+                button.isEnabled()
+                and r.origin.x <= x < UI.NSMaxX(r)
+                and r.origin.y <= y < UI.NSMaxY(r)
+            ):
+                return str(button.identifier())
+        return None
+
+    def build(self, options=None):
+        self.panel_size = self.size()
+        self.show_suggestions = self.suggestions_enabled()
+        rect = panel_rect(self.target[1], self.fallback, self.panel_size)
         width, height = rect.size
         if self.panel is None:
             self.panel = KeyboardPanel.alloc().initWithContentRect_styleMask_backing_defer_(
-                rect, UI.NSWindowStyleMaskNonactivatingPanel, UI.NSBackingStoreBuffered, False
+                rect,
+                UI.NSWindowStyleMaskBorderless | UI.NSWindowStyleMaskNonactivatingPanel,
+                UI.NSBackingStoreBuffered,
+                False,
             )
             self.panel.controller = self
+            self.panel.setTitle_("Türkçe klavye")
+            self.panel.setOpaque_(False)
+            self.panel.setBackgroundColor_(UI.NSColor.clearColor())
+            self.panel.setReleasedWhenClosed_(False)
+            self.panel.setAppearance_(UI.NSAppearance.appearanceNamed_(UI.NSAppearanceNameDarkAqua))
             self.panel.setFloatingPanel_(True)
             self.panel.setLevel_(UI.NSFloatingWindowLevel)
             self.panel.setHidesOnDeactivate_(False)
@@ -175,7 +212,14 @@ class FocusKeyboard:
         self.panel.setFrame_display_(rect, True)
         view = UI.NSView.alloc().initWithFrame_(UI.NSMakeRect(0, 0, width, height))
         view.setWantsLayer_(True)
-        view.layer().setCornerRadius_(12)
+        view.layer().setCornerRadius_(18)
+        view.layer().setBackgroundColor_(
+            UI.NSColor.colorWithSRGBRed_green_blue_alpha_(0.04, 0.07, 0.10, 0.72).CGColor()
+        )
+        view.layer().setBorderColor_(
+            UI.NSColor.colorWithSRGBRed_green_blue_alpha_(0.67, 0.81, 0.88, 0.42).CGColor()
+        )
+        view.layer().setBorderWidth_(1)
         self.panel.setContentView_(view)
         rows = SYMBOL_ROWS if self.symbols else LETTER_ROWS
         lines = [[(c, turkish_upper(c) if self.shift else c, 1) for c in row] for row in rows]
@@ -184,14 +228,16 @@ class FocusKeyboard:
                 ("shift", "⇧", 1),
                 ("page", "ABC" if self.symbols else "123", 1),
                 ("space", "Boşluk", 4),
+                ("dictation", "Dikte", 1.4),
                 ("period", ".", 1),
                 ("backspace", "⌫", 1),
                 ("hide", "Kapat", 1),
             ]
         )
-        self.options = self.suggestions()
-        if self.options:
-            lines.insert(0, [(f"sug{i}", word, 1) for i, word in enumerate(self.options)])
+        self.options = self.suggestions() if options is None else options
+        if self.show_suggestions:
+            padded = self.options + [""] * (SUGGESTION_SLOTS - len(self.options))
+            lines.insert(0, [(f"sug{i}", word, 1) for i, word in enumerate(padded)])
         step = (height - 12) / len(lines)
         for index, row in enumerate(lines):
             if not row:
@@ -203,8 +249,27 @@ class FocusKeyboard:
                     label, self.panel, "keyClicked:"
                 )
                 button.setIdentifier_(key)
-                button.setBezelStyle_(UI.NSBezelStyleRegularSquare)
-                button.setFont_(UI.NSFont.systemFontOfSize_(19))
+                button.setEnabled_(bool(label))
+                button.setBordered_(False)
+                button.setWantsLayer_(True)
+                button.layer().setCornerRadius_(8)
+                fill = (0.12, 0.25, 0.26) if key.startswith("sug") else (0.11, 0.15, 0.21)
+                button.layer().setBackgroundColor_(
+                    UI.NSColor.colorWithSRGBRed_green_blue_alpha_(
+                        *fill, 0.94 if label else 0.42
+                    ).CGColor()
+                )
+                button.setAttributedTitle_(
+                    UI.NSAttributedString.alloc().initWithString_attributes_(
+                        label,
+                        {
+                            UI.NSForegroundColorAttributeName: UI.NSColor.whiteColor(),
+                            UI.NSFontAttributeName: UI.NSFont.systemFontOfSize_weight_(
+                                17 if len(label) > 2 else 21, UI.NSFontWeightSemibold
+                            ),
+                        },
+                    )
+                )
                 button.setFrame_(
                     UI.NSMakeRect(
                         x + 2, height - 6 - (index + 1) * step, unit * weight - 4, step - 4
@@ -218,7 +283,11 @@ class FocusKeyboard:
         if self.stopped or not self.target or self.focused() != self.target:
             return
         if key == "hide":
-            self.panel.orderOut_(None)
+            self.stow()
+            return
+        if key == "dictation":
+            if self.dictate:
+                self.dictate()
             return
         if key in ("shift", "page"):
             if key == "shift":
@@ -258,13 +327,13 @@ class FocusKeyboard:
             if key != "backspace":
                 Quartz.CGEventKeyboardSetUnicodeString(event, len(char), char)
             Quartz.CGEventPostToPid(pid, event)
-        self.shift = False
-        self.build()
+        if self.shift:
+            self.shift = False
+            self.build()
 
-    def start(self):
-        AppHelper.callAfter(self.tick)
-
-    def close(self):
+    def dispose(self):
         self.stopped = True
+        self.stow()
         if self.panel:
-            AppHelper.callAfter(self.panel.orderOut_, None)
+            self.panel.close()
+            self.panel = None

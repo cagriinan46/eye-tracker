@@ -3,7 +3,7 @@ const $=id=>document.getElementById(id);
 const names={overview:'Genel bakış',notes:'Notlar',search:'Notlarda ara',title:'Başlık',reminder:'Hatırlatıcı ekle',save:'Notu kaydet',details:'Ayrıntı',clear:'Temizle'};
 const targetEls=[...document.querySelectorAll('.web-target')];
 let appliedTrial=0;
-let api=null,state=null,lastToken=null,acknowledged=null,busy=false,geometryKey='',userBusy=false,errorToken=null,activePage='home',preferenceEpoch=0,preferenceSaving=false;
+let api=null,state=null,lastToken=null,acknowledged=null,busy=false,geometryKey='',userBusy=false,errorToken=null,activePage='home',preferenceEpoch=0,preferenceSaving=false,nativePageBusy=false,lastDesktopError=null,wasDesktop=false;
 function notice(message=''){ $('error').textContent=message; $('notice').classList.toggle('hidden',!message); }
 async function act(action,payload={}){
   if(userBusy)return;
@@ -38,6 +38,7 @@ function page(name){
   document.querySelector('.main').scrollTop=0;
 }
 async function navigate(name){
+  if(state?.desktop_active&&name==='settings'){show('preparation');page(name);return;}
   if(state&&!['preparation','error'].includes(state.phase)){
     const r=await act('home');if(!r?.ok)return;
   }
@@ -80,6 +81,15 @@ function render(s){
     if(phase==='results')results(s);
     if(phase==='error'){page('calibration');}
     if(['ready','results'].includes(phase))activePage='practice';
+  }
+  if(wasDesktop&&!s.desktop_active)geometryKey='';
+  wasDesktop=s.desktop_active;
+  if(s.desktop_error&&s.desktop_error!==lastDesktopError)notice(s.desktop_error);
+  lastDesktopError=s.desktop_error;
+  for(const id of ['desktopReady','desktopPractice']){
+    $(id).hidden=!s.desktop_available;
+    $(id).disabled=s.camera!=='ready'||!s.can_demo;
+    $(id).textContent=s.desktop_active?'Masaüstü kontrolünü bitir':'Masaüstünü kontrol et';
   }
   if(phase==='error'&&errorToken!==s.token){errorToken=s.token;notice(s.message);}
   $('cameraBadge').textContent=({off:'Kamera kapalı',loading:'Kamera hazırlanıyor',ready:s.tracking?'Gözlerin görünüyor':s.signal_status==='processing_delayed'?'Gözler algılandı · İşlem gecikiyor':'Geçerli bakış verisi bekleniyor',stopping:'Kamera kapanıyor',error:'Kamera açılamadı'})[s.camera];
@@ -141,11 +151,25 @@ function render(s){
     }));
   }
 }
+async function applyNativePage(name){
+  if(!name||nativePageBusy)return;
+  if(name==='calibration'&&!document.hasFocus())return;
+  nativePageBusy=true;
+  try{
+    show('preparation');
+    page(name);
+    if(name==='calibration'){
+      await command('focus',{active:true});
+      await command('calibrate',{geometry:geometry()});
+    }
+    await command('native_page_ready',{page:name});
+  }finally{nativePageBusy=false;}
+}
 async function poll(){
  if(!api||busy)return;busy=true;
  const epoch=preferenceEpoch;
  try{const g=geometry(),key=JSON.stringify(g);if(geometryKey!==key){geometryKey=key;await command('geometry',{geometry:g});}
-   const s=await api.snapshot();if(epoch===preferenceEpoch&&!preferenceSaving)render(s);
+   const s=await api.snapshot();if(epoch===preferenceEpoch&&!preferenceSaving){render(s);await applyNativePage(s.native_page);}
  }catch(e){notice('Uygulama bağlantısı kesildi. Pencereyi yeniden aç.');for(const el of targetEls)fillFor(el).style.width='0%';}
  finally{busy=false;setTimeout(poll,16);}
 }
@@ -220,6 +244,7 @@ $('webSearch').addEventListener('input',()=>{
 $('cameraStart').onclick=()=>act(['ready','loading'].includes(state?.camera)?'stop_camera':'camera');
 const calibrate=()=>act('calibrate',{geometry:geometry()});
 for(const id of ['calibrate','recalibrateReady','recalibrateResult'])$(id).onclick=calibrate;
+for(const id of ['desktopReady','desktopPractice'])$(id).onclick=()=>act(state?.desktop_active?'desktop_stop':'desktop_start');
 for(const id of ['startDemo','again','practiceStart'])$(id).onclick=()=>act('demo');
 for(const id of ['homeDemo','homeReady','homeResult'])$(id).onclick=()=>navigate('home');
 for(const el of document.querySelectorAll('[data-page]'))el.onclick=()=>navigate(el.dataset.page);
@@ -238,7 +263,7 @@ $('dismissError').onclick=()=>notice();
 window.addEventListener('blur',()=>command('focus',{active:false}));
 window.addEventListener('focus',()=>command('focus',{active:true}));
 document.addEventListener('visibilitychange',()=>command('focus',{active:!document.hidden&&document.hasFocus()}));
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();act('pause');}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();act(state?.desktop_active?'desktop_stop':'pause');}});
 function connect(){
   if(api||!window.pywebview?.api)return;
   api=window.pywebview.api;

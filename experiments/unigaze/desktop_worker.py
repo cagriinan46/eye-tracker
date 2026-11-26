@@ -7,6 +7,7 @@ import socket
 import sys
 import threading
 import time
+from collections import deque
 
 import numpy as np
 
@@ -30,6 +31,30 @@ def eligible_features(row):
     return angles.tolist()
 
 
+class EyeClosure:
+    """Classify bilateral closure against recent open-eye apertures."""
+
+    def __init__(self, minimum_open):
+        self.minimum_open = minimum_open
+        self.open_samples = deque(maxlen=40)
+
+    def update(self, ratios):
+        ratios = np.asarray(ratios, dtype=float)
+        if ratios.shape != (2,) or not np.isfinite(ratios).all() or np.any(ratios < 0):
+            return None
+        if not self.open_samples:
+            if min(ratios) < self.minimum_open:
+                return None
+            self.open_samples.append(ratios)
+            return False
+        baseline = np.median(self.open_samples, axis=0)
+        closed = ratios < baseline * 0.68
+        if not np.any(closed):
+            self.open_samples.append(ratios)
+            return False
+        return True if np.all(closed) else None
+
+
 class Engine:
     model_id = "unigaze"
 
@@ -40,6 +65,8 @@ class Engine:
         self.eye_captured = 0
         self.eye_updated = 0
         self.eye_detected = False
+        self.eye_closure = EyeClosure(self.minimum_eye_open)
+        self.eyes_closed = None
         self.cpu_seconds = None
         try:
             import cv2
@@ -81,6 +108,7 @@ class Engine:
             self.close()
             raise
 
+    minimum_eye_open = 0.10
     model_description = "UniGaze B16 joint + standardized Ridge alpha0.1"
     model_limitations = ("MGaze supplies face matching and eligibility.",)
 
@@ -92,6 +120,7 @@ class Engine:
     def observe(self, frame, captured_ns):
         row = self.pair.process(frame, self.frame_id, captured_ns)
         self.frame_id += 1
+        self.eyes_closed = self.eye_closure.update(row.get("eye_gap_ratios"))
         features = eligible_features(row)
         if features is not None:
             reason = "valid"
@@ -132,6 +161,7 @@ class Engine:
             point=point,
             filter_history_ms=lag,
             eligibility_reason=reason,
+            eyes_closed=getattr(self, "eyes_closed", None),
             preview=jpeg,
         )
 
@@ -207,6 +237,7 @@ class Engine:
 
 class MPIIFaceEngine(Engine):
     model_id = "mpiifacegaze"
+    minimum_eye_open = 0.16
     model_description = "MPIIFaceGaze ResNet-18 + standardized Ridge alpha0.1"
     model_limitations = ("One detected face is required per frame.",)
 
@@ -216,7 +247,16 @@ class MPIIFaceEngine(Engine):
         return Extractor()
 
     def observe(self, frame, captured_ns):
-        return self.pair.observe(frame)
+        features, eyes, reason = self.pair.observe(frame)
+        self.eyes_closed = None
+        if eyes is not None:
+            points = np.asarray(eyes)
+            widths = np.linalg.norm(points[:, 0] - points[:, 3], axis=1)
+            gaps = np.linalg.norm(points[:, 1] - points[:, 5], axis=1) + np.linalg.norm(
+                points[:, 2] - points[:, 4], axis=1
+            )
+            self.eyes_closed = self.eye_closure.update(gaps / (2 * np.maximum(widths, 1e-8)))
+        return features, eyes, reason
 
 
 def serve_preview(sock, engine):

@@ -18,7 +18,8 @@ def html():
 
 
 def pause_for_window_move(api, *args):
-    api.command("pause")
+    if not api.desktop_running():
+        api.command("pause")
 
 
 def main():
@@ -51,18 +52,19 @@ def main():
         height=800,
         min_size=(960, 640),
         resizable=True,
+        maximized=sys.platform == "darwin",
         background_color="#100e17",
         zoomable=False,
         text_select=False,
     )
-    pointer = keyboard = None
+    pointer = desktop = None
     if sys.platform == "darwin":
         from eye_tracker.platform_adapters.macos_window_pointer import MacOSWindowPointer
 
-        from .macos_keyboard import FocusKeyboard
+        from .macos_desktop import MacOSDesktop
 
-        keyboard = FocusKeyboard(api._keyboard_suggester(), api._word_suggestions_enabled)
-        window.events.closed += keyboard.close
+        desktop = MacOSDesktop(window, api)
+        window.events.closed += desktop.close
         pointer = MacOSWindowPointer(window, api.pointer_sample, api.request_pointer_pause)
         window.events.closed += pointer.close
     window.events.closing += api.close
@@ -72,7 +74,7 @@ def main():
     def start_native():
         if pointer:
             pointer.start()
-            keyboard.start()
+            desktop.start()
 
     try:
         webview.start(

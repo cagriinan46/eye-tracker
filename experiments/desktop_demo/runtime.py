@@ -19,7 +19,7 @@ class DesktopAPI:
         self,
         output=None,
         camera_index=None,
-        model_name="unigaze",
+        model_name="mpiifacegaze",
         preferences_path=None,
         perf_diagnostics=False,
     ):
@@ -300,7 +300,7 @@ class DesktopAPI:
             dwell_max_interruption_seconds=s.dwell.max_interruption,
             trial_timeout_seconds=15,
             model=self._meta,
-            protocol=("fresh13x20-window6s" if self._model_name == "unigaze" else "fresh13x45")
+            protocol=("fresh13x20-window6s" if self._model_name != "mgaze" else "fresh13x45")
             + ";5point-independent-check;12-web-control-trials-v3-magnet",
             selected_model=self._model_name,
             scenario=self._session.scenario,
@@ -322,16 +322,17 @@ class DesktopAPI:
     def _run(self):
         model = None
         try:
-            if self._model_name == "unigaze":
-                from .unigaze_model import CameraModel
-            else:
+            if self._model_name == "mgaze":
                 from .model import CameraModel
 
-            model = (
-                CameraModel(self._camera_index, stop_event=self._stop)
-                if self._model_name == "unigaze"
-                else CameraModel(self._camera_index)
-            )
+                model = CameraModel(self._camera_index)
+            else:
+                from .unigaze_model import CameraModel
+
+                options = (
+                    {"model_name": self._model_name} if self._model_name == "mpiifacegaze" else {}
+                )
+                model = CameraModel(self._camera_index, stop_event=self._stop, **options)
             with self._lock:
                 if self._stop.is_set():
                     return

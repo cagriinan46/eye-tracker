@@ -31,6 +31,8 @@ def eligible_features(row):
 
 
 class Engine:
+    model_id = "unigaze"
+
     def __init__(self, camera_index):
         self.cap = self.pair = self.stream = None
         self.last_capture = -1
@@ -42,17 +44,16 @@ class Engine:
         try:
             import cv2
 
-            from .paired import PairedExtractor
             from .smoothing import SOURCE_HASHES, StreamFilter
 
             self.cv2 = cv2
-            self.pair = PairedExtractor()
+            self.pair = self.create_extractor()
             self.mapping = Ridge(standardize=True)
             self.smoothing = StreamFilter()
             self.frame_id = 0
             self.metadata = dict(
-                model="UniGaze B16 joint + standardized Ridge alpha0.1",
-                model_id="unigaze",
+                model=self.model_description,
+                model_id=self.model_id,
                 camera_index=camera_index,
                 provenance=self.pair.provenance,
                 filter="HeuristicFilter look_ahead3",
@@ -61,7 +62,7 @@ class Engine:
                 limitations=[
                     "Lateral head translation can cause large bias; recalibrate after repositioning.",
                     "Windows execution unverified; macOS worker transport only.",
-                    "MGaze branch retained for validated eligibility/matching, not selected gaze output.",
+                    *self.model_limitations,
                 ],
             )
             self.cap = cv2.VideoCapture(camera_index, cv2.CAP_AVFOUNDATION)
@@ -80,13 +81,32 @@ class Engine:
             self.close()
             raise
 
-    def process_frame(self, frame, captured_ns, preview=False):
+    model_description = "UniGaze B16 joint + standardized Ridge alpha0.1"
+    model_limitations = ("MGaze supplies face matching and eligibility.",)
+
+    def create_extractor(self):
+        from .paired import PairedExtractor
+
+        return PairedExtractor()
+
+    def observe(self, frame, captured_ns):
         row = self.pair.process(frame, self.frame_id, captured_ns)
         self.frame_id += 1
+        features = eligible_features(row)
+        if features is not None:
+            reason = "valid"
+        elif not row.get("mgaze_valid"):
+            reason = "mgaze_invalid"
+        else:
+            reason = row.get("unigaze_reason") or "eye_gap_or_invalid_features"
+        return features, row.get("preview_eyes"), reason
+
+    def process_frame(self, frame, captured_ns, preview=False):
+        features, eyes, reason = self.observe(frame, captured_ns)
         if preview:
             from .preview import eye_view
 
-            crop = eye_view(self.cv2, frame, row.get("preview_eyes"))
+            crop = eye_view(self.cv2, frame, eyes)
             self.eye_detected = crop is not None
             if crop is not None:
                 self.eye_preview = crop
@@ -94,7 +114,6 @@ class Engine:
                 self.eye_updated = time.monotonic()
         else:
             self.eye_preview = None
-        features = eligible_features(row)
         raw = None
         if features is not None and self.mapping.weights is not None:
             raw = self.mapping.predict(features).tolist()
@@ -112,13 +131,7 @@ class Engine:
             raw_point=raw,
             point=point,
             filter_history_ms=lag,
-            eligibility_reason=(
-                "valid"
-                if features is not None
-                else "mgaze_invalid"
-                if not row.get("mgaze_valid")
-                else row.get("unigaze_reason") or "eye_gap_or_invalid_features"
-            ),
+            eligibility_reason=reason,
             preview=jpeg,
         )
 
@@ -172,7 +185,7 @@ class Engine:
     def fit(self, features, labels):
         x, y = np.asarray(features, float), np.asarray(labels, float)
         if x.shape != (260, 2) or y.shape != (260, 2):
-            raise ValueError("UniGaze requires fresh13x20 calibration")
+            raise ValueError(f"{self.model_id} requires fresh13x20 calibration")
         self.mapping.fit(x, y)
         self.smoothing.reset()
         return float(
@@ -192,6 +205,20 @@ class Engine:
             self.pair = None
 
 
+class MPIIFaceEngine(Engine):
+    model_id = "mpiifacegaze"
+    model_description = "MPIIFaceGaze ResNet-18 + standardized Ridge alpha0.1"
+    model_limitations = ("One detected face is required per frame.",)
+
+    def create_extractor(self):
+        from .mpiifacegaze import Extractor
+
+        return Extractor()
+
+    def observe(self, frame, captured_ns):
+        return self.pair.observe(frame)
+
+
 def serve_preview(sock, engine):
     try:
         while True:
@@ -203,13 +230,13 @@ def serve_preview(sock, engine):
         pass
 
 
-def main(fd, camera_index, preview_fd=None):
+def main(fd, camera_index, preview_fd=None, model_name="unigaze"):
     sock = socket.socket(fileno=fd)
     engine = None
     preview_sock = socket.socket(fileno=preview_fd) if preview_fd is not None else None
     preview_thread = None
     try:
-        engine = Engine(camera_index)
+        engine = {"unigaze": Engine, "mpiifacegaze": MPIIFaceEngine}[model_name](camera_index)
         if preview_sock is not None:
             preview_thread = threading.Thread(
                 target=serve_preview, args=(preview_sock, engine), daemon=True
@@ -255,4 +282,9 @@ def main(fd, camera_index, preview_fd=None):
 
 
 if __name__ == "__main__":
-    main(int(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3]) if len(sys.argv) > 3 else None)
+    main(
+        int(sys.argv[1]),
+        int(sys.argv[2]),
+        int(sys.argv[3]) if len(sys.argv) > 3 else None,
+        sys.argv[4] if len(sys.argv) > 4 else "unigaze",
+    )

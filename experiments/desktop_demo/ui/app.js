@@ -73,7 +73,7 @@ function results(s){const count=k=>s.trials.filter(t=>t.outcome===k).length;
   $('recordPath').textContent=s.record_path?'Seçimlerin bu cihazda saklandı.':'Bu oturum kaydedilemedi.';
 }
 function render(s){
-  state=s;document.title='Eye Tracker · '+(s.model_name==='mgaze'?'MGaze':'UniGaze');const phase=s.phase;const measurement=['calibration','calibration_retry','check','fitting'].includes(phase);
+  state=s;document.title='Eye Tracker · '+({mgaze:'MGaze',unigaze:'UniGaze',mpiifacegaze:'MPIIFaceGaze ResNet-18'}[s.model_name]);const phase=s.phase;const measurement=['calibration','calibration_retry','check','fitting'].includes(phase);
   if(lastToken!==s.token){
     lastToken=s.token;acknowledged=null;
     show(measurement?'measurement':['ready','demo','results','keyboard'].includes(phase)?phase:'preparation');

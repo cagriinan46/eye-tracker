@@ -1,9 +1,8 @@
 # Desktop target-selection demo
 
 Local Python + pywebview presentation prototype, issues #136 and #139.
-UniGaze is the default model; MGazeNet remains an explicit rollback option.
-See the UniGaze setup and calibration details below. No failed head correction,
-old SVR prediction, OS clicks or hardware movement is deployed.
+MPIIFaceGaze ResNet-18 is the default on the prepared Mac. UniGaze is the
+primary fallback, and MGazeNet remains available.
 
 ## Run
 
@@ -20,8 +19,7 @@ PYTHONPATH=src:. python -m experiments.desktop_demo
 The macOS native window uses WKWebView. Windows uses Edge WebView2 (runtime
 required); choose a camera with `--camera-index 0`. Windows has not been tested.
 This is a runnable development application, not a signed/distributable installer.
-Model files remain in the existing local GazeFollower support directory. No model
-is downloaded at application startup. All UI assets are local; no account needed.
+Models use prepared local weights. All UI assets are local.
 
 ## User flow
 
@@ -89,22 +87,23 @@ remain visible until dismissed or a user action succeeds.
 A real participant session is still required to establish this UI's selection
 accuracy. Existing calibration experiments do not validate the new UI geometry.
 
-## UniGaze default (issue #139)
-
-The default model is now **UniGaze**. The existing MGaze adapter is preserved and
-can be selected explicitly; there is no silent automatic fallback:
+## Model selection and calibration
 
 ```sh
 PYTHONPATH=src:. python -m experiments.desktop_demo
+PYTHONPATH=src:. python -m experiments.desktop_demo --model unigaze
 PYTHONPATH=src:. python -m experiments.desktop_demo --model mgaze
 ```
 
 On the prepared development Mac, run these with
-`~/.virtualenvs/eye-tracker-gazefollower-20261019/bin/python`. That environment
-owns pywebview; it does not need torch. UniGaze runs in the separate prepared
-`validation/results/unigaze-preflight-kit-20261029/venv/bin/python` environment.
-Each launch starts uncalibrated. Close and restart with `--model mgaze` to roll
-back; a UniGaze calibration is never reused for MGaze.
+`~/.virtualenvs/eye-tracker-gazefollower-20261019/bin/python`. The UI runs in
+pywebview and the two angle models run in the prepared separate inference
+environment. Start a fresh calibration when changing models.
+
+MPIIFaceGaze loads the [ResNet-18 checkpoint](https://huggingface.co/hysts/ptgaze-mpiifacegaze-resnet-simple)
+from the local experiment assets. It uses the same single-face detection,
+six-point pose estimate, and normalized BGR crop as the head-to-head experiment.
+The worker records the engine and checkpoint hash in each saved session.
 
 The tracked `experiments/unigaze` package contains the promoted research adapter,
 not imports of ignored research Python scripts. Prepared model assets remain
@@ -112,6 +111,7 @@ local and are not downloaded at startup. Configure these existing paths if moved
 
 | Variable | Meaning |
 | --- | --- |
+| `EYE_TRACKER_MPIIFACEGAZE_WEIGHTS` | Local `model.safetensors` from the checkpoint above, defaulting to the prepared `validation/results/alternative-gaze-20261126/mpiiface.safetensors` |
 | `EYE_TRACKER_UNIGAZE_HOME` | Prepared kit root containing `support/upstream`, `support/unigaze_b16_joint.safetensors`, `support/torch/hub/checkpoints` |
 | `EYE_TRACKER_UNIGAZE_PYTHON` | Python with the tested UniGaze dependencies; defaults to kit `venv/bin/python` |
 | `EYE_TRACKER_CAMERA_INTRINSICS` | Accepted measured-intrinsics completion JSON for the selected camera at native640x480 |
@@ -125,13 +125,13 @@ The dependency set already prepared/tested is torch2.7.1, torchvision0.22.1,
 timm0.3.2, safetensors0.5.3, face-alignment1.5.0, numpy2.2.6, OpenCV4.11.0.86.
 This is a local integration, not an installer or portable dependency lock.
 
-UniGaze uses the research13-target layout and13x20 training samples, selected
+MPIIFaceGaze and UniGaze use the 13-target layout and 13×20 training samples, selected
 uniformly over each6second window after1.5seconds settling. Expected calibration
 is about98seconds. Inadequate valid samples fail explicitly. Standardized two-angle
 Ridge alpha0.1 and HeuristicFilter look_ahead3 match the measured implementation.
 MGaze's13x45 behavior is unchanged. The five independent check points and12
 selection trials remain; reports contain filtered check error and separate raw
-error/sample count for UniGaze. Training fit is not validation accuracy.
+error/sample count for both angle models. Training fit is not validation accuracy.
 
 A baseline worker is still used inside the UniGaze extractor for the measured
 face-matching and eligibility gates. This preserves the validated pipeline, and

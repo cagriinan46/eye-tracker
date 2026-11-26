@@ -14,7 +14,7 @@ def eye_view(cv2, frame, eyes):
     tiles = []
     for points in eyes or []:
         p = np.asarray(points, float)
-        if p.shape != (8, 2) or not np.isfinite(p).all():
+        if p.shape not in ((6, 2), (8, 2)) or not np.isfinite(p).all():
             return None
         lo = np.floor(p.min(axis=0) - [12, 12]).astype(int)
         hi = np.ceil(p.max(axis=0) + [12, 12]).astype(int)

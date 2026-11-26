@@ -34,7 +34,10 @@ def _screen_matches(api, size):
     )
 
 
-def _make_panel(api):
+_PANEL_TYPES = {}
+
+
+def _panel_types(api):
     class SemanticOutlinePanel(api.NSPanel):
         def canBecomeKeyWindow(self):
             return False
@@ -53,7 +56,16 @@ def _make_panel(api):
             path.setLineWidth_(2.0)
             path.stroke()
 
-    panel = SemanticOutlinePanel.alloc().initWithContentRect_styleMask_backing_defer_(
+    return SemanticOutlinePanel, SemanticOutlineView
+
+
+def _make_panel(api):
+    # A PyObjC class name can only be registered once per process.
+    key = id(api)
+    if key not in _PANEL_TYPES:
+        _PANEL_TYPES[key] = _panel_types(api)
+    panel_type, view_type = _PANEL_TYPES[key]
+    panel = panel_type.alloc().initWithContentRect_styleMask_backing_defer_(
         ((0, 0), (1, 1)),
         api.NSWindowStyleMaskBorderless | api.NSWindowStyleMaskNonactivatingPanel,
         api.NSBackingStoreBuffered,
@@ -68,7 +80,7 @@ def _make_panel(api):
     panel.setLevel_(api.NSFloatingWindowLevel)
     panel.setAccessibilityElement_(False)
     panel.setAccessibilityChildren_([])
-    view = SemanticOutlineView.alloc().initWithFrame_(((0, 0), (1, 1)))
+    view = view_type.alloc().initWithFrame_(((0, 0), (1, 1)))
     view.setAccessibilityElement_(False)
     view.setAccessibilityChildren_([])
     panel.setContentView_(view)

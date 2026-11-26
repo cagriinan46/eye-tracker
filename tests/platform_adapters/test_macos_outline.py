@@ -63,6 +63,8 @@ def test_panel_is_nonactivating_nonkey_and_mouse_transparent():
         NSColor=SimpleNamespace(clearColor=lambda: None),
     )
     panel, view = _make_panel(api)
+    second, second_view = _make_panel(api)
+    assert type(second) is type(panel) and type(second_view) is type(view)
     assert panel.mask == 128
     assert not panel.canBecomeKeyWindow() and not panel.canBecomeMainWindow()
     assert ("setIgnoresMouseEvents_", (True,)) in panel.calls

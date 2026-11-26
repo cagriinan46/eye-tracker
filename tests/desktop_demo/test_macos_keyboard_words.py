@@ -41,6 +41,7 @@ def test_precision_panel_shows_dictation_without_a_text_label(monkeypatch):
     toolbar.visible = True
     toolbar.paused = False
     toolbar.status = None
+    toolbar.dock_loading = False
     toolbar.results = queue.Queue()
     toolbar.keyboard = SimpleNamespace(focused=lambda: None)
     toolbar.results.put(((1, object()), None, "Dikte sonucu"))

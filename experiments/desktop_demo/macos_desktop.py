@@ -265,19 +265,21 @@ class MacOSDesktop:
         active = getattr(self.gestures, "active", None)
         if active is None:
             active = {"smile"} if self.gestures.smiling else set()
-        holding = any(actions.get(name, "off") != "off" for name in active) and self.api_pref(
-            "face_hold", True
-        )
+        expressing = any(actions.get(name, "off") != "off" for name in active)
         # The face mesh relaxes after the score drops, so keep holding briefly.
         now = time.monotonic()
-        if holding:
+        if expressing:
             self.hold_release = now + HOLD_RELEASE_SECONDS
-        holding = holding or now < getattr(self, "hold_release", 0.0)
+        expressing = expressing or now < getattr(self, "hold_release", 0.0)
+        # A gesture-started head scroll always waits for the expression to end
+        # before taking its neutral height (the log showed it taken 2-5 ms after
+        # the mouth opened when the cursor hold was switched off).
+        self.toolbar.face_holding = expressing
+        holding = expressing and self.api_pref("face_hold", True)
         if holding and self.smile_point is None:
             self.smile_point = self.mouse_location()
         elif not holding and not any(e in FACE_GESTURES for e in events):
             self.smile_point = None
-        self.toolbar.face_holding = holding
         stop = self.api.scroll_stop()
         for event in events:
             logger.info(

@@ -61,6 +61,7 @@ class MacOSDesktop:
         self.window, self.api = window, api
         self.toolbar = self.ring = self.feed = None
         self.closed = False
+        self.main_window_hidden = False
         self.escape_down = False
         self.recentre_key = HoldKey()
         self.gestures = EyeGestures()
@@ -74,11 +75,18 @@ class MacOSDesktop:
     def start(self):
         AppHelper.callAfter(self.tick)
 
+    def show_main_window(self):
+        native = self.window.native
+        if native is not None and not self.closed:
+            if native.isMiniaturized():
+                native.deminiaturize_(None)
+            native.makeKeyAndOrderFront_(None)
+            UI.NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
+        self.main_window_hidden = False
+
     def native_page(self, page):
         self.api.request_native_page(page)
-        native = self.window.native
-        native.makeKeyAndOrderFront_(None)
-        UI.NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
+        self.show_main_window()
 
     def prepare(self):
         if not AX.AXIsProcessTrusted():
@@ -142,6 +150,9 @@ class MacOSDesktop:
         self.assisted = None
         self.next_screen_check = 0
         self.ring_locked = False
+        # Preserve the calibrated viewport while exposing the desktop underneath.
+        native.orderOut_(None)
+        self.main_window_hidden = True
 
     @staticmethod
     def poll_dock(stop, values, screen):
@@ -170,6 +181,8 @@ class MacOSDesktop:
         self.aim.reset()
         self.cursor.reset()
         self.magnet.reset()
+        if self.main_window_hidden:
+            self.show_main_window()
 
     def display(self, now, aim, assisted):
         cursor = self.cursor.update(now, assisted)

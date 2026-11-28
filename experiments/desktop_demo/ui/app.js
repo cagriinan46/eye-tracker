@@ -9,7 +9,7 @@ async function act(action,payload={}){
   if(userBusy)return;
   if(!api){notice('Uygulama henüz hazır değil. Birkaç saniye bekle.');return;}
   userBusy=true;
-  try{const r=await command(action,payload);if(r?.ok)notice();return r;}
+  try{const r=await command(action,payload);if(r?.ok&&action!=='desktop_start')notice();return r;}
   finally{userBusy=false;}
 }
 function geometry(){return [innerWidth,innerHeight,screenX,screenY,devicePixelRatio];}
@@ -95,6 +95,9 @@ function render(s){
     $(id).disabled=s.camera!=='ready'||!s.can_demo;
     $(id).textContent=s.desktop_active?'Masaüstü kontrolünü bitir':'Masaüstünü kontrol et';
   }
+  const desktopHint=$('desktopHomeHint');
+  desktopHint.hidden=!s.desktop_available||(s.camera==='ready'&&s.can_demo);
+  desktopHint.textContent=s.camera==='ready'?'Masaüstü kontrolü için kalibrasyonu tamamla.':'Masaüstü kontrolü için kamerayı aç.';
   if(phase==='error'&&errorToken!==s.token){errorToken=s.token;notice(s.message);}
   $('cameraBadge').textContent=({off:'Kamera kapalı',loading:'Kamera hazırlanıyor',ready:s.tracking?'Gözlerin görünüyor':s.signal_status==='processing_delayed'?'Gözler algılandı · İşlem gecikiyor':'Geçerli bakış verisi bekleniyor',stopping:'Kamera kapanıyor',error:'Kamera açılamadı'})[s.camera];
   appearance(s.preferences);
@@ -258,7 +261,13 @@ const calibrate=variant=>act('calibrate',{geometry:geometry(),variant});
 $('calibrate').onclick=()=>calibrate('standard');
 $('quickCalibrate').onclick=()=>calibrate('quick');
 for(const id of ['recalibrateReady','recalibrateResult'])$(id).onclick=()=>calibrate(state?.calibration_variant||'standard');
-for(const id of ['desktopHome','desktopReady','desktopPractice','desktopResult'])$(id).onclick=()=>act(state?.desktop_active?'desktop_stop':'desktop_start');
+for(const id of ['desktopHome','desktopReady','desktopPractice','desktopResult'])$(id).onclick=()=>{
+  if(userBusy)return;
+  if(state?.desktop_active){act('desktop_stop');return;}
+  lastDesktopError=null;
+  notice();
+  act('desktop_start');
+};
 for(const id of ['startDemo','again','practiceStart'])$(id).onclick=()=>act('demo');
 for(const id of ['homeDemo','homeReady','homeResult'])$(id).onclick=()=>navigate('home');
 for(const el of document.querySelectorAll('[data-page]'))el.onclick=()=>navigate(el.dataset.page);

@@ -1753,3 +1753,31 @@ the window closed.
   `face_hold` was off for the baseline. I set it back to true.
 - Performance and the magnet are not implicated by these numbers.
   `browser_fields` was off during this log, so its effect is untested.
+
+## 2026-11-28 20:40 +03:00 — Issue #160 paused; work published
+
+At Fatih's request ("deneyleri sonra yapalım, GitHub'a yükle"), work stops
+here. The branch `feature/desktop-head-cursor` is pushed and
+[PR #161](https://github.com/cagriinan46/eye-tracker/pull/161) is OPEN and
+UNMERGED; no merge by the agent. I closed the desktop app that I had
+launched, freeing the camera.
+
+**State on Fatih's Mac:**
+- `~/.eye-tracker/desktop-preferences.json`: `face_hold` true,
+  `browser_fields` false, `magnet` true; pucker is still set to "recentre"
+  (his choice).
+- Dictation assets are in `~/.eye-tracker/dictation`.
+- ffmpeg 9.0.2 is installed via Homebrew.
+- The face recordings `.venv/face-gestures-fatih-1.json` and `-2.json`
+  are local and Git-ignored.
+
+**Next, when Fatih resumes:**
+1. Verify the PR state.
+2. Read the newest `desktop-diagnostics.log` lines.
+3. Ask Fatih to:
+   - set pucker to Kapalı;
+   - check the smile hold;
+   - check that gesture-started scrolling no longer drifts;
+   - compare "Tarayıcı metin alanları" on and off in Brave;
+   - optionally run the 12 tasks in head mode, for a measured head-vs-gaze
+     comparison.

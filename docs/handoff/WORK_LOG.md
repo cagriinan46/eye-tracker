@@ -1499,3 +1499,176 @@ decision.
 Commits `dffd1cc` (preregistration) and the results commit are on
 `feature/head-pointer-tuning`, pushed. [PR #159](https://github.com/cagriinan46/eye-tracker/pull/159)
 is OPEN and UNMERGED. No merge by the agent.
+
+## 2026-11-28 18:10 +03:00 — correction: PR #159 merged
+
+Verified at task start: [PR #159](https://github.com/cagriinan46/eye-tracker/pull/159)
+is **MERGED** (squash commit `63c3778`). The entry above recorded it as pending.
+
+## 2026-11-28 20:30 +03:00 — Issue #160: head cursor in the desktop demo, face-gesture controls
+
+**Request:** Fatih asked to check, in the real desktop app, whether head control
+beats gaze and to try recentring. He then asked for several changes after each
+trial:
+- wink clicks
+- the keyboard opening on a text-field click
+- a smoother keyboard
+- a settings section for the gesture mappings
+- a "Kafa ortala" button
+- head-tilt scrolling stopped by an eye gesture
+- Enter and "Kelime sil" keys
+- matching keyboards
+- a smile click
+- dictation in the app keyboard, and a working dictation install
+- the YouTube search box
+- a configurable scroll-stop gesture
+- a fix for the smile cursor drift
+- a redesigned rail
+- per-user detection times
+
+The issue is [#160](https://github.com/cagriinan46/eye-tracker/issues/160);
+the branch `feature/desktop-head-cursor` starts from main `63c3778`. These
+were Fatih's explicit requests in chat; no new ADR was made. Head as an input
+method stays Fatih's decision; Çağrı may revise it.
+
+**Changes:** see `experiments/desktop_demo/README.md` (head cursor section).
+
+- `HeadEngine` runs in the desktop worker, in the GazeFollower Python. It
+  computes RAY with the same Ridge and the 13×20 calibration and uses the
+  #158 STEADY filter.
+- Hold-R recentring, and a "Kafa ortala" button that waits 1.5 s.
+- `EyeGestures` classifies each closure by its duration and its mean
+  right-minus-left asymmetry. It also detects long closures and smiles.
+- New settings: per-gesture actions, a scroll-stop gesture, per-user times
+  and one-eye sensitivity.
+- Head scroll.
+- A click opens the keyboard when a text field takes focus.
+- The cursor glides over our own panels.
+- Both keyboards share Enter, Kelime sil (Option+Backspace) and Dikte.
+- In-app dictation.
+- Chromium web accessibility.
+- An expandable one-button rail.
+- Gesture samples are buffered in the runtime.
+
+**Observations (actual):**
+- **Head-mode 5-point check, session `desktop-gaze-055a47ab…`:** mean error
+  196.9 px, with every point biased upward (y −44 to −220 px). Fatih's recent
+  gaze checks were 35–49 px. The check hides the cursor, and head pointing
+  relies on seeing it, so this does not measure closed-loop use. No
+  12-task head run was done.
+- **Fatih, subjectively:** desktop head control is more comfortable than
+  gaze. Winks "sometimes great, sometimes hard". Scroll did not work at
+  first. The cursor slides down when smiling.
+- **Face-gesture recording** (`.venv/face-gestures-fatih-1.json`, 498,217 B,
+  SHA-256 `a8a04d85…eb04119`, 105 s, 2,370 frames, no images):
+  - Natural blinks last 0.30–0.50 s, which explains why the first 0.3 s
+    long-blink stop ended every scroll at once.
+  - Fatih's winks half-close the other eye (0.56–0.62), so the first
+    "other eye open" rule rejected them.
+  - Right winks: mean asymmetry +0.10 to +0.17, 0.4–0.8 s. Left winks:
+    −0.06 to −0.17, 0.63–0.9 s, close to his natural blinks.
+  - Deliberate long closures: 1.2–1.7 s.
+  - Smile score about 0.8; at most 0.06 at rest or while talking.
+  - Median head pitch: 17.5° smiling against 11.4° neutral.
+  - The tuned detector, replayed on the **same** recording (in-sample),
+    found 7 right winks, 9 left winks, 3 long closures, 5 smiles and 0 false
+    events in the rest phases.
+- **YouTube search box in Brave:** an Accessibility probe found only the
+  address bar until `AXEnhancedUserInterface` was set; after that, the search
+  box appeared as a settable AXComboBox. `AXManualAccessibility` was
+  rejected (−25205). The probe opened a YouTube tab in Brave and saved no
+  text. Two earlier probe runs were useless, because the script read
+  `frontmostApplication` without a run loop and always got Terminal.
+- **Dictation install on Fatih's Mac (outside the repo):**
+  - Whisper tiny was downloaded from OpenAI's public URL and its SHA-256
+    matched.
+  - The openai-whisper 20250625 package files were copied, because the
+    sdist needs `pkg_resources`. tiktoken 0.9.0, more-itertools 10.5.0 and
+    regex 2024.11.6 were installed `--no-deps`.
+  - `brew install ffmpeg` installed 9.0.2.
+  - The transcription subprocess rejected silence and returned empty text
+    for a tone. Real speech is untested.
+- **Environment:** the app was first launched from VS Code, which lacks
+  Accessibility permission, so desktop control refused to start. Fatih's
+  launches go through Terminal.
+
+**Checks:**
+- `ruff check .` and `ruff format --check .` pass; `git diff --check` is
+  clean; `node --check` passes for app.js.
+- pytest: 1024 passed, 16 failed. The 16 are the same SVR tests that fail
+  for lack of scikit-learn in the GazeFollower environment.
+- A headless AppKit render of the rail passed: collapsed 114×114, expanded
+  12 rows, paused shows "Devam et".
+
+**Not established:**
+- The latest round (rail menu, timing settings, smile hold, sample buffer,
+  Chromium fix in the app) has not been live-tested.
+- Gesture thresholds are in-sample from one recording; there is no
+  validation.
+- Left winks are the least distinct from natural blinks.
+- No 12-task comparison of head and gaze.
+- Comfort and fatigue over long use.
+- Other users.
+- `AXEnhancedUserInterface` can affect some apps' window animations; it is
+  limited to Chromium browsers.
+
+## 2026-11-28 20:35 +03:00 — Issue #160 published; review pending
+
+Commits `11311a8`, `efd53cd`, `4a35030`, `bdb4376` and `34e7a93` are on
+`feature/desktop-head-cursor`, pushed. The PR is OPEN and UNMERGED; the CI
+result was not yet known when this was written. No merge by the agent.
+
+## 2026-11-28 21:15 +03:00 — Issue #160 follow-up: more face gestures, rail tiles restored (same PR #161)
+
+**Request (Fatih):**
+- Keep the one-button rail start, but open into the earlier two-column tiles
+  rather than a list.
+- Add mouth opening, and tongue-out for scrolling.
+- Add any other gestures I would suggest.
+
+**Finding:** MediaPipe's Face Landmarker exposes 52 blendshapes and no
+`tongueOut`, so tongue-out cannot be detected. A second recording
+(`face_gestures_check --phases extended`, `.venv/face-gestures-fatih-2.json`,
+1,497,897 B, SHA-256 `543ec212…4371fd55`, 144 s, 3,426 frames, no images)
+showed:
+
+| Gesture | Recorded score | Head-pitch shift | Notes |
+| --- | --- | --- | --- |
+| jawOpen | 0.84–0.91 for about 2 s | up to 11° | talking at most 0.27 |
+| browInnerUp | 0.94–0.96 for 0.6–1.3 s | 4–5° | appeared only when raising the brows |
+| mouthPucker | 1.0 | 4–6° | talking reached 0.7+ for 0.73 s |
+| mouth sideways | — | — | pulled by winks; not used |
+
+**Fresh wink check (data not used to set the wink thresholds):**
+- Right-wink phase: 6 right winks detected for 5 requested.
+- Left-wink phase: 7 left winks detected for 5 requested.
+- No wrong side, and no events while talking or blinking.
+- False events: 1 wink while opening the mouth (now vetoed) and 4 while
+  sliding the mouth sideways.
+
+**Change:**
+- **Held gestures:** mouth ≥ 0.5 held 0.5 s, pucker ≥ 0.7 held 0.8 s,
+  brows ≥ 0.6 held 0.4 s.
+- **Wink veto:** an eye closure during an open mouth, pucker or raised brows
+  is not a wink.
+- **Cursor hold:** the cursor is held while any enabled gesture is active.
+- **Actions:** each of the six gestures chooses Sol tık, Sağ tık, Çift tık,
+  Kaydırmayı başlat/durdur, Klavye, Menü, Kafa ortala or Kapalı. Defaults:
+  mouth → scroll, brows → double click, pucker → off.
+- **Head scroll from a gesture:** it takes its neutral height after the
+  gesture ends.
+- **Settings:** the scroll-stop choice gains mouth, pucker and brows, and
+  each gesture's hold time is a setting.
+- **Rail:** the expanded rail uses the two-column icon tiles again.
+- **Replay on the second recording** (partly in-sample for the new
+  thresholds): mouth 3/3, pucker 4, brows 8, winks 6/7. Remaining false
+  events: 3 winks while sliding the mouth sideways and 1 long closure while
+  moving the head.
+
+**Checks:**
+- Ruff and format pass.
+- pytest: 1029 passed, 16 failed. The 16 are the SVR tests that need
+  scikit-learn.
+- A headless AppKit render of the rail passed: collapsed 114×114, expanded
+  205×593 with 12 tiles.
+- **No live test of this round yet.**

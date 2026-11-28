@@ -69,6 +69,48 @@ def panel_rect(element, fallback, size="medium"):
     )
 
 
+KEY_CODES = {"backspace": 51, "delete_word": 51, "enter": 36}
+# Chromium browsers expose web-page elements (e.g. the YouTube search box) to
+# Accessibility only after an assistive tool sets AXEnhancedUserInterface, as
+# VoiceOver does. Verified on Brave 2026-11-28: before, only the address bar was
+# visible; after, the search box appeared as a settable AXComboBox (Issue #160).
+CHROMIUM_BROWSERS = frozenset(
+    {
+        "com.brave.Browser",
+        "com.google.Chrome",
+        "com.microsoft.edgemac",
+        "com.vivaldi.Vivaldi",
+        "com.operasoftware.Opera",
+        "org.chromium.Chromium",
+        "company.thebrowser.Browser",
+    }
+)
+
+
+def needs_web_accessibility(bundle_id):
+    return str(bundle_id) in CHROMIUM_BROWSERS
+
+
+class WebAccessibility:
+    """Ask each frontmost Chromium browser process once to expose its web content."""
+
+    def __init__(self):
+        self.enabled = set()
+
+    def update(self, app):
+        if app is None or not needs_web_accessibility(app.bundleIdentifier()):
+            return False
+        pid = app.processIdentifier()
+        if pid in self.enabled:
+            return False
+        self.enabled.add(pid)
+        # Chromium applies the setting even though the call reports -25208.
+        AX.AXUIElementSetAttributeValue(
+            AX.AXUIElementCreateApplication(pid), "AXEnhancedUserInterface", True
+        )
+        return True
+
+
 class KeyboardPanel(UI.NSPanel):
     def canBecomeKeyWindow(self):
         return False
@@ -225,15 +267,18 @@ class FocusKeyboard:
         self.panel.setContentView_(view)
         rows = SYMBOL_ROWS if self.symbols else LETTER_ROWS
         lines = [[(c, turkish_upper(c) if self.shift else c, 1) for c in row] for row in rows]
+        # Same control set as the in-app keyboard (Issue #160), plus Kapat.
+        lines[-1].append(("backspace", "⌫", 1.6))
         lines.append(
             [
+                ("page", "ABC" if self.symbols else "123", 1.3),
                 ("shift", "⇧", 1),
-                ("page", "ABC" if self.symbols else "123", 1),
-                ("space", "Boşluk", 4),
-                ("dictation", "Dikte", 1.4),
-                ("period", ".", 1),
-                ("backspace", "⌫", 1),
-                ("hide", "Kapat", 1),
+                ("dictation", "Dikte", 1.3),
+                ("space", "Boşluk", 3.2),
+                ("period", ".", 0.8),
+                ("delete_word", "Kelime sil", 1.6),
+                ("enter", "↵ Enter", 1.6),
+                ("hide", "Kapat", 1.2),
             ]
         )
         self.options = self.suggestions() if options is None else options
@@ -309,9 +354,15 @@ class FocusKeyboard:
             char = word[len(self.prefix) :] + " "
             self.suggester.remember(word)
             self.prefix = ""
-        elif key == "backspace":
+        elif key in ("backspace", "delete_word"):
             char = ""
-            self.prefix = self.prefix[:-1] if self.prefix_at_caret() else ""
+            if key == "delete_word" or not self.prefix_at_caret():
+                self.prefix = ""
+            else:
+                self.prefix = self.prefix[:-1]
+        elif key == "enter":
+            char = "\r"
+            self.prefix = ""
         else:
             char = {"space": " ", "period": "."}.get(key, key)
             char = turkish_upper(char) if self.shift else char
@@ -323,10 +374,14 @@ class FocusKeyboard:
                 self.suggester.remember(self.prefix)
                 self.prefix = ""
         pid, _ = self.target
+        # Backspace 51, Return 36; Option+Backspace deletes the previous word on macOS.
+        code = KEY_CODES.get(key, 0)
         for down in (True, False):
-            event = Quartz.CGEventCreateKeyboardEvent(None, 51 if key == "backspace" else 0, down)
-            Quartz.CGEventSetFlags(event, 0)
-            if key != "backspace":
+            event = Quartz.CGEventCreateKeyboardEvent(None, code, down)
+            Quartz.CGEventSetFlags(
+                event, Quartz.kCGEventFlagMaskAlternate if key == "delete_word" else 0
+            )
+            if key not in KEY_CODES:
                 Quartz.CGEventKeyboardSetUnicodeString(event, len(char), char)
             Quartz.CGEventPostToPid(pid, event)
         if self.shift:

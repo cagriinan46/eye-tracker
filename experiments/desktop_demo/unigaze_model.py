@@ -8,7 +8,14 @@ import sys
 import threading
 import time
 
-from experiments.unigaze.settings import PYTHON, ROOT, validate_assets, validate_mpiiface_assets
+from experiments.unigaze.settings import (
+    BASELINE_PYTHON,
+    PYTHON,
+    ROOT,
+    validate_assets,
+    validate_head_assets,
+    validate_mpiiface_assets,
+)
 from experiments.unigaze.wire import receive, send
 
 
@@ -24,6 +31,7 @@ class CameraModel:
         self.raw_point = None
         self.desktop_blink = False
         self.blink_samples = None
+        self.eye_samples = None
         self.filter_history_ms = None
         self.collect_timing = False  # Set by --perf-diagnostics (issue #145).
         self.last_timing = None
@@ -31,7 +39,11 @@ class CameraModel:
             raise RuntimeError(
                 "Bu bakış modelinin masaüstü bağlantısı şu an macOS için hazır. MGaze için --model mgaze kullan."
             )
-        if model_name == "mpiifacegaze":
+        # The head cursor needs only MediaPipe, which lives in the GazeFollower environment.
+        python = BASELINE_PYTHON if model_name == "head" else PYTHON
+        if model_name == "head":
+            validate_head_assets()
+        elif model_name == "mpiifacegaze":
             validate_mpiiface_assets()
         else:
             validate_assets()
@@ -47,7 +59,7 @@ class CameraModel:
             try:
                 self.worker = subprocess.Popen(
                     [
-                        str(PYTHON),
+                        str(python),
                         "-m",
                         "experiments.unigaze.desktop_worker",
                         str(child.fileno()),
@@ -123,6 +135,7 @@ class CameraModel:
         self.raw_point = r["raw_point"]
         self.eyes_closed = r.get("eyes_closed")
         self.blink_samples = r.get("blink_samples")
+        self.eye_samples = r.get("eye_samples")
         self.filter_history_ms = r["filter_history_ms"]
         return r["captured"], r["features"], r["point"], r["preview"]
 
@@ -133,6 +146,9 @@ class CameraModel:
         self._request("reset")
         self.raw_point = None
         self.filter_history_ms = None
+
+    def recentre(self):
+        return bool(self._request("recentre").get("recentred"))
 
     def metadata(self):
         return dict(self._metadata)

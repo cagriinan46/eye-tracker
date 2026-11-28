@@ -118,7 +118,7 @@ UNIGAZE_POINTS = [
 
 class Session:
     def __init__(self, model_name="mgaze", scenario="shapes"):
-        if model_name not in ("mpiifacegaze", "unigaze", "mgaze"):
+        if model_name not in ("mpiifacegaze", "unigaze", "mgaze", "head"):
             raise ValueError("Unknown gaze model")
         if scenario not in ("shapes", "web"):
             raise ValueError("Unknown interaction scenario")

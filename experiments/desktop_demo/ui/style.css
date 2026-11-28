@@ -271,3 +271,15 @@ input.web-target::placeholder { color: var(--muted); }
 .kb-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .kb-foot { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; }
 @media (max-height: 740px) { .keyboard { gap: 8px; padding-top: 10px; }.kb-text { padding-block: 8px; font-size: 22px; }.kb-key { font-size: 24px; }.kb-key.kb-sug { font-size: 18px; }.kb-key.kb-ctl { font-size: 15px; } }
+
+/* Issue #160: per-user gesture detection settings. */
+.time-row { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 14px 0; border-top: 1px solid var(--line); }
+.time-row:first-of-type { margin-top: 14px; }
+.time-row h3 { font-size: 15px; font-weight: 550; }
+.time-row p { margin-top: 4px; color: var(--muted); font-size: 13px; }
+.stepper { display: flex; flex: none; align-items: center; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.stepper button { min-width: 48px; min-height: 44px; background: var(--surface); font-size: 22px; }
+.stepper button:disabled { opacity: .35; }
+.stepper output { min-width: 84px; text-align: center; font-variant-numeric: tabular-nums; font-weight: 550; }
+#gestureDefaults { margin-top: 14px; }
+.gesture-select { flex: none; min-width: 220px; min-height: 44px; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: inherit; font: inherit; font-size: 14px; }

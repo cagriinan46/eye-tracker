@@ -24,7 +24,16 @@ CHARACTER_KEYS = tuple(
     f"r{row}c{column}" for row, letters in enumerate(LETTER_ROWS) for column in range(len(letters))
 )
 SUGGESTION_KEYS = tuple(f"sug{slot}" for slot in range(SUGGESTION_SLOTS))
-CONTROL_KEYS = ("backspace", "page", "shift", "space", "period", "delete_word")
+CONTROL_KEYS = (
+    "backspace",
+    "page",
+    "shift",
+    "space",
+    "period",
+    "delete_word",
+    "enter",
+    "dictation",
+)
 KEY_IDS = frozenset(CHARACTER_KEYS + SUGGESTION_KEYS + CONTROL_KEYS)
 _LOWER = str.maketrans("Iİ", "ıi")
 _UPPER = str.maketrans("ıi", "Iİ")
@@ -131,7 +140,13 @@ class Keyboard:
         self.shift = True  # A new text starts with a capital letter.
         self.auto_space = False
         self.started = self.last_key = self.completed_s = None
-        self.counts = dict(gaze=0, manual=0, backspace=0, delete_word=0, suggestion=0)
+        self.counts = dict(
+            gaze=0, manual=0, backspace=0, delete_word=0, suggestion=0, enter=0, dictation=0
+        )
+        # Issue #160: the runtime starts or stops dictation when this count grows.
+        self.dictation_requests = 0
+        self.dictation_status = None
+        self.dictation_error = None
 
     @property
     def rows(self):
@@ -180,6 +195,12 @@ class Keyboard:
             self._insert(".")
         elif key == "space":
             self._insert(" ")
+        elif key == "enter":
+            self._insert("\n")
+            self.counts["enter"] += 1
+        elif key == "dictation":
+            self.dictation_requests += 1
+            self.counts["dictation"] += 1
         elif key == "backspace":
             self.text = self.text[:-1]
             self.auto_space = False
@@ -194,7 +215,7 @@ class Keyboard:
         elif key == "shift":
             self.shift = not self.shift
         self.counts[modality] += 1
-        if key not in ("shift", "page"):
+        if key not in ("shift", "page", "dictation"):
             self.shift = not self.text or self.text.rstrip(" ")[-1:] in SENTENCE_END
             if self.text and self.started is None:
                 self.started = now
@@ -202,6 +223,20 @@ class Keyboard:
         if self.completed_s is None and self.started is not None and self.text == self.target:
             self.completed_s = now - self.started
         return True
+
+    def insert_text(self, text, now):
+        """Append dictated text as one edit, separated from earlier text by a space."""
+        text = text.strip()
+        if not text:
+            return
+        if self.text and not self.text[-1].isspace():
+            text = " " + text
+        self.text += text
+        self.auto_space = False
+        self.shift = self.text.rstrip(" ")[-1:] in SENTENCE_END
+        if self.started is None:
+            self.started = now
+        self.last_key = now
 
     @staticmethod
     def _last_word(text):
@@ -252,4 +287,6 @@ class Keyboard:
             suggestions=options + [""] * (SUGGESTION_SLOTS - len(options)),
             target=self.target,
             stats=self.stats(),
+            dictation=self.dictation_status,
+            dictation_error=self.dictation_error,
         )

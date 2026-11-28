@@ -10,7 +10,39 @@ DEFAULTS = {
     "reduced_motion": False,
     "word_suggestions": True,
     "keyboard_size": "medium",
+    "wink_left": "left",
+    "wink_right": "right",
+    "smile": "left",
+    "mouth_open": "scroll",
+    "pucker": "off",
+    "brows": "double",
+    "scroll_stop": "long_blink",
+    "wink_sensitivity": "medium",
+    "wink_right_min_ms": 250,
+    "wink_left_min_ms": 550,
+    "wink_max_ms": 1000,
+    "long_blink_ms": 1000,
+    "smile_hold_ms": 400,
+    "mouth_open_hold_ms": 500,
+    "pucker_hold_ms": 800,
+    "brows_hold_ms": 400,
 }
+# What a face gesture does (Issue #160).
+GESTURE_KEYS = ("wink_right", "wink_left", "smile", "mouth_open", "pucker", "brows")
+ACTIONS = ("left", "right", "double", "scroll", "keyboard", "menu", "recentre", "off")
+# Per-user detection times (Issue #160): (minimum, maximum) in ms, 50 ms steps.
+GESTURE_TIMES = {
+    "wink_right_min_ms": (100, 800),
+    "wink_left_min_ms": (200, 1000),
+    "wink_max_ms": (500, 2000),
+    "long_blink_ms": (500, 3000),
+    "smile_hold_ms": (200, 1500),
+    "mouth_open_hold_ms": (200, 2000),
+    "pucker_hold_ms": (300, 2000),
+    "brows_hold_ms": (200, 1500),
+}
+SENSITIVITIES = ("low", "medium", "high")
+SCROLL_STOPS = ("long_blink", "smile", "wink_right", "wink_left", "mouth_open", "pucker", "brows")
 KEYBOARD_SIZES = ("small", "medium", "large")
 DEFAULT_PATH = Path.home() / ".eye-tracker" / "desktop-preferences.json"
 
@@ -27,6 +59,16 @@ def validated(values):
         raise ValueError("Kelime önerisi ayarı açık veya kapalı olmalı.")
     if result["keyboard_size"] not in KEYBOARD_SIZES:
         raise ValueError("Geçersiz klavye boyutu.")
+    if any(result[key] not in ACTIONS for key in GESTURE_KEYS):
+        raise ValueError("Geçersiz yüz hareketi eylemi.")
+    if result["scroll_stop"] not in SCROLL_STOPS:
+        raise ValueError("Geçersiz kaydırma durdurma hareketi.")
+    if result["wink_sensitivity"] not in SENSITIVITIES:
+        raise ValueError("Geçersiz göz kırpma hassasiyeti.")
+    for key, (low, high) in GESTURE_TIMES.items():
+        value = result[key]
+        if type(value) is not int or not low <= value <= high or value % 50:
+            raise ValueError("Algılama süresi geçersiz.")
     return result
 
 

@@ -53,6 +53,10 @@ function appearance(p){
   $('suggestToggle').setAttribute('aria-checked',String(p.word_suggestions!==false));
   document.documentElement.dataset.kbSize=p.keyboard_size||'medium';
   for(const el of document.querySelectorAll('[data-kb-size]'))el.setAttribute('aria-pressed',String(el.dataset.kbSize===(p.keyboard_size||'medium')));
+  for(const el of document.querySelectorAll('[data-gesture]'))el.value=p[el.dataset.gesture]||gestureDefaults[el.dataset.gesture];
+  for(const el of document.querySelectorAll('[data-scroll-stop-select]'))el.value=p.scroll_stop||'long_blink';
+  for(const el of document.querySelectorAll('[data-sensitivity]'))el.setAttribute('aria-pressed',String(el.dataset.sensitivity===(p.wink_sensitivity||'medium')));
+  for(const el of document.querySelectorAll('[data-time]')){const v=p[el.dataset.time]??gestureTimes[el.dataset.time][2];el.querySelector('output').textContent=(v/1000).toFixed(2).replace('.',',')+' sn';const [lo,hi]=gestureTimes[el.dataset.time];el.querySelector('[data-dir="-1"]').disabled=v<=lo;el.querySelector('[data-dir="1"]').disabled=v>=hi;}
 }
 async function saveAppearance(p){
   if(userBusy)return;
@@ -74,7 +78,7 @@ function results(s){const count=k=>s.trials.filter(t=>t.outcome===k).length;
   $('recordPath').textContent=s.record_path?'Seçimlerin bu cihazda saklandı.':'Bu oturum kaydedilemedi.';
 }
 function render(s){
-  state=s;document.title='Eye Tracker · '+({mgaze:'MGaze',unigaze:'UniGaze',mpiifacegaze:'MPIIFaceGaze ResNet-18'}[s.model_name]);const phase=s.phase;const measurement=['calibration','calibration_retry','check','fitting'].includes(phase);
+  state=s;document.title='Eye Tracker · '+({mgaze:'MGaze',unigaze:'UniGaze',mpiifacegaze:'MPIIFaceGaze ResNet-18',head:'Kafa imleci'}[s.model_name]);if(s.model_name==='head'){const step=document.querySelector('#stepCalibration p');if(step)step.textContent='Beliren noktayı burnunla göster; gözle değil. Süre dolana kadar kafanı orada tut. Sonra imleci kaydırmak için R tuşunu basılı tutarak ortalayabilirsin.';}const phase=s.phase;const measurement=['calibration','calibration_retry','check','fitting'].includes(phase);
   if(lastToken!==s.token){
     lastToken=s.token;acknowledged=null;
     show(measurement?'measurement':['ready','demo','results','keyboard'].includes(phase)?phase:'preparation');
@@ -137,7 +141,7 @@ function render(s){
   if(phase==='ready')$('checkError').textContent=Math.round(s.checks.reduce((v,r)=>v+r.mean_px,0)/s.checks.length)+' px';
   if(phase==='demo'){
     $('instruction').textContent=s.paused?'Mola veriyoruz.':s.instruction||'“'+names[s.expected]+'” öğesini seç.';
-    $('trialInfo').textContent=s.paused?'Hazır olduğunda Devam et düğmesine bas.':`Adım ${s.index+1} / ${s.total_trials} · İstenen öğeye bakışını sabitle.`;
+    $('trialInfo').textContent=s.paused?'Hazır olduğunda Devam et düğmesine bas.':`Adım ${s.index+1} / ${s.total_trials} · `+(s.model_name==='head'?'İmleci burnunla istenen öğeye getir ve tut. Kayarsa R tuşunu basılı tut.':'İstenen öğeye bakışını sabitle.');
     $('pause').textContent=s.paused?'Devam et':'Duraklat';$('targets').classList.toggle('paused',s.paused);
     $('trackingLabel').textContent=s.paused?'Duraklatıldı':s.tracking?'Bakışın izleniyor':s.signal_status==='processing_delayed'?'İşlem gecikiyor. Bakışla seçim bekletiliyor.':'Geçerli bakış verisi bekleniyor.';
     for(const el of targetEls){const on=el.dataset.control===s.dwell_target&&!s.paused;el.classList.toggle('focused',on);fillFor(el).style.width=(on?s.dwell_progress*100:0)+'%';}
@@ -184,10 +188,13 @@ const kbLayout=[
   Array.from({length:12},(_,c)=>['r0c'+c,2]),
   Array.from({length:11},(_,c)=>['r1c'+c,2,c?0:2]),
   [...Array.from({length:9},(_,c)=>['r2c'+c,2,c?0:3]),['backspace',4]],
-  [['page',4],['shift',4],['space',9],['period',3],['delete_word',4]],
+  [['page',3],['shift',2],['dictation',3],['space',7],['period',2],['delete_word',3],['enter',4]],
 ];
-const kbNames={backspace:'Sil',page:'Sayfa değiştir',shift:'Büyük harf',space:'Boşluk',period:'Nokta',delete_word:'Kelimeyi sil'};
-const kbEls={};let kbSent=null,kbSending=false;
+const kbNames={backspace:'Sil',page:'Sayfa değiştir',shift:'Büyük harf',space:'Boşluk',period:'Nokta',delete_word:'Kelimeyi sil',enter:'Yeni satır',dictation:'Türkçe dikte'};
+const kbEls={};let kbSent=null,kbSending=false,kbDictationError=null;
+// Issue #160: per-user gesture times [min, max, default] in ms (preferences.GESTURE_TIMES).
+const gestureTimes={wink_right_min_ms:[100,800,250],wink_left_min_ms:[200,1000,550],wink_max_ms:[500,2000,1000],long_blink_ms:[500,3000,1000],smile_hold_ms:[200,1500,400],mouth_open_hold_ms:[200,2000,500],pucker_hold_ms:[300,2000,800],brows_hold_ms:[200,1500,400]};
+const gestureDefaults={wink_right:'right',wink_left:'left',smile:'left',mouth_open:'scroll',pucker:'off',brows:'double'};
 for(const row of kbLayout)for(const [id,span,start] of row){
   const el=document.createElement('button');el.className='kb-key'+(id.startsWith('sug')?' kb-sug':/^r\d/.test(id)?'':' kb-ctl');
   el.dataset.key=id;el.style.gridColumn=(start?start+' / ':'')+'span '+span;
@@ -206,7 +213,7 @@ function renderKeyboard(s){
   $('kbKeys').classList.toggle('nosug',!k.suggestions_on);
   k.rows.forEach((row,r)=>row.forEach((c,i)=>label('r'+r+'c'+i,c)));
   k.suggestions.forEach((word,i)=>{const el=kbEls['sug'+i];label('sug'+i,word);el.classList.toggle('gone',!k.suggestions_on);el.classList.toggle('empty',!word);el.disabled=!word;});
-  label('backspace','⌫');label('page',k.page==='letters'?'?123':'ABC');label('shift','⇧');label('space','boşluk');label('period','.');label('delete_word','kelime sil');
+  label('backspace','⌫');label('page',k.page==='letters'?'?123':'ABC');label('shift','⇧');label('space','boşluk');label('period','.');label('delete_word','kelime sil');label('enter','↵ enter');label('dictation',({listening:'dinleniyor…',processing:'yazılıyor…'})[k.dictation]||'dikte');kbEls.dictation.classList.toggle('on',!!k.dictation);if(k.dictation_error&&k.dictation_error!==kbDictationError)notice('Dikte: '+k.dictation_error);kbDictationError=k.dictation_error;
   kbEls.shift.classList.toggle('on',k.shift&&k.page==='letters');
   for(const [id,el] of Object.entries(kbEls)){const on=id===s.dwell_target&&!s.paused;el.classList.toggle('focused',on);el.lastChild.style.width=(on?s.dwell_progress*100:0)+'%';}
   const st=k.stats,parts=[st.characters+' karakter'];
@@ -259,6 +266,11 @@ $('practiceSetup').onclick=()=>navigate('calibration');
 for(const el of document.querySelectorAll('[data-theme-choice]'))el.onclick=()=>saveAppearance({theme:el.dataset.themeChoice});
 $('motionToggle').onclick=()=>saveAppearance({reduced_motion:!state?.preferences?.reduced_motion});
 for(const el of document.querySelectorAll('[data-kb-size]'))el.onclick=()=>saveAppearance({keyboard_size:el.dataset.kbSize});
+for(const el of document.querySelectorAll('[data-gesture]'))el.onchange=()=>saveAppearance({[el.dataset.gesture]:el.value});
+for(const el of document.querySelectorAll('[data-scroll-stop-select]'))el.onchange=()=>saveAppearance({scroll_stop:el.value});
+for(const el of document.querySelectorAll('[data-sensitivity]'))el.onclick=()=>saveAppearance({wink_sensitivity:el.dataset.sensitivity});
+for(const el of document.querySelectorAll('[data-time]'))for(const b of el.querySelectorAll('button'))b.onclick=()=>{const key=el.dataset.time,[lo,hi,def]=gestureTimes[key],v=state?.preferences?.[key]??def;saveAppearance({[key]:Math.min(hi,Math.max(lo,v+50*Number(b.dataset.dir)))});};
+$('gestureDefaults').onclick=()=>saveAppearance({wink_sensitivity:'medium',...Object.fromEntries(Object.entries(gestureTimes).map(([k,v])=>[k,v[2]]))});
 $('suggestToggle').onclick=()=>saveAppearance({word_suggestions:state?.preferences?.word_suggestions===false});
 $('pause').onclick=()=>act(state?.paused?'resume':'pause');
 $('kbPause').onclick=()=>act(state?.paused?'resume':'pause');

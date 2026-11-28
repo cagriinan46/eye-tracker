@@ -361,6 +361,175 @@ size. **No human typing result exists yet**: the keyboard
 has synthetic tests and a browser render only; it has not been run in the native
 window or with real gaze.
 
+## Head cursor mode (issue #160)
+
+`--model head` replaces the gaze model with the head pointer chosen in
+[Issue #156](../head_pointer/RESULTS.md): RAY, the point where the head's
+forward axis meets the camera plane (MediaPipe Face Landmarker transformation
+matrix).
+
+- **Calibration:** the same 13×20 timed calibration and the same standardized
+  Ridge (alpha 0.1). Point the **nose**, not the eyes, at each dot.
+- **Point filter:** One Euro 0.3 Hz / β 0.03, the frozen-rule outcome of
+  [Issue #158](../head_pointer_tuning/RESULTS.md), whose evidence was weak.
+- **Shared with gaze mode:** the 5-point check, the 12 tasks, desktop control,
+  the magnet, the toolbar and the double-blink clicks. They run unchanged.
+- **Blinks:** eye closure comes from MediaPipe eye landmarks. A blink does not
+  remove the head signal, so the cursor holds still during a blink.
+- **Recentring:** hold **R** for at least 0.35 s to make the current head pose
+  the screen centre. It works in the app window and during desktop control,
+  after calibration. A short tap does nothing, so typing "r" does not
+  recentre. Each session record counts the recentres in `head_recentres`.
+- **Environment:** the worker runs in the GazeFollower environment
+  (`EYE_TRACKER_MGAZE_PYTHON`, MediaPipe 0.10.35) and needs only
+  `.venv/models/face_landmarker.task` (or `EYE_TRACKER_BLINK_MODEL`). It does
+  not use UniGaze weights or camera intrinsics.
+
+```sh
+source ~/.eye-tracker/env.sh   # this Mac's local configuration
+PYTHONPATH=src:. "$EYE_TRACKER_MGAZE_PYTHON" -m experiments.desktop_demo --model head --camera-index 0
+```
+
+Limits: one participant has used it. Comfort over long use and other users
+are unmeasured. Windows is not supported.
+
+### Wink clicks, head scroll and smoother panels (Fatih's feedback, same issue)
+
+- **Winks and smile (both modes):** Settings choose Sol tık / Sağ tık /
+  Kapalı for "Sağ göz kırpma", "Sol göz kırpma" and "Gülümseme" (`wink_right`,
+  `wink_left`, `smile`). Defaults: right → right click, left → left click,
+  smile → left click.
+  - A wink clicks where the cursor was when the closure began. A smile clicks
+    at the current cursor.
+  - A hint names the detected gesture. Double-blink clicks and the rail
+    buttons still work.
+  - Scores are MediaPipe blendshapes from the existing blink stream:
+    `eyeBlinkLeft`/`eyeBlinkRight` and the mean of `mouthSmileLeft`/`Right`.
+  - **Thresholds come from one recording of Fatih**
+    (`experiments/head_pointer/face_gestures_check.py`, 2026-11-28,
+    `.venv/face-gestures-fatih-1.json`, 105 s, 2,370 frames).
+  - His winks also half-close the other eye (other-eye score 0.56–0.62). A
+    "one eye open" rule therefore rejected them.
+  - A closure (either eye ≥ 0.45, ends when both < 0.40) is classified when
+    it ends:
+    - right wink: mean(right − left) ≥ 0.07, lasting 0.25–1.0 s
+    - left wink: mean ≤ −0.06, lasting 0.55–1.0 s; his left winks lasted
+      0.63–0.90 s, his natural blinks 0.30–0.50 s
+    - long closure: both eyes closed for ≥ 1.0 s; his deliberate ones lasted
+      1.2–1.7 s. A long closure stops head scrolling. The earlier 0.3 s
+      threshold fired on his natural blinks, which is why scrolling never
+      worked.
+    - smile: mean smile ≥ 0.5 held for 0.4 s, with no eye closure in
+      progress (a left-wink squint raised it to 0.86)
+  - Replayed on the same recording (in-sample, not a validation), the
+    detector found:
+    - right winks: 7
+    - left winks: 9
+    - long closures: 3 of 3
+    - smiles: 5
+    - false events in the neutral, down, up, natural-blink and talking
+      phases: 0
+  - Left winks are close to this user's natural blinks and rely on duration;
+    expect them to be the least reliable.
+- **Keyboard after a click:** about 0.35 s after any click, if a text field
+  has focus, the floating keyboard opens.
+- **Keyboards:** the floating desktop keyboard now has the in-app
+  keyboard's controls: `⌫`, `123/ABC`, `⇧`, Dikte, Boşluk, `.`, "Kelime sil"
+  (Option+Backspace) and "↵ Enter" (Return), plus Kapat. The in-app keyboard
+  gained Enter (a new line) and Dikte. Dikte starts or stops a recording of up
+  to 10 s; the local Whisper text is appended to the in-app text.
+- **Dictation setup on Fatih's Mac (2026-11-28, outside the repository):**
+  - `~/.eye-tracker/dictation/tiny.pt`, downloaded from OpenAI's public URL;
+    SHA-256 `65147644…ce22b9` matches `WEIGHT_SHA`.
+  - `speech-runtime/`: the `whisper/` package files from
+    openai-whisper 20250625 (its sdist could not build without
+    `pkg_resources`), plus tiktoken 0.9.0, more-itertools 10.5.0 and regex
+    2024.11.6, installed `--no-deps` for the UniGaze Python. That Python
+    already has torch, numba and tqdm.
+  - `brew install ffmpeg` (9.0.2).
+- **Browser text fields:** Chromium browsers (Brave, Chrome, Edge, Vivaldi,
+  Opera, Chromium, Arc) hide web-page elements from Accessibility until an
+  assistive tool sets `AXEnhancedUserInterface`, as VoiceOver does.
+  - Before this change, clicking the YouTube search box in Brave did not open
+    the keyboard, and the rail Klavye button reported no text field.
+  - Probe on 2026-11-28: before the setting, only the address bar was a text
+    field; after it, the search box was a settable `AXComboBox`. Brave
+    rejected `AXManualAccessibility` (−25205), and the enhanced call reports
+    −25208 but takes effect.
+  - Desktop control now sets it once per frontmost Chromium process.
+    Safari is not affected.
+- **Head-scroll stop gesture:** Settings → "Kaydırmayı durdur" chooses
+  Gözleri kapat (≥ 1 s, default), Gülümse, Sağ göz or Sol göz
+  (`scroll_stop`). While head scrolling, only that gesture acts and no
+  gesture clicks.
+- **Rail menu:** the rail starts as one "Menü" button. Selecting it opens
+  the earlier two-column icon tiles, with Kapat first; Fatih preferred the
+  tiles to a labelled list. The menu closes after a rail command or after
+  3 s off it. While paused, the rail shows only "Devam et".
+- **Smile holds the cursor:** smiling reshapes the face mesh and reads as a
+  downward head tilt. In Fatih's recording the median pitch was 17.5° while
+  smiling, against 11.4° neutral and 10.4° talking, so the cursor slid down.
+  - While the smile score is ≥ 0.15 (rest ≤ 0.06) and the smile gesture is
+    not "Kapalı", the cursor is held.
+  - The smile click goes to the point where the smile began.
+- **Per-user detection:** Settings → "Algılama ayarları" sets:
+  - one-eye sensitivity: Düşük, Orta or Yüksek, giving asymmetry thresholds
+    of ±0.10/0.09, 0.07/0.06 or 0.05/0.04
+  - right-wink minimum: 100–800 ms
+  - left-wink minimum: 200–1000 ms
+  - wink maximum: 500–2000 ms
+  - eye-closing time: 500–3000 ms
+  - smile hold: 200–1500 ms
+
+  Steps are 50 ms, and the defaults are the recorded values above.
+- **No lost gesture samples:** gesture scores used to reach the desktop loop
+  only with the latest frame. A busy main thread could therefore drop samples
+  mid-closure, and the 0.25 s gap rule then discarded the wink. They are now
+  buffered (240 samples) and drained by the desktop loop. This is a
+  plausible cause of "sometimes it does not click"; it is not proven.
+- **More face gestures (second recording, `.venv/face-gestures-fatih-2.json`):**
+  MediaPipe has no tongue blendshape, so tongue-out cannot be detected. Held
+  gestures fire once after their hold time and re-arm when relaxed:
+  - **Ağız açma**: `jawOpen` ≥ 0.5 held 0.5 s. Recorded 0.84–0.91 for about
+    2 s; talking reached at most 0.27.
+  - **Kaş kaldırma**: `browInnerUp` ≥ 0.6 held 0.4 s. Recorded 0.94–0.96;
+    it appeared in no other phase.
+  - **Dudak büzme**: `mouthPucker` ≥ 0.7 held 0.8 s. Talking also reached
+    0.7+ for 0.73 s, so the default action is Kapalı.
+
+  Every gesture (winks, smile, mouth, pucker, brows) chooses one action in
+  Settings → "Yüz hareketleri": Sol tık, Sağ tık, Çift tık, Kaydırmayı
+  başlat/durdur, Klavyeyi aç/kapat, Menüyü aç/kapat, Kafa ortala or Kapalı.
+  - Defaults: mouth → scroll, brows → double click, pucker → off.
+  - Each gesture's hold time is a per-user setting.
+  - While an enabled gesture is active, the cursor is held, because these
+    expressions shift the head-pitch reading. An open mouth shifted it by up
+    to 11°, brows by 4–5° and a pucker by 4–6°.
+  - A gesture-started head scroll takes its neutral height after the gesture
+    ends.
+  - An eye closure during an open mouth, pucker or raised brows is not a wink.
+    This removed the false wink recorded while opening the mouth.
+  - Replay on the second recording: winks 6 right and 7 left for 5
+    requested each, with no wrong side and nothing while talking or
+    blinking. Mouth 3/3, pucker 4, brows 8. Remaining false events: 3 winks
+    while sliding the mouth sideways (not used as a gesture) and 1 long
+    closure while moving the head.
+- **Smoother keyboard and panels:** over the keyboard, the rail and open
+  panel pages, the cursor keeps gliding without the magnet. Before this
+  change it was hidden there and its smoothing was reset, so it jumped
+  ("teleported") when it reappeared. Keys are hit-tested with the smoothed
+  point.
+- **"Kafa ortala" rail button (head mode):** after selecting it, there are
+  1.5 s to turn the head back to a comfortable centre, then the recentre runs.
+- **Head scroll (head mode):** choose Kaydır and rest the cursor on the
+  content for 0.55 s.
+  - Tilting the head down scrolls down and tilting it up scrolls up. Speed
+    grows with the cursor's offset from where it started: 40 px dead zone,
+    0.25 px per px, at most 60 px per frame.
+  - The gesture chosen in "Kaydırmayı durdur" stops scrolling; by default,
+    closing both eyes for 1.0 s.
+  - In gaze mode, the arrow panel is unchanged.
+
 ## Performance diagnostics (issue #145)
 
 Measurement only, for the reported lag (smooth for 2–3 s after calibration, then

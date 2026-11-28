@@ -178,6 +178,7 @@ class Engine:
         # Both estimators still see exactly this capture; old captures never queue.
         response = self.process_frame(frame, captured, preview)
         response["blink_samples"] = self.blinks.drain() if blink else None
+        response["eye_samples"] = self.blinks.drain_eyes() if blink else None
         if timing:
             response["timing"] = self.timing(
                 requested, received, received_ns, captured, sequence, skipped
@@ -268,6 +269,55 @@ class MPIIFaceEngine(Engine):
         return features, eyes, reason
 
 
+class HeadEngine(Engine):
+    """Head cursor (Issue #160): RAY from MediaPipe, same Ridge and app calibration."""
+
+    model_id = "head"
+    minimum_eye_open = 0.16
+    model_description = "Head RAY (MediaPipe transformation matrix) + standardized Ridge alpha0.1"
+    model_limitations = (
+        "Point the nose, not the eyes, at calibration dots and targets.",
+        "Recentre by holding R; recalibrate after large changes in seating.",
+    )
+
+    def __init__(self, camera_index):
+        super().__init__(camera_index)
+        from experiments.head_pointer.desktop import FILTER, HeadFilter, RecentredMapping
+
+        self.mapping = RecentredMapping(self.mapping)
+        self.smoothing = HeadFilter()
+        self.metadata.update(
+            filter=f"One Euro min_cutoff {FILTER.min_cutoff} Hz, beta {FILTER.beta} (Issue #158)",
+            filter_source_sha256=None,
+        )
+        self.metadata["limitations"] = [
+            line for line in self.metadata["limitations"] if "Lateral head" not in line
+        ]
+
+    def create_extractor(self):
+        from experiments.head_pointer.desktop import HeadLandmarks
+        from experiments.unigaze.settings import head_face_model
+
+        return HeadLandmarks(head_face_model())
+
+    def observe(self, frame, captured_ns):
+        from experiments.head_pointer.desktop import eye_opening
+
+        features, eyes, reason = self.pair.observe(frame, captured_ns)
+        ratios = eye_opening(eyes) if eyes is not None else None
+        self.eyes_closed = self.eye_closure.update(ratios) if ratios is not None else None
+        return features, eyes, reason
+
+    def recentre(self):
+        recentred = self.mapping.recentre()
+        if recentred:
+            self.smoothing.reset()
+        return recentred
+
+
+ENGINES = {"unigaze": Engine, "mpiifacegaze": MPIIFaceEngine, "head": HeadEngine}
+
+
 def serve_preview(sock, engine):
     try:
         while True:
@@ -285,7 +335,7 @@ def main(fd, camera_index, preview_fd=None, model_name="unigaze"):
     preview_sock = socket.socket(fileno=preview_fd) if preview_fd is not None else None
     preview_thread = None
     try:
-        engine = {"unigaze": Engine, "mpiifacegaze": MPIIFaceEngine}[model_name](camera_index)
+        engine = ENGINES[model_name](camera_index)
         if preview_sock is not None:
             preview_thread = threading.Thread(
                 target=serve_preview, args=(preview_sock, engine), daemon=True
@@ -310,6 +360,10 @@ def main(fd, camera_index, preview_fd=None, model_name="unigaze"):
             elif command == "reset":
                 engine.smoothing.reset()
                 response = dict(status="ok")
+            elif command == "recentre":
+                if not hasattr(engine, "recentre"):
+                    raise ValueError("Recentring needs the head model")
+                response = dict(status="ok", recentred=engine.recentre())
             else:
                 raise ValueError("Unknown worker command")
             send(sock, response)

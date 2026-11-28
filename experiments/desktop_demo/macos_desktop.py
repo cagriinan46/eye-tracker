@@ -18,13 +18,32 @@ from eye_tracker.platform_adapters.macos_accessibility import MacOSAccessibility
 from eye_tracker.platform_adapters.macos_outline import _screen_matches
 
 from .desktop_gaze_filter import DesktopGazeFilter
-from .macos_keyboard import FocusKeyboard
+from .eye_gestures import FACE_GESTURES, EyeGestures
+from .hold_key import R_KEY_CODE, HoldKey
+from .macos_keyboard import FocusKeyboard, WebAccessibility
 from .macos_targets import Dock, window_targets
-from .macos_toolbar import Toolbar, nonactivating_panel
+from .macos_toolbar import SCROLL_STOP_HINTS, Toolbar, nonactivating_panel
 from .ring_magnet import RingMagnet
 
 logger = logging.getLogger(__name__)
 HID = Quartz.kCGEventSourceStateCombinedSessionState
+GESTURE_LABELS = {
+    "wink_right": "Sağ göz kırpma",
+    "wink_left": "Sol göz kırpma",
+    "smile": "Gülümseme",
+    "mouth_open": "Ağız açma",
+    "pucker": "Dudak büzme",
+    "brows": "Kaş kaldırma",
+}
+ACTION_LABELS = {
+    "left": "sol tık",
+    "right": "sağ tık",
+    "double": "çift tık",
+    "scroll": "kaydırma",
+    "keyboard": "klavye",
+    "menu": "menü",
+    "off": "kapalı",
+}
 
 
 def desktop_point(point, viewport, size):
@@ -43,6 +62,10 @@ class MacOSDesktop:
         self.toolbar = self.ring = self.feed = None
         self.closed = False
         self.escape_down = False
+        self.recentre_key = HoldKey()
+        self.gestures = EyeGestures()
+        self.wink_point = self.smile_point = None
+        self.web_accessibility = WebAccessibility()
         self.magnet = RingMagnet()
         self.fixation = DesktopGazeFilter()
         self.aim = PointerSmoother(fast=0.065, slow=0.16)
@@ -92,12 +115,18 @@ class MacOSDesktop:
             self.api._word_suggestions_enabled,
             self.api.keyboard_size,
         )
+        head = getattr(self.api, "supports_recentre", lambda: False)()
         self.toolbar = Toolbar(
             self.size,
             lambda: self.native_page("calibration"),
             lambda: self.native_page("settings"),
             keyboard,
+            recentre=(lambda: self.api.command("recentre").get("ok", False)) if head else None,
+            head_mode=head,
+            scroll_stop_hint=lambda: SCROLL_STOP_HINTS[self.api.scroll_stop()],
         )
+        self.gestures.reset()
+        self.wink_point = None
         self.feed = PreviewFeed(MacOSAccessibility())
         self.dock_stop = threading.Event()
         self.dock_values = []
@@ -163,18 +192,101 @@ class MacOSDesktop:
         if not self.ring.isVisible():
             self.ring.orderFrontRegardless()
 
+    def mouse_location(self):
+        position = Quartz.CGEventGetLocation(Quartz.CGEventCreate(None))
+        return (position.x, position.y)
+
+    def eye_gestures(self, eye_samples):
+        """Issue #160: face gestures act where the cursor was when they began."""
+        drain = getattr(self.api, "drain_eye_samples", None)
+        if drain is not None:
+            eye_samples = drain()
+        settings = getattr(self.api, "gesture_settings", None)
+        if settings is not None:
+            self.gestures.configure(settings())
+        events = self.gestures.feed(eye_samples)
+        if self.gestures.pending and self.wink_point is None:
+            self.wink_point = self.mouse_location()
+        actions = self.api.wink_actions()
+        # Smiles, an open mouth, a pucker or raised brows reshape the face mesh and
+        # read as head tilts (up to 11 degrees for an open mouth in Fatih's
+        # recordings), so the cursor is held while an enabled one is in progress.
+        active = getattr(self.gestures, "active", None)
+        if active is None:
+            active = {"smile"} if self.gestures.smiling else set()
+        holding = any(actions.get(name, "off") != "off" for name in active)
+        if holding and self.smile_point is None:
+            self.smile_point = self.mouse_location()
+        elif not holding and not any(e in FACE_GESTURES for e in events):
+            self.smile_point = None
+        self.toolbar.face_holding = holding
+        stop = self.api.scroll_stop()
+        for event in events:
+            if self.toolbar.head_scroll is not None or self.toolbar.head_scroll_pending:
+                # While head scrolling only the stop gesture (or a scroll toggle) acts.
+                if event == stop or actions.get(event) == "scroll":
+                    self.toolbar.stop_head_scroll()
+                continue
+            if event == "long_blink" or self.toolbar.paused:
+                continue
+            point = self.smile_point if event in FACE_GESTURES else self.wink_point
+            self.perform(event, actions.get(event, "off"), point or self.mouse_location())
+        if not self.gestures.pending:
+            self.wink_point = None
+        if events and not holding:
+            self.smile_point = None
+
+    def perform(self, gesture, action, point):
+        label = GESTURE_LABELS[gesture]
+        if action in ("left", "right"):
+            self.toolbar.click(action, point)
+        elif action == "double":
+            self.toolbar.click("left", point, count=2)
+        elif action == "scroll":
+            if self.toolbar.head_mode:
+                self.toolbar.start_head_scroll(point)
+            else:
+                self.toolbar.start_mode("scroll")
+        elif action == "keyboard":
+            self.toolbar.toggle_keyboard()
+        elif action == "menu":
+            self.toolbar.command("menu")
+        elif action == "recentre":
+            if self.toolbar.recentre is None:
+                self.toolbar.show_hint("Kafa ortalama yalnız kafa modunda.")
+                return
+            self.toolbar.command("recentre")
+            return  # the recentre hint explains the next step
+        self.toolbar.show_hint(f"{label} → {ACTION_LABELS[action]}")
+
     def update(self, now, frame):
-        stamp, normalized, closed, blink_samples = frame
+        stamp, normalized, closed, blink_samples, *rest = frame
+        self.eye_gestures(rest[0] if rest else None)
         valid = 0 <= now - stamp <= 0.3 and closed is not None
         raw = desktop_point(normalized, self.viewport, self.size) if valid and not closed else None
         point = self.fixation.update(stamp, raw)
+        aim = self.aim.update(now, point) if point is not None else None
         owned = self.toolbar.tick(stamp, now, point, closed is True, self.last_cursor)
         pressed = any(Quartz.CGEventSourceButtonState(HID, button) for button in (0, 1, 2))
         if not owned and not pressed:
             owned = self.toolbar.desktop_gaze(
-                stamp, point, closed, valid, self.last_cursor, blink_samples=blink_samples
+                stamp,
+                point,
+                closed,
+                valid,
+                self.last_cursor,
+                blink_samples=blink_samples,
+                keyboard_point=aim,
             )
-        if owned or pressed:
+        if owned and not pressed and self.toolbar.pointer_free:
+            # Issue #160: over the keyboard and our panels the cursor keeps gliding
+            # (no magnet) instead of vanishing and jumping back afterwards.
+            self.magnet.reset()
+            self.assisted = None
+            self.last_sample = None
+            if aim is not None and self.smile_point is None:
+                self.display(now, aim, aim)
+        elif owned or pressed:
             self.cursor.reset()
             self.magnet.reset()
             self.last_sample = None
@@ -182,7 +294,6 @@ class MacOSDesktop:
             if self.ring.isVisible():
                 self.ring.orderOut_(None)
         elif point is not None:
-            aim = self.aim.update(now, point)
             if stamp != self.last_sample or self.assisted is None:
                 targets = window_targets(self.feed, self.desktop_rect, now)
                 dock = self.dock_values[:]
@@ -190,7 +301,8 @@ class MacOSDesktop:
                     targets.extend(dock[0][1])
                 self.assisted = self.magnet.update(stamp, point, targets)
                 self.last_sample = stamp
-            self.display(now, aim, self.assisted if self.magnet.locked else aim)
+            if self.smile_point is None:
+                self.display(now, aim, self.assisted if self.magnet.locked else aim)
         elif not valid:
             self.magnet.reset()
             self.last_sample = None
@@ -203,6 +315,12 @@ class MacOSDesktop:
             self.stop()
             return
         try:
+            if getattr(self.api, "supports_recentre", lambda: False)():
+                held = bool(Quartz.CGEventSourceKeyState(HID, R_KEY_CODE))
+                if self.recentre_key.update(time.monotonic(), held):
+                    result = self.api.command("recentre")
+                    if not result.get("ok"):
+                        logger.info("Recentre ignored: %s", result.get("message"))
             reading = self.api.desktop_sample()
             if reading is not None:
                 active, frame, _ = reading
@@ -217,6 +335,9 @@ class MacOSDesktop:
                         now = time.monotonic()
                         if now >= self.next_screen_check:
                             self.next_screen_check = now + 0.4
+                            self.web_accessibility.update(
+                                UI.NSWorkspace.sharedWorkspace().frontmostApplication()
+                            )
                             if not _screen_matches(UI, self.size):
                                 raise RuntimeError("Ekran değişti. Kalibrasyonu yenile.")
                         self.update(now, frame)

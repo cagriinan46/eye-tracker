@@ -2,9 +2,11 @@
 
 import hashlib
 import json
+import queue
 import sys
 import threading
 import time
+from collections import deque
 from pathlib import Path
 from uuid import uuid4
 
@@ -37,7 +39,7 @@ class DesktopAPI:
         self._active_model = None
         self._pointer_captured = 0
         self._desktop_active = False
-        self._desktop_frame = (0, None, None, None)
+        self._desktop_frame = (0, None, None, None, None)
         self._native_page = None
         self._desktop_error = None
         self._pointer_pause = threading.Event()
@@ -61,6 +63,14 @@ class DesktopAPI:
         # Opt-in timing aggregates (issue #145); None keeps normal runs unchanged.
         self._perf = perf.PerfRecorder(self._output, model_name) if perf_diagnostics else None
         self._suggester = None
+        self._recentre_requested = False
+        self._recentre_count = 0
+        # Issue #160: Turkish dictation for the in-app keyboard.
+        self._dictation = None
+        self._dictation_results = queue.Queue()
+        self._dictation_seen = 0
+        # Every face-gesture sample reaches the desktop loop, even when it lags a frame.
+        self._eye_samples = deque(maxlen=240)
 
     def _keyboard_suggester(self):
         with self._lock:
@@ -93,6 +103,52 @@ class DesktopAPI:
             return active, self._desktop_frame, self._preferences["reduced_motion"]
         finally:
             self._lock.release()
+
+    def supports_recentre(self):
+        return self._model_name == "head"
+
+    def _poll_app_dictation(self, keyboard):
+        if keyboard.dictation_requests != self._dictation_seen:
+            self._dictation_seen = keyboard.dictation_requests
+            if self._dictation is None:
+                from .dictation import Dictation
+
+                self._dictation = Dictation(self._dictation_results)
+            keyboard.dictation_error = None
+            started = self._dictation.start("app")
+            keyboard.dictation_status = "listening" if started else "processing"
+        try:
+            _, text, error = self._dictation_results.get_nowait()
+        except queue.Empty:
+            return
+        keyboard.dictation_status = None
+        if text:
+            keyboard.insert_text(text, time.monotonic())
+        else:
+            keyboard.dictation_error = error or "Konuşma algılanmadı."
+
+    def drain_eye_samples(self):
+        if not self._lock.acquire(blocking=False):
+            return []
+        try:
+            samples = list(self._eye_samples)
+            self._eye_samples.clear()
+            return samples
+        finally:
+            self._lock.release()
+
+    def gesture_settings(self):
+        return {
+            key: self._preferences[key] for key in ("wink_sensitivity", *preferences.GESTURE_TIMES)
+        }
+
+    def scroll_stop(self):
+        """Issue #160: the face gesture that ends head scrolling."""
+        return self._preferences["scroll_stop"]
+
+    def wink_actions(self):
+        """Issue #160: the action of each face gesture, keyed by detector event name."""
+        return {key: self._preferences[key] for key in preferences.GESTURE_KEYS}
 
     def desktop_failed(self, message):
         with self._lock:
@@ -155,6 +211,8 @@ class DesktopAPI:
                 self._session.pause(self._last_ui)
                 self._reset_filter = True
                 self._pointer_pause.clear()
+            if self._session.keyboard is not None:
+                self._poll_app_dictation(self._session.keyboard)
             state = self._session.snapshot()
             state.update(
                 camera=self._camera,
@@ -191,11 +249,15 @@ class DesktopAPI:
                         raise ValueError("Önce mevcut denemeden çık.")
                     if not self._focused or s.geometry is None:
                         raise ValueError("Eye Tracker penceresine dön.")
-                    self._desktop_frame = (0, None, None, None)
+                    self._desktop_frame = (0, None, None, None, None)
                     self._desktop_error = None
                     self._desktop_active = True
                 elif action == "desktop_stop":
                     self._desktop_active = False
+                elif action == "recentre":
+                    if not self.supports_recentre() or self._camera != "ready" or not s.calibrated:
+                        raise ValueError("Ortalama kafa imleci kalibrasyonundan sonra çalışır.")
+                    self._recentre_requested = True
                 elif action == "native_page_ready":
                     if payload["page"] == self._native_page:
                         self._native_page = None
@@ -384,6 +446,7 @@ class DesktopAPI:
             calibration_variant=s.calibration_variant,
             calibration_seconds=s.calibration_seconds,
             selected_model=self._model_name,
+            head_recentres=self._recentre_count if self._model_name == "head" else None,
             scenario=self._session.scenario,
             appearance=dict(self._preferences),
             latest_raw_point=self._last_raw_point,
@@ -411,7 +474,9 @@ class DesktopAPI:
                 from .unigaze_model import CameraModel
 
                 options = (
-                    {"model_name": self._model_name} if self._model_name == "mpiifacegaze" else {}
+                    {"model_name": self._model_name}
+                    if self._model_name in ("mpiifacegaze", "head")
+                    else {}
                 )
                 model = CameraModel(self._camera_index, stop_event=self._stop, **options)
             with self._lock:
@@ -430,6 +495,8 @@ class DesktopAPI:
                         model.desktop_blink = self._desktop_active
                     reset_filter = self._reset_filter
                     self._reset_filter = False
+                    recentre = self._recentre_requested
+                    self._recentre_requested = False
                     preview = not self._desktop_active and self._session.phase in (
                         "preparation",
                         "error",
@@ -439,6 +506,9 @@ class DesktopAPI:
                 reset_started = time.perf_counter()
                 if reset_filter and hasattr(model, "reset_filter"):
                     model.reset_filter()
+                if recentre and hasattr(model, "recentre") and model.recentre():
+                    with self._lock:
+                        self._recentre_count += 1
                 read_started = time.perf_counter()
                 captured, features, point, jpeg = model.read(preview=preview)
                 read_done = time.perf_counter()
@@ -509,7 +579,9 @@ class DesktopAPI:
                             raw_point,
                             closed,
                             getattr(model, "blink_samples", None),
+                            getattr(model, "eye_samples", None),
                         )
+                        self._eye_samples.extend(getattr(model, "eye_samples", None) or ())
                     if s.phase == "fitting":
                         x, y = s.calibration_arrays()
                         self._meta["training_fit_normalized"] = model.fit(x, y)
@@ -574,6 +646,8 @@ class DesktopAPI:
             if not self._closed:
                 self._closed = True
                 self._stop.set()
+                if self._dictation is not None:
+                    self._dictation.close()
                 try:
                     self._save("completed" if self._session.phase == "results" else "aborted")
                 except OSError:

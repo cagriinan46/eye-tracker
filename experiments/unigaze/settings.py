@@ -73,3 +73,17 @@ def validate_mpiiface_assets():
     missing = [str(path) for path in paths if not path.is_file()]
     if missing:
         raise RuntimeError("MPIIFaceGaze için yerel dosyalar eksik: " + ", ".join(missing))
+
+
+def head_face_model():
+    return Path(
+        os.environ.get("EYE_TRACKER_BLINK_MODEL", ROOT / ".venv/models/face_landmarker.task")
+    )
+
+
+def validate_head_assets():
+    """Head cursor (Issue #160): MediaPipe environment and Face Landmarker only."""
+    paths = (BASELINE_PYTHON, head_face_model())
+    missing = [str(path) for path in paths if not path.is_file()]
+    if missing:
+        raise RuntimeError("Kafa imleci için yerel dosyalar eksik: " + ", ".join(missing))

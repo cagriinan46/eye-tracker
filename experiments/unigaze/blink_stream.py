@@ -16,6 +16,9 @@ class BlinkStream:
         self.enabled = threading.Event()
         self.lock = threading.Lock()
         self.samples = deque(maxlen=24)
+        # Issue #160: (stamp, eyeBlinkLeft, eyeBlinkRight, mean mouthSmile, jawOpen,
+        # mouthPucker, browInnerUp) for face gestures.
+        self.eye_scores = deque(maxlen=24)
         self.available = False
         self.thread = None
 
@@ -32,6 +35,7 @@ class BlinkStream:
             self.enabled.clear()
             with self.lock:
                 self.samples.clear()
+                self.eye_scores.clear()
 
     def drain(self):
         if not self.available:
@@ -39,6 +43,14 @@ class BlinkStream:
         with self.lock:
             values = list(self.samples)
             self.samples.clear()
+        return values
+
+    def drain_eyes(self):
+        if not self.available:
+            return None
+        with self.lock:
+            values = list(self.eye_scores)
+            self.eye_scores.clear()
         return values
 
     def run(self):
@@ -79,10 +91,17 @@ class BlinkStream:
                         mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb), ms
                     )
                     closed = None
+                    eyes = None
                     if len(result.face_blendshapes) == 1:
                         scores = {v.category_name: v.score for v in result.face_blendshapes[0]}
                         left, right = scores.get("eyeBlinkLeft"), scores.get("eyeBlinkRight")
+                        smile = [scores.get(k) for k in ("mouthSmileLeft", "mouthSmileRight")]
                         if left is not None and right is not None:
+                            smiled = None if None in smile else (smile[0] + smile[1]) / 2
+                            held = [
+                                scores.get(k) for k in ("jawOpen", "mouthPucker", "browInnerUp")
+                            ]
+                            eyes = (stamp / 1e9, float(left), float(right), smiled, *held)
                             if min(left, right) >= 0.50:
                                 closed = True
                             elif max(left, right) <= 0.30:
@@ -90,6 +109,8 @@ class BlinkStream:
                     with self.lock:
                         if self.enabled.is_set():
                             self.samples.append((stamp / 1e9, closed))
+                            if eyes is not None:
+                                self.eye_scores.append(eyes)
         except (AttributeError, ImportError, OSError, RuntimeError, TypeError, ValueError):
             pass
         finally:

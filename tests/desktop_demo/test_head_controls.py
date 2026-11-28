@@ -276,6 +276,7 @@ def test_scroll_stop_preference_and_desktop_routing(tmp_path, monkeypatch) -> No
         show_hint=lambda text: None,
     )
     desktop.wink_point = desktop.smile_point = None
+    desktop.hold_release = 0.0
     desktop.mouse_location = lambda: (10.0, 20.0)
     events = iter([["wink_right", "long_blink"], ["smile"], ["wink_right"]])
     desktop.gestures = SimpleNamespace(
@@ -312,6 +313,8 @@ def test_chromium_browsers_are_asked_once_per_process(monkeypatch) -> None:
     assert not web.update(app("com.brave.Browser", 41))
     assert not web.update(app("com.apple.Terminal", 7)) and not web.update(None)
     assert calls == [(("app", 41), "AXEnhancedUserInterface", True)]
+    web.disable_all()
+    assert calls[-1] == (("app", 41), "AXEnhancedUserInterface", False) and not web.enabled
 
 
 def test_rail_menu_expands_collapses_after_commands_and_when_left() -> None:
@@ -412,10 +415,14 @@ def test_active_set_drives_the_cursor_hold() -> None:
     g = EyeGestures()
     g.update(0.0, *REST)
     assert g.active == set()
-    g.update(0.033, 0.1, 0.12, 0.0, 0.35, 0.05, 0.2)  # mouth starting to open
+    g.update(0.033, 0.1, 0.12, 0.0, 0.35, 0.05, 0.2)  # slightly open: still free
+    assert g.active == set()
+    g.update(0.066, 0.1, 0.12, 0.0, 0.45, 0.05, 0.2)  # clearly opening
     assert g.active == {"mouth_open"}
-    g.update(0.066, 0.1, 0.12, 0.2, 0.03, 0.05, 0.55)
+    g.update(0.1, 0.1, 0.12, 0.2, 0.03, 0.05, 0.6)
     assert g.active == {"smile", "brows"}
+    g.update(0.133, 0.1, 0.12, 0.0, 0.03, 0.05, 0.5)  # looking up (<= 0.38 recorded)
+    assert g.active == set()
 
 
 def test_open_mouth_or_raised_brows_veto_a_wink() -> None:
@@ -458,3 +465,77 @@ def test_head_scroll_from_a_gesture_waits_for_the_gesture_to_end() -> None:
     t.cancel_mode = module.Toolbar.cancel_mode.__get__(t)
     t.mark = lambda *a: None
     assert t.stop_head_scroll() and t.head_scroll is None
+
+
+def test_protocol_skips_the_check_when_asked() -> None:
+    from experiments.desktop_demo.protocol import Session
+
+    session = Session("head")
+    session.skip_check = True
+    session.fitted()
+    assert session.phase == "ready" and session.calibrated
+    other = Session("head")
+    other.fitted()
+    assert other.phase == "check" and not other.calibrated
+    assert preferences.DEFAULTS["calibration_check"] is False
+    for key in ("calibration_check", "magnet", "face_hold"):
+        with pytest.raises(ValueError, match="açık veya kapalı"):
+            preferences.validated({key: "yes"})
+
+
+def test_gesture_started_head_scroll_sets_a_mode_origin() -> None:
+    module, t = _toolbar()
+    module_quartz = module.Quartz
+    original = module_quartz.CGWarpMouseCursorPosition
+    module_quartz.CGWarpMouseCursorPosition = lambda point: None
+    try:
+        t.cancel_mode = lambda: None
+        t.scroll_stop_hint = lambda: "ağzını aç"
+        t.start_head_scroll((300.0, 400.0))
+    finally:
+        module_quartz.CGWarpMouseCursorPosition = original
+    # Toolbar.tick computes math.dist(point, mode_origin); this crashed before.
+    assert t.mode_origin == (300.0, 400.0) and t.center_left
+
+
+def test_desktop_stats_log_aggregates_every_period(caplog) -> None:
+    desktop_module = pytest.importorskip("experiments.desktop_demo.macos_desktop")
+    stats = desktop_module.DesktopStats(period=1.0)
+    desktop = SimpleNamespace(
+        last_stamp=0.0,
+        last_valid=True,
+        magnet=SimpleNamespace(locked=None),
+        smile_point=None,
+        last_cursor=(1, 2),
+        toolbar=SimpleNamespace(head_scroll=None, head_scroll_pending=False, face_holding=False),
+    )
+    caplog.set_level("INFO", logger="experiments.desktop_demo")
+    for i in range(30):
+        desktop.last_stamp = i // 2
+        desktop.magnet.locked = "rect" if i % 3 == 0 else None
+        stats.tick(i / 20, 2.0, desktop)
+    lines = [r.getMessage() for r in caplog.records if r.getMessage().startswith("stats")]
+    assert lines and "magnet_locked=33%" in lines[0] and "update_ms p50=2.0" in lines[0]
+    assert "valid=100%" in lines[0] and "frames=11" in lines[0]
+
+
+def test_scroll_neutral_waits_for_the_expression_even_without_cursor_hold() -> None:
+    desktop_module = pytest.importorskip("experiments.desktop_demo.macos_desktop")
+    desktop = desktop_module.MacOSDesktop.__new__(desktop_module.MacOSDesktop)
+    desktop.api = SimpleNamespace(
+        wink_actions=lambda: {"mouth_open": "scroll", "smile": "left"},
+        scroll_stop=lambda: "long_blink",
+        _preferences={"face_hold": False},
+    )
+    desktop.toolbar = SimpleNamespace(
+        head_scroll=None, head_scroll_pending=False, paused=False, face_holding=False
+    )
+    desktop.wink_point = desktop.smile_point = None
+    desktop.hold_release = 0.0
+    desktop.mouse_location = lambda: (5.0, 6.0)
+    desktop.gestures = SimpleNamespace(
+        pending=False, smiling=False, active={"mouth_open"}, feed=lambda samples: []
+    )
+    desktop.eye_gestures([])
+    assert desktop.toolbar.face_holding is True  # scroll neutral waits
+    assert desktop.smile_point is None  # but the cursor is not held (switch off)

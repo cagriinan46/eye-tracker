@@ -1672,3 +1672,131 @@ showed:
 - A headless AppKit render of the rail passed: collapsed 114×114, expanded
   205×593 with 12 tiles.
 - **No live test of this round yet.**
+
+## 2026-11-28 21:45 +03:00 — Issue #160 fixes after Fatih's trial (same PR #161)
+
+**Reported by Fatih:**
+- A "NoneType object" error.
+- He asked for the menu button without text.
+- Smiling seemed to behave as before (the cursor slid).
+- Control felt odd and not smooth.
+- He asked to remove the post-calibration check.
+
+**Cause of the error (traceback read from the app's Terminal window):**
+`Toolbar.tick` computed `math.dist(point, self.mode_origin)` after a mouth
+gesture had started head scrolling through `start_head_scroll`. That method
+never set `mode_origin`, so desktop control stopped with
+`TypeError: 'NoneType' object is not iterable`. This was my bug from the
+previous round, not covered by its tests.
+
+**Changes:**
+- `start_head_scroll` sets `mode_origin` and `center_left`. A regression
+  test was added.
+- The menu button is icon-only, 72 px.
+- Cursor-hold levels were raised to jawOpen 0.4, browInnerUp 0.55,
+  mouthPucker 0.6 and smile 0.12. The hold also lasts 0.3 s after release.
+- The 5-point check is skipped by default; the new `calibration_check`
+  preference and its Settings switch turn it back on.
+
+**Not established:** whether the raised hold levels fix the jerkiness, and
+whether the smile hold now works for Fatih. Both await his next trial.
+
+**Checks:** pytest 1031 passed, 16 failed (the 16 are the SVR tests that
+need scikit-learn); ruff and format pass.
+
+## 2026-11-28 20:30 +03:00 — Issue #160: diagnostics after "cursor got much worse" (same PR #161)
+
+**Report (Fatih):**
+- Scrolling worked, then stopped.
+- The cursor felt less smooth, then "much worse".
+- The open menu selected too fast.
+
+The first diagnostic log went to the Terminal window only and was lost when
+the window closed.
+
+**Change:**
+- Diagnostics also go to `~/.eye-tracker/desktop-diagnostics.log`.
+  - Every 5 s: frames/fps, valid share, update time, magnet-lock share and
+    cursor-held/hidden share.
+  - Each gesture event and head-scroll transition.
+  - No images and no cursor positions.
+- New Settings switches:
+  - "İmleç mıknatısı" (`magnet`)
+  - "İfade sürerken imleci tut" (`face_hold`)
+  - "Tarayıcı metin alanları" (`browser_fields`); Chromium web
+    accessibility is handed back when desktop control stops or the switch
+    is off.
+- The open menu uses a 1.2 s dwell.
+
+**Baseline for comparison:**
+- I turned off `AXEnhancedUserInterface` in the running Brave. My
+  Accessibility probe had left it on since 18:50.
+- I set Fatih's preferences to `browser_fields` false, `face_hold` false and
+  `magnet` true.
+
+**Log, 20:24–20:26:**
+- Camera 30.0–30.2 fps; valid share 93–100%, with one window at 62%.
+- Update time p50 0.1–0.4 ms, p95 under 3.5 ms.
+- Magnet locked 0–2% of ticks.
+- Head scroll started and stopped by mouth opening twice.
+- Smile clicks fired 4 times.
+
+**Findings:**
+- **Pucker → "Kafa ortala"** (Fatih's own setting) fired 3 times outside
+  scrolling, each recentring the mapping. Pucker also occurs while talking.
+  This is the likely cause of "much worse", not proven.
+- **Scroll-neutral bug:** with `face_hold` off, the gesture-started head
+  scroll took its neutral height 2–5 ms after the mouth opened, while the
+  open mouth still shifted the head reading. It now waits for the
+  expression to end, independent of the cursor-hold switch.
+- After "a bit better", Fatih saw the smile drift return. That is expected:
+  `face_hold` was off for the baseline. I set it back to true.
+- Performance and the magnet are not implicated by these numbers.
+  `browser_fields` was off during this log, so its effect is untested.
+
+## 2026-11-28 20:40 +03:00 — Issue #160 paused; work published
+
+At Fatih's request ("deneyleri sonra yapalım, GitHub'a yükle"), work stops
+here. The branch `feature/desktop-head-cursor` is pushed and
+[PR #161](https://github.com/cagriinan46/eye-tracker/pull/161) is OPEN and
+UNMERGED; no merge by the agent. I closed the desktop app that I had
+launched, freeing the camera.
+
+**State on Fatih's Mac:**
+- `~/.eye-tracker/desktop-preferences.json`: `face_hold` true,
+  `browser_fields` false, `magnet` true; pucker is still set to "recentre"
+  (his choice).
+- Dictation assets are in `~/.eye-tracker/dictation`.
+- ffmpeg 9.0.2 is installed via Homebrew.
+- The face recordings `.venv/face-gestures-fatih-1.json` and `-2.json`
+  are local and Git-ignored.
+
+**Next, when Fatih resumes:**
+1. Verify the PR state.
+2. Read the newest `desktop-diagnostics.log` lines.
+3. Ask Fatih to:
+   - set pucker to Kapalı;
+   - check the smile hold;
+   - check that gesture-started scrolling no longer drifts;
+   - compare "Tarayıcı metin alanları" on and off in Brave;
+   - optionally run the 12 tasks in head mode, for a measured head-vs-gaze
+     comparison.
+
+## 2026-11-28 20:45 +03:00 — correction: PR #161 merged before the last fixes; follow-up PR
+
+Verified while publishing: [PR #161](https://github.com/cagriinan46/eye-tracker/pull/161)
+was **MERGED** at 2026-11-28T16:55:43Z (19:55 +03:00) as squash commit `0f7424d`,
+with branch head `cd89fb0` at that time. The entries above from 21:45 onward
+said the later commits went to "the same PR #161"; that is wrong.
+
+The later commits `f11638b`, `3785a65`, `6875cf3`, `7f0763b` and `7547644`
+were pushed to the merged branch, so they did not reach main. They contain:
+the head-scroll crash fix, the icon-only menu, the cursor-hold levels, the
+optional check, diagnostics, the switches, the scroll-neutral fix and the
+pause notes.
+
+They were cherry-picked unchanged onto `fix/160-desktop-head-followups` from
+main `0f7424d`. `git diff feature/desktop-head-cursor` before this entry was
+empty. A new PR carries them. The merged `feature/desktop-head-cursor` branch
+was not deleted.
+Published as [PR #162](https://github.com/cagriinan46/eye-tracker/pull/162) (OPEN, UNMERGED).

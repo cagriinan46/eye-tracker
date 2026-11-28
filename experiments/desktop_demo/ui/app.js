@@ -51,6 +51,10 @@ function appearance(p){
   for(const el of document.querySelectorAll('[data-theme-choice]'))el.setAttribute('aria-pressed',String(el.dataset.themeChoice===p.theme));
   $('motionToggle').setAttribute('aria-checked',String(p.reduced_motion));
   $('suggestToggle').setAttribute('aria-checked',String(p.word_suggestions!==false));
+  $('checkToggle').setAttribute('aria-checked',String(p.calibration_check===true));
+  $('magnetToggle').setAttribute('aria-checked',String(p.magnet!==false));
+  $('faceHoldToggle').setAttribute('aria-checked',String(p.face_hold!==false));
+  $('browserToggle').setAttribute('aria-checked',String(p.browser_fields!==false));
   document.documentElement.dataset.kbSize=p.keyboard_size||'medium';
   for(const el of document.querySelectorAll('[data-kb-size]'))el.setAttribute('aria-pressed',String(el.dataset.kbSize===(p.keyboard_size||'medium')));
   for(const el of document.querySelectorAll('[data-gesture]'))el.value=p[el.dataset.gesture]||gestureDefaults[el.dataset.gesture];
@@ -138,7 +142,7 @@ function render(s){
   }
   if(s.trials.length<appliedTrial)appliedTrial=0;
   while(appliedTrial<s.trials.length){const trial=s.trials[appliedTrial++];if(trial.selected)activateControl(trial.selected);}
-  if(phase==='ready')$('checkError').textContent=Math.round(s.checks.reduce((v,r)=>v+r.mean_px,0)/s.checks.length)+' px';
+  if(phase==='ready')$('checkError').textContent=s.checks.length?Math.round(s.checks.reduce((v,r)=>v+r.mean_px,0)/s.checks.length)+' px':'kontrol atlandı';
   if(phase==='demo'){
     $('instruction').textContent=s.paused?'Mola veriyoruz.':s.instruction||'“'+names[s.expected]+'” öğesini seç.';
     $('trialInfo').textContent=s.paused?'Hazır olduğunda Devam et düğmesine bas.':`Adım ${s.index+1} / ${s.total_trials} · `+(s.model_name==='head'?'İmleci burnunla istenen öğeye getir ve tut. Kayarsa R tuşunu basılı tut.':'İstenen öğeye bakışını sabitle.');
@@ -265,6 +269,10 @@ for(const el of document.querySelectorAll('[data-page]'))el.onclick=()=>navigate
 $('practiceSetup').onclick=()=>navigate('calibration');
 for(const el of document.querySelectorAll('[data-theme-choice]'))el.onclick=()=>saveAppearance({theme:el.dataset.themeChoice});
 $('motionToggle').onclick=()=>saveAppearance({reduced_motion:!state?.preferences?.reduced_motion});
+$('checkToggle').onclick=()=>saveAppearance({calibration_check:!state?.preferences?.calibration_check});
+$('magnetToggle').onclick=()=>saveAppearance({magnet:state?.preferences?.magnet===false});
+$('faceHoldToggle').onclick=()=>saveAppearance({face_hold:state?.preferences?.face_hold===false});
+$('browserToggle').onclick=()=>saveAppearance({browser_fields:state?.preferences?.browser_fields===false});
 for(const el of document.querySelectorAll('[data-kb-size]'))el.onclick=()=>saveAppearance({keyboard_size:el.dataset.kbSize});
 for(const el of document.querySelectorAll('[data-gesture]'))el.onchange=()=>saveAppearance({[el.dataset.gesture]:el.value});
 for(const el of document.querySelectorAll('[data-scroll-stop-select]'))el.onchange=()=>saveAppearance({scroll_stop:el.value});

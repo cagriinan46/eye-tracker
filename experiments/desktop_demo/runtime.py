@@ -585,6 +585,7 @@ class DesktopAPI:
                     if s.phase == "fitting":
                         x, y = s.calibration_arrays()
                         self._meta["training_fit_normalized"] = model.fit(x, y)
+                        s.skip_check = not self._preferences["calibration_check"]
                         s.fitted()
                         self._save("in_progress")
                     if len(s.trials) != self._last_saved_trials or (

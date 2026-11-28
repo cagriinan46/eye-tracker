@@ -38,10 +38,12 @@ def main():
     )
     args = parser.parse_args()
     # Issue #160 diagnostics: aggregate desktop numbers and gesture events only.
-    handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter("%(asctime)s %(name)s %(message)s"))
     package = logging.getLogger("experiments.desktop_demo")
-    package.addHandler(handler)
+    log_path = Path.home() / ".eye-tracker" / "desktop-diagnostics.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    for handler in (logging.StreamHandler(), logging.FileHandler(log_path)):
+        handler.setFormatter(logging.Formatter("%(asctime)s %(name)s %(message)s"))
+        package.addHandler(handler)
     package.setLevel(logging.INFO)
     import webview
 

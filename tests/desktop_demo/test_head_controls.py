@@ -313,6 +313,8 @@ def test_chromium_browsers_are_asked_once_per_process(monkeypatch) -> None:
     assert not web.update(app("com.brave.Browser", 41))
     assert not web.update(app("com.apple.Terminal", 7)) and not web.update(None)
     assert calls == [(("app", 41), "AXEnhancedUserInterface", True)]
+    web.disable_all()
+    assert calls[-1] == (("app", 41), "AXEnhancedUserInterface", False) and not web.enabled
 
 
 def test_rail_menu_expands_collapses_after_commands_and_when_left() -> None:
@@ -500,6 +502,8 @@ def test_desktop_stats_log_aggregates_every_period(caplog) -> None:
     desktop_module = pytest.importorskip("experiments.desktop_demo.macos_desktop")
     stats = desktop_module.DesktopStats(period=1.0)
     desktop = SimpleNamespace(
+        last_stamp=0.0,
+        last_valid=True,
         magnet=SimpleNamespace(locked=None),
         smile_point=None,
         last_cursor=(1, 2),
@@ -507,7 +511,9 @@ def test_desktop_stats_log_aggregates_every_period(caplog) -> None:
     )
     caplog.set_level("INFO", logger="experiments.desktop_demo")
     for i in range(30):
+        desktop.last_stamp = i // 2
         desktop.magnet.locked = "rect" if i % 3 == 0 else None
         stats.tick(i / 20, 2.0, desktop)
     lines = [r.getMessage() for r in caplog.records if r.getMessage().startswith("stats")]
     assert lines and "magnet_locked=33%" in lines[0] and "update_ms p50=2.0" in lines[0]
+    assert "valid=100%" in lines[0] and "frames=11" in lines[0]

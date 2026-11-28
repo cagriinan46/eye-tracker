@@ -1703,3 +1703,53 @@ whether the smile hold now works for Fatih. Both await his next trial.
 
 **Checks:** pytest 1031 passed, 16 failed (the 16 are the SVR tests that
 need scikit-learn); ruff and format pass.
+
+## 2026-11-28 20:30 +03:00 — Issue #160: diagnostics after "cursor got much worse" (same PR #161)
+
+**Report (Fatih):**
+- Scrolling worked, then stopped.
+- The cursor felt less smooth, then "much worse".
+- The open menu selected too fast.
+
+The first diagnostic log went to the Terminal window only and was lost when
+the window closed.
+
+**Change:**
+- Diagnostics also go to `~/.eye-tracker/desktop-diagnostics.log`.
+  - Every 5 s: frames/fps, valid share, update time, magnet-lock share and
+    cursor-held/hidden share.
+  - Each gesture event and head-scroll transition.
+  - No images and no cursor positions.
+- New Settings switches:
+  - "İmleç mıknatısı" (`magnet`)
+  - "İfade sürerken imleci tut" (`face_hold`)
+  - "Tarayıcı metin alanları" (`browser_fields`); Chromium web
+    accessibility is handed back when desktop control stops or the switch
+    is off.
+- The open menu uses a 1.2 s dwell.
+
+**Baseline for comparison:**
+- I turned off `AXEnhancedUserInterface` in the running Brave. My
+  Accessibility probe had left it on since 18:50.
+- I set Fatih's preferences to `browser_fields` false, `face_hold` false and
+  `magnet` true.
+
+**Log, 20:24–20:26:**
+- Camera 30.0–30.2 fps; valid share 93–100%, with one window at 62%.
+- Update time p50 0.1–0.4 ms, p95 under 3.5 ms.
+- Magnet locked 0–2% of ticks.
+- Head scroll started and stopped by mouth opening twice.
+- Smile clicks fired 4 times.
+
+**Findings:**
+- **Pucker → "Kafa ortala"** (Fatih's own setting) fired 3 times outside
+  scrolling, each recentring the mapping. Pucker also occurs while talking.
+  This is the likely cause of "much worse", not proven.
+- **Scroll-neutral bug:** with `face_hold` off, the gesture-started head
+  scroll took its neutral height 2–5 ms after the mouth opened, while the
+  open mouth still shifted the head reading. It now waits for the
+  expression to end, independent of the cursor-hold switch.
+- After "a bit better", Fatih saw the smile drift return. That is expected:
+  `face_hold` was off for the baseline. I set it back to true.
+- Performance and the magnet are not implicated by these numbers.
+  `browser_fields` was off during this log, so its effect is untested.

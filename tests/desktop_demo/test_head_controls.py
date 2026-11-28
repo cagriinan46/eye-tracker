@@ -517,3 +517,25 @@ def test_desktop_stats_log_aggregates_every_period(caplog) -> None:
     lines = [r.getMessage() for r in caplog.records if r.getMessage().startswith("stats")]
     assert lines and "magnet_locked=33%" in lines[0] and "update_ms p50=2.0" in lines[0]
     assert "valid=100%" in lines[0] and "frames=11" in lines[0]
+
+
+def test_scroll_neutral_waits_for_the_expression_even_without_cursor_hold() -> None:
+    desktop_module = pytest.importorskip("experiments.desktop_demo.macos_desktop")
+    desktop = desktop_module.MacOSDesktop.__new__(desktop_module.MacOSDesktop)
+    desktop.api = SimpleNamespace(
+        wink_actions=lambda: {"mouth_open": "scroll", "smile": "left"},
+        scroll_stop=lambda: "long_blink",
+        _preferences={"face_hold": False},
+    )
+    desktop.toolbar = SimpleNamespace(
+        head_scroll=None, head_scroll_pending=False, paused=False, face_holding=False
+    )
+    desktop.wink_point = desktop.smile_point = None
+    desktop.hold_release = 0.0
+    desktop.mouse_location = lambda: (5.0, 6.0)
+    desktop.gestures = SimpleNamespace(
+        pending=False, smiling=False, active={"mouth_open"}, feed=lambda samples: []
+    )
+    desktop.eye_gestures([])
+    assert desktop.toolbar.face_holding is True  # scroll neutral waits
+    assert desktop.smile_point is None  # but the cursor is not held (switch off)

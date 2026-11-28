@@ -18,7 +18,7 @@ from eye_tracker.platform_adapters.macos_accessibility import MacOSAccessibility
 from eye_tracker.platform_adapters.macos_outline import _screen_matches
 
 from .desktop_gaze_filter import DesktopGazeFilter
-from .eye_gestures import EyeGestures
+from .eye_gestures import FACE_GESTURES, EyeGestures
 from .hold_key import R_KEY_CODE, HoldKey
 from .macos_keyboard import FocusKeyboard, WebAccessibility
 from .macos_targets import Dock, window_targets
@@ -27,6 +27,23 @@ from .ring_magnet import RingMagnet
 
 logger = logging.getLogger(__name__)
 HID = Quartz.kCGEventSourceStateCombinedSessionState
+GESTURE_LABELS = {
+    "wink_right": "Sağ göz kırpma",
+    "wink_left": "Sol göz kırpma",
+    "smile": "Gülümseme",
+    "mouth_open": "Ağız açma",
+    "pucker": "Dudak büzme",
+    "brows": "Kaş kaldırma",
+}
+ACTION_LABELS = {
+    "left": "sol tık",
+    "right": "sağ tık",
+    "double": "çift tık",
+    "scroll": "kaydırma",
+    "keyboard": "klavye",
+    "menu": "menü",
+    "off": "kapalı",
+}
 
 
 def desktop_point(point, viewport, size):
@@ -180,7 +197,7 @@ class MacOSDesktop:
         return (position.x, position.y)
 
     def eye_gestures(self, eye_samples):
-        """Issue #160: winks click where the cursor was when the wink began."""
+        """Issue #160: face gestures act where the cursor was when they began."""
         drain = getattr(self.api, "drain_eye_samples", None)
         if drain is not None:
             eye_samples = drain()
@@ -191,38 +208,56 @@ class MacOSDesktop:
         if self.gestures.pending and self.wink_point is None:
             self.wink_point = self.mouse_location()
         actions = self.api.wink_actions()
-        # Smiling reshapes the face mesh and reads as a ~6° downward head tilt
-        # (Fatih's recording: median pitch 17.5° smiling vs 11.4° neutral), so the
-        # cursor is held while a smile gesture may be in progress.
-        holding = self.gestures.smiling and actions["smile"] != "off"
+        # Smiles, an open mouth, a pucker or raised brows reshape the face mesh and
+        # read as head tilts (up to 11 degrees for an open mouth in Fatih's
+        # recordings), so the cursor is held while an enabled one is in progress.
+        active = getattr(self.gestures, "active", None)
+        if active is None:
+            active = {"smile"} if self.gestures.smiling else set()
+        holding = any(actions.get(name, "off") != "off" for name in active)
         if holding and self.smile_point is None:
             self.smile_point = self.mouse_location()
-        elif not holding and not any(e == "smile" for e in events):
+        elif not holding and not any(e in FACE_GESTURES for e in events):
             self.smile_point = None
+        self.toolbar.face_holding = holding
         stop = self.api.scroll_stop()
         for event in events:
-            if self.toolbar.head_scroll is not None:
-                # While head scrolling only the chosen stop gesture acts; no stray clicks.
-                if event == stop:
+            if self.toolbar.head_scroll is not None or self.toolbar.head_scroll_pending:
+                # While head scrolling only the stop gesture (or a scroll toggle) acts.
+                if event == stop or actions.get(event) == "scroll":
                     self.toolbar.stop_head_scroll()
-            elif event == "long_blink":
                 continue
-            elif not self.toolbar.paused:
-                gesture = event.removeprefix("wink_")
-                side = actions[gesture]
-                label = {"right": "Sağ göz kırpma", "left": "Sol göz kırpma"}.get(
-                    gesture, "Gülümseme"
-                )
-                point = self.smile_point if gesture == "smile" else self.wink_point
-                if side in ("left", "right"):
-                    self.toolbar.click(side, point or self.mouse_location())
-                    self.toolbar.show_hint(f"{label} → {'sol' if side == 'left' else 'sağ'} tık")
-                else:
-                    self.toolbar.show_hint(f"{label} (kapalı)")
+            if event == "long_blink" or self.toolbar.paused:
+                continue
+            point = self.smile_point if event in FACE_GESTURES else self.wink_point
+            self.perform(event, actions.get(event, "off"), point or self.mouse_location())
         if not self.gestures.pending:
             self.wink_point = None
-        if events and not self.gestures.smiling:
+        if events and not holding:
             self.smile_point = None
+
+    def perform(self, gesture, action, point):
+        label = GESTURE_LABELS[gesture]
+        if action in ("left", "right"):
+            self.toolbar.click(action, point)
+        elif action == "double":
+            self.toolbar.click("left", point, count=2)
+        elif action == "scroll":
+            if self.toolbar.head_mode:
+                self.toolbar.start_head_scroll(point)
+            else:
+                self.toolbar.start_mode("scroll")
+        elif action == "keyboard":
+            self.toolbar.toggle_keyboard()
+        elif action == "menu":
+            self.toolbar.command("menu")
+        elif action == "recentre":
+            if self.toolbar.recentre is None:
+                self.toolbar.show_hint("Kafa ortalama yalnız kafa modunda.")
+                return
+            self.toolbar.command("recentre")
+            return  # the recentre hint explains the next step
+        self.toolbar.show_hint(f"{label} → {ACTION_LABELS[action]}")
 
     def update(self, now, frame):
         stamp, normalized, closed, blink_samples, *rest = frame

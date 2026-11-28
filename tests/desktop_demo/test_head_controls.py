@@ -116,10 +116,12 @@ def test_wink_preferences_default_validate_and_migrate(tmp_path) -> None:
     assert preferences.DEFAULTS["wink_right"] == "right"
     assert preferences.validated({"wink_right": "off"})["wink_right"] == "off"
     assert preferences.DEFAULTS["smile"] == "left"
-    with pytest.raises(ValueError, match="Gülümseme"):
-        preferences.validated({"smile": "both"})
-    with pytest.raises(ValueError, match="Göz kırpma"):
-        preferences.validated({"wink_left": "double"})
+    assert preferences.validated({"wink_left": "double"})["wink_left"] == "double"
+    assert (preferences.DEFAULTS["mouth_open"], preferences.DEFAULTS["pucker"]) == ("scroll", "off")
+    assert preferences.DEFAULTS["brows"] == "double"
+    for key in preferences.GESTURE_KEYS:
+        with pytest.raises(ValueError, match="yüz hareketi"):
+            preferences.validated({key: "both"})
     old = tmp_path / "prefs.json"
     old.write_text('{"theme": "dark", "keyboard_size": "large"}')
     loaded = preferences.load(old)
@@ -128,9 +130,17 @@ def test_wink_preferences_default_validate_and_migrate(tmp_path) -> None:
 
 def test_runtime_wink_actions_follow_saved_preferences(tmp_path) -> None:
     api = DesktopAPI(model_name="head", output=tmp_path, preferences_path=tmp_path / "p.json")
-    assert api.wink_actions() == {"left": "left", "right": "right", "smile": "left"}
+    defaults = {
+        "wink_right": "right",
+        "wink_left": "left",
+        "smile": "left",
+        "mouth_open": "scroll",
+        "pucker": "off",
+        "brows": "double",
+    }
+    assert api.wink_actions() == defaults
     assert api.command("preferences", {"wink_right": "left", "wink_left": "off"})["ok"]
-    assert api.wink_actions() == {"left": "off", "right": "left", "smile": "left"}
+    assert api.wink_actions() == defaults | {"wink_right": "left", "wink_left": "off"}
     assert api.command("preferences", {"wink_left": "middle"})["ok"] is False
     api.close()
 
@@ -139,6 +149,7 @@ def _toolbar():
     toolbar_module = pytest.importorskip("experiments.desktop_demo.macos_toolbar")
     t = toolbar_module.Toolbar.__new__(toolbar_module.Toolbar)
     t.head_scroll = t.anchor = t.recentre_at = t.reveal_after = None
+    t.head_scroll_pending = t.face_holding = False
     t.active_mode = t.aim_since = t.front_pid = None
     t.last_action_stamp = None
     t.keyboard_owned = t.on_rail = t.visible = t.tools_ready = t.paused = False
@@ -253,21 +264,22 @@ def test_scroll_stop_preference_and_desktop_routing(tmp_path, monkeypatch) -> No
     desktop = desktop_module.MacOSDesktop.__new__(desktop_module.MacOSDesktop)
     clicks, stops = [], []
     desktop.api = SimpleNamespace(
-        wink_actions=lambda: {"left": "left", "right": "left", "smile": "right"},
+        wink_actions=lambda: {"wink_left": "left", "wink_right": "left", "smile": "right"},
         scroll_stop=lambda: "smile",
     )
     desktop.toolbar = SimpleNamespace(
         head_scroll=500.0,
+        head_scroll_pending=False,
         paused=False,
         stop_head_scroll=lambda: stops.append(1),
-        click=lambda side, point: clicks.append(side),
+        click=lambda side, point, count=1: clicks.append((side, count)),
         show_hint=lambda text: None,
     )
     desktop.wink_point = desktop.smile_point = None
     desktop.mouse_location = lambda: (10.0, 20.0)
     events = iter([["wink_right", "long_blink"], ["smile"], ["wink_right"]])
     desktop.gestures = SimpleNamespace(
-        pending=False, smiling=False, feed=lambda samples: next(events)
+        pending=False, smiling=False, active=set(), feed=lambda samples: next(events)
     )
     desktop.eye_gestures([])  # scrolling: no clicks, long blink is not the stop gesture
     assert clicks == [] and stops == []
@@ -275,7 +287,7 @@ def test_scroll_stop_preference_and_desktop_routing(tmp_path, monkeypatch) -> No
     assert stops == [1] and clicks == []
     desktop.toolbar.head_scroll = None
     desktop.eye_gestures([])  # not scrolling: the wink clicks again
-    assert clicks == ["left"]
+    assert clicks == [("left", 1)]
 
 
 def test_chromium_browsers_are_asked_once_per_process(monkeypatch) -> None:
@@ -371,3 +383,78 @@ def test_runtime_buffers_eye_samples_until_drained(tmp_path) -> None:
     assert api.drain_eye_samples() == [(1.0, 0.1, 0.1, 0.0), (1.03, 0.2, 0.1, 0.0)]
     assert api.drain_eye_samples() == []
     api.close()
+
+
+def held(frames_, start=0.0):
+    """Frames of (left, right, smile, jaw, pucker, brows)."""
+    g = EyeGestures()
+    return g, run(g, frames_, start)
+
+
+REST = (0.1, 0.12, 0.0, 0.03, 0.05, 0.2)
+
+
+def test_held_gestures_fire_once_after_their_hold_time() -> None:
+    mouth = (0.1, 0.12, 0.0, 0.9, 0.3, 0.2)
+    _, events = held([REST] * 3 + [mouth] * 20 + [REST] * 3 + [mouth] * 20)  # 0.67 s each
+    assert events == ["mouth_open", "mouth_open"]
+    _, events = held([REST] * 3 + [mouth] * 12 + [REST] * 3)  # 0.4 s < 0.5 s
+    assert events == []
+    brows = (0.1, 0.12, 0.0, 0.03, 0.1, 0.95)
+    assert held([REST] * 3 + [brows] * 15 + [REST])[1] == ["brows"]
+    pucker = (0.1, 0.12, 0.0, 0.03, 1.0, 0.2)
+    # A talking-length pucker (0.73 s recorded) stays below the 0.8 s hold.
+    assert held([REST] * 3 + [pucker] * 21 + [REST])[1] == []
+    assert held([REST] * 3 + [pucker] * 27 + [REST])[1] == ["pucker"]
+
+
+def test_active_set_drives_the_cursor_hold() -> None:
+    g = EyeGestures()
+    g.update(0.0, *REST)
+    assert g.active == set()
+    g.update(0.033, 0.1, 0.12, 0.0, 0.35, 0.05, 0.2)  # mouth starting to open
+    assert g.active == {"mouth_open"}
+    g.update(0.066, 0.1, 0.12, 0.2, 0.03, 0.05, 0.55)
+    assert g.active == {"smile", "brows"}
+
+
+def test_open_mouth_or_raised_brows_veto_a_wink() -> None:
+    right_wink = (0.58, 0.72, 0.0, 0.03, 0.05, 0.2)
+    assert held([REST] * 3 + [right_wink] * 14 + [REST] * 3)[1] == ["wink_right"]
+    with_mouth = (0.58, 0.72, 0.0, 0.6, 0.05, 0.2)
+    _, events = held([REST] * 3 + [with_mouth] * 14 + [REST] * 3)
+    assert "wink_right" not in events
+
+
+def test_recordings_replay_has_no_false_events_at_rest(tmp_path) -> None:
+    # Synthetic stand-in for the recorded talk phase: jaw <= 0.27, short puckers.
+    talk = [
+        (0.1, 0.12, 0.0, 0.27 if i % 4 else 0.1, 0.98 if i % 9 < 7 else 0.1, 0.28)
+        for i in range(90)
+    ]
+    assert held(talk)[1] == []
+
+
+def test_head_scroll_from_a_gesture_waits_for_the_gesture_to_end() -> None:
+    module, t = _toolbar()
+    warps = []
+    module_quartz = module.Quartz
+    original = module_quartz.CGWarpMouseCursorPosition
+    module_quartz.CGWarpMouseCursorPosition = lambda point: warps.append(point)
+    try:
+        t.cancel_mode = lambda: None
+        t.scroll_stop_hint = lambda: "ağzını aç"
+        t.start_head_scroll((300.0, 400.0))
+    finally:
+        module_quartz.CGWarpMouseCursorPosition = original
+    assert t.head_scroll_pending and t.head_scroll is None and warps == [(300.0, 400.0)]
+    assert "ağzını aç" in t.hints[-1]
+    assert not t.pointer_free
+    t.face_holding = True
+    assert t.desktop_gaze(1.0, (300, 520), False, True, None) and t.head_scroll is None
+    t.face_holding = False
+    t.desktop_gaze(1.1, (300, 430), False, True, None)
+    assert t.head_scroll == 430 and not t.head_scroll_pending
+    t.cancel_mode = module.Toolbar.cancel_mode.__get__(t)
+    t.mark = lambda *a: None
+    assert t.stop_head_scroll() and t.head_scroll is None

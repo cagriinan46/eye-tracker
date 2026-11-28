@@ -147,12 +147,8 @@ class DesktopAPI:
         return self._preferences["scroll_stop"]
 
     def wink_actions(self):
-        """Issue #160: what each face gesture does ("left", "right" or "off")."""
-        return {
-            "left": self._preferences["wink_left"],
-            "right": self._preferences["wink_right"],
-            "smile": self._preferences["smile"],
-        }
+        """Issue #160: the action of each face gesture, keyed by detector event name."""
+        return {key: self._preferences[key] for key in preferences.GESTURE_KEYS}
 
     def desktop_failed(self, message):
         with self._lock:

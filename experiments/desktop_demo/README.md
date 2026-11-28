@@ -462,12 +462,10 @@ are unmeasured. Windows is not supported.
   Gözleri kapat (≥ 1 s, default), Gülümse, Sağ göz or Sol göz
   (`scroll_stop`). While head scrolling, only that gesture acts and no
   gesture clicks.
-- **Rail menu:** the right-hand rail is one "Menü" button.
-  - Selecting it opens a single labelled column (icon and Turkish name):
-    Kapat, the commands, and Kafa ortala in head mode.
-  - The menu closes after any rail command, or once the cursor has stayed
-    off it for 3 s.
-  - While paused, the rail shows only "Devam et".
+- **Rail menu:** the rail starts as one "Menü" button. Selecting it opens
+  the earlier two-column icon tiles, with Kapat first; Fatih preferred the
+  tiles to a labelled list. The menu closes after a rail command or after
+  3 s off it. While paused, the rail shows only "Devam et".
 - **Smile holds the cursor:** smiling reshapes the face mesh and reads as a
   downward head tilt. In Fatih's recording the median pitch was 17.5° while
   smiling, against 11.4° neutral and 10.4° talking, so the cursor slid down.
@@ -489,6 +487,33 @@ are unmeasured. Windows is not supported.
   mid-closure, and the 0.25 s gap rule then discarded the wink. They are now
   buffered (240 samples) and drained by the desktop loop. This is a
   plausible cause of "sometimes it does not click"; it is not proven.
+- **More face gestures (second recording, `.venv/face-gestures-fatih-2.json`):**
+  MediaPipe has no tongue blendshape, so tongue-out cannot be detected. Held
+  gestures fire once after their hold time and re-arm when relaxed:
+  - **Ağız açma**: `jawOpen` ≥ 0.5 held 0.5 s. Recorded 0.84–0.91 for about
+    2 s; talking reached at most 0.27.
+  - **Kaş kaldırma**: `browInnerUp` ≥ 0.6 held 0.4 s. Recorded 0.94–0.96;
+    it appeared in no other phase.
+  - **Dudak büzme**: `mouthPucker` ≥ 0.7 held 0.8 s. Talking also reached
+    0.7+ for 0.73 s, so the default action is Kapalı.
+
+  Every gesture (winks, smile, mouth, pucker, brows) chooses one action in
+  Settings → "Yüz hareketleri": Sol tık, Sağ tık, Çift tık, Kaydırmayı
+  başlat/durdur, Klavyeyi aç/kapat, Menüyü aç/kapat, Kafa ortala or Kapalı.
+  - Defaults: mouth → scroll, brows → double click, pucker → off.
+  - Each gesture's hold time is a per-user setting.
+  - While an enabled gesture is active, the cursor is held, because these
+    expressions shift the head-pitch reading. An open mouth shifted it by up
+    to 11°, brows by 4–5° and a pucker by 4–6°.
+  - A gesture-started head scroll takes its neutral height after the gesture
+    ends.
+  - An eye closure during an open mouth, pucker or raised brows is not a wink.
+    This removed the false wink recorded while opening the mouth.
+  - Replay on the second recording: winks 6 right and 7 left for 5
+    requested each, with no wrong side and nothing while talking or
+    blinking. Mouth 3/3, pucker 4, brows 8. Remaining false events: 3 winks
+    while sliding the mouth sideways (not used as a gesture) and 1 long
+    closure while moving the head.
 - **Smoother keyboard and panels:** over the keyboard, the rail and open
   panel pages, the cursor keeps gliding without the magnet. Before this
   change it was hidden there and its smoothing was reset, so it jumped

@@ -16,7 +16,8 @@ class BlinkStream:
         self.enabled = threading.Event()
         self.lock = threading.Lock()
         self.samples = deque(maxlen=24)
-        # Issue #160: (stamp, eyeBlinkLeft, eyeBlinkRight, mean mouthSmile) for gestures.
+        # Issue #160: (stamp, eyeBlinkLeft, eyeBlinkRight, mean mouthSmile, jawOpen,
+        # mouthPucker, browInnerUp) for face gestures.
         self.eye_scores = deque(maxlen=24)
         self.available = False
         self.thread = None
@@ -97,7 +98,10 @@ class BlinkStream:
                         smile = [scores.get(k) for k in ("mouthSmileLeft", "mouthSmileRight")]
                         if left is not None and right is not None:
                             smiled = None if None in smile else (smile[0] + smile[1]) / 2
-                            eyes = (stamp / 1e9, float(left), float(right), smiled)
+                            held = [
+                                scores.get(k) for k in ("jawOpen", "mouthPucker", "browInnerUp")
+                            ]
+                            eyes = (stamp / 1e9, float(left), float(right), smiled, *held)
                             if min(left, right) >= 0.50:
                                 closed = True
                             elif max(left, right) <= 0.30:

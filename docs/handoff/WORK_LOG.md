@@ -1617,3 +1617,58 @@ method stays Fatih's decision; Çağrı may revise it.
 Commits `11311a8`, `efd53cd`, `4a35030`, `bdb4376` and `34e7a93` are on
 `feature/desktop-head-cursor`, pushed. The PR is OPEN and UNMERGED; the CI
 result was not yet known when this was written. No merge by the agent.
+
+## 2026-11-28 21:15 +03:00 — Issue #160 follow-up: more face gestures, rail tiles restored (same PR #161)
+
+**Request (Fatih):**
+- Keep the one-button rail start, but open into the earlier two-column tiles
+  rather than a list.
+- Add mouth opening, and tongue-out for scrolling.
+- Add any other gestures I would suggest.
+
+**Finding:** MediaPipe's Face Landmarker exposes 52 blendshapes and no
+`tongueOut`, so tongue-out cannot be detected. A second recording
+(`face_gestures_check --phases extended`, `.venv/face-gestures-fatih-2.json`,
+1,497,897 B, SHA-256 `543ec212…4371fd55`, 144 s, 3,426 frames, no images)
+showed:
+
+| Gesture | Recorded score | Head-pitch shift | Notes |
+| --- | --- | --- | --- |
+| jawOpen | 0.84–0.91 for about 2 s | up to 11° | talking at most 0.27 |
+| browInnerUp | 0.94–0.96 for 0.6–1.3 s | 4–5° | appeared only when raising the brows |
+| mouthPucker | 1.0 | 4–6° | talking reached 0.7+ for 0.73 s |
+| mouth sideways | — | — | pulled by winks; not used |
+
+**Fresh wink check (data not used to set the wink thresholds):**
+- Right-wink phase: 6 right winks detected for 5 requested.
+- Left-wink phase: 7 left winks detected for 5 requested.
+- No wrong side, and no events while talking or blinking.
+- False events: 1 wink while opening the mouth (now vetoed) and 4 while
+  sliding the mouth sideways.
+
+**Change:**
+- **Held gestures:** mouth ≥ 0.5 held 0.5 s, pucker ≥ 0.7 held 0.8 s,
+  brows ≥ 0.6 held 0.4 s.
+- **Wink veto:** an eye closure during an open mouth, pucker or raised brows
+  is not a wink.
+- **Cursor hold:** the cursor is held while any enabled gesture is active.
+- **Actions:** each of the six gestures chooses Sol tık, Sağ tık, Çift tık,
+  Kaydırmayı başlat/durdur, Klavye, Menü, Kafa ortala or Kapalı. Defaults:
+  mouth → scroll, brows → double click, pucker → off.
+- **Head scroll from a gesture:** it takes its neutral height after the
+  gesture ends.
+- **Settings:** the scroll-stop choice gains mouth, pucker and brows, and
+  each gesture's hold time is a setting.
+- **Rail:** the expanded rail uses the two-column icon tiles again.
+- **Replay on the second recording** (partly in-sample for the new
+  thresholds): mouth 3/3, pucker 4, brows 8, winks 6/7. Remaining false
+  events: 3 winks while sliding the mouth sideways and 1 long closure while
+  moving the head.
+
+**Checks:**
+- Ruff and format pass.
+- pytest: 1029 passed, 16 failed. The 16 are the SVR tests that need
+  scikit-learn.
+- A headless AppKit render of the rail passed: collapsed 114×114, expanded
+  205×593 with 12 tiles.
+- **No live test of this round yet.**

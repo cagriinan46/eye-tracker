@@ -25,18 +25,45 @@ SCORES = (
     "eyeSquintRight",
     "mouthSmileLeft",
     "mouthSmileRight",
+    "jawOpen",
+    "mouthPucker",
+    "mouthFunnel",
+    "browInnerUp",
+    "browOuterUpLeft",
+    "browOuterUpRight",
+    "mouthLeft",
+    "mouthRight",
+    "cheekPuff",
 )
-PHASES = (
-    ("neutral", 6, "Ekrana normal bak, rahat dur."),
-    ("down", 6, "Kafani asagi eg ve ekranin altina bak."),
-    ("up", 5, "Kafani yukari kaldir ve ekranin ustune bak."),
-    ("wink_right", 12, "Sadece SAG gozunu 5 kez kirp (her biri kisa, ~0.3 sn)."),
-    ("wink_left", 12, "Sadece SOL gozunu 5 kez kirp (her biri kisa, ~0.3 sn)."),
-    ("blink", 8, "Normal sekilde 5 kez goz kirp."),
-    ("long_blink", 10, "Iki gozunu 3 kez yaklasik 0.5 sn kapat."),
-    ("smile", 12, "3 kez gulumse (dudaklarini kivir), aralarda normal yuz."),
-    ("talk", 8, "Kendi kendine bir sey soyle / konus (yanlis alarm testi)."),
-)
+PHASE_SETS = {
+    # Session 1 (2026-11-28): eyes and smile.
+    "basic": (
+        ("neutral", 6, "Ekrana normal bak, rahat dur."),
+        ("down", 6, "Kafani asagi eg ve ekranin altina bak."),
+        ("up", 5, "Kafani yukari kaldir ve ekranin ustune bak."),
+        ("wink_right", 12, "Sadece SAG gozunu 5 kez kirp (her biri kisa, ~0.3 sn)."),
+        ("wink_left", 12, "Sadece SOL gozunu 5 kez kirp (her biri kisa, ~0.3 sn)."),
+        ("blink", 8, "Normal sekilde 5 kez goz kirp."),
+        ("long_blink", 10, "Iki gozunu 3 kez yaklasik 0.5 sn kapat."),
+        ("smile", 12, "3 kez gulumse (dudaklarini kivir), aralarda normal yuz."),
+        ("talk", 8, "Kendi kendine bir sey soyle / konus (yanlis alarm testi)."),
+    ),
+    # Session 2: new face gestures, plus fresh winks to validate the thresholds.
+    "extended": (
+        ("neutral", 6, "Ekrana normal bak, rahat dur."),
+        ("talk", 10, "Yuksek sesle bir sey anlat / konus (yanlis alarm testi)."),
+        ("wink_right", 12, "Sadece SAG gozunu 5 kez kirp."),
+        ("wink_left", 12, "Sadece SOL gozunu 5 kez kirp."),
+        ("blink", 8, "Normal sekilde 5 kez goz kirp."),
+        ("smile", 10, "3 kez gulumse, aralarda normal yuz."),
+        ("mouth_open", 12, "3 kez agzini genis ac ve ~1 sn tut, aralarda kapat."),
+        ("pucker", 12, "3 kez dudaklarini buz (opucuk) ve ~1 sn tut."),
+        ("brows", 12, "3 kez kaslarini kaldir ve ~1 sn tut."),
+        ("mouth_side", 12, "Agzini 3 kez SAGA, sonra 3 kez SOLA kaydir."),
+        ("move", 8, "Kafani yavasca saga sola, yukari asagi oynat (imlec gibi)."),
+    ),
+}
+PHASES = PHASE_SETS["basic"]
 DEFAULT_MODEL = Path(".venv/models/face_landmarker.task")
 
 
@@ -50,9 +77,9 @@ def percentiles(values, points=(5, 50, 95, 100)):
     }
 
 
-def summarize(frames):
+def summarize(frames, phases=PHASES):
     summary = {}
-    for phase, *_ in PHASES:
+    for phase, *_ in phases:
         rows = [f for f in frames if f["phase"] == phase and f["scores"]]
         gestures = EyeGestures()
         events = gestures.feed(
@@ -69,7 +96,10 @@ def summarize(frames):
         summary[phase] = {
             "frames": len(rows),
             "events": events,
-            **{name: percentiles([f["scores"][name] for f in rows]) for name in SCORES},
+            **{
+                name: percentiles([f["scores"][name] for f in rows if name in f["scores"]])
+                for name in SCORES
+            },
             "pitch": percentiles([f["pitch"] for f in rows if f["pitch"] is not None]),
         }
     return summary
@@ -81,7 +111,9 @@ def main(argv=None) -> int:
     parser.add_argument("--screen-size", required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--model", type=Path, default=DEFAULT_MODEL)
+    parser.add_argument("--phases", choices=tuple(PHASE_SETS), default="basic")
     args = parser.parse_args(argv)
+    phases = PHASE_SETS[args.phases]
     if args.output.exists():
         print(f"Refusing to overwrite {args.output}", file=sys.stderr)
         return 1
@@ -108,7 +140,7 @@ def main(argv=None) -> int:
     try:
         source.open()
         width, height = open_target_window(cv2, np, window, (width, height))
-        for index, (phase, seconds, text) in enumerate(PHASES, start=1):
+        for index, (phase, seconds, text) in enumerate(phases, start=1):
             ready_until = time.monotonic() + 2.5
             phase_end = None
             while True:
@@ -129,9 +161,11 @@ def main(argv=None) -> int:
                     if result.face_blendshapes:
                         all_scores = {c.category_name: c.score for c in result.face_blendshapes[0]}
                         scores = {name: round(float(all_scores[name]), 4) for name in SCORES}
+                    yaw = None
                     if result.facial_transformation_matrixes:
                         angles = angle_signal(result.facial_transformation_matrixes[0])
                         pitch = round(angles[1], 2) if angles else None
+                        yaw = round(angles[0], 2) if angles else None
                     if recording:
                         frames.append(
                             {
@@ -139,11 +173,12 @@ def main(argv=None) -> int:
                                 "t": round(frame.timestamp_ns / 1e9, 4),
                                 "scores": scores,
                                 "pitch": pitch,
+                                "yaw": yaw,
                             }
                         )
                 canvas = np.full((height, width, 3), 24, dtype=np.uint8)
                 color = (80, 200, 80) if recording else (0, 210, 255)
-                cv2.putText(canvas, f"{index}/{len(PHASES)}", (60, 90), 0, 1.0, (160,) * 3, 2)
+                cv2.putText(canvas, f"{index}/{len(phases)}", (60, 90), 0, 1.0, (160,) * 3, 2)
                 cv2.putText(canvas, text, (60, height // 2), 0, 1.0, (235,) * 3, 2)
                 remaining = (phase_end - now) if phase_end else (ready_until - now)
                 label = f"Kayit: {remaining:.0f} sn" if recording else "Hazirlan..."
@@ -173,10 +208,11 @@ def main(argv=None) -> int:
             "camera_index": args.camera_index,
             "completed": completed,
             "duration_s": round(time.monotonic() - started, 1),
-            "phases": [p[:2] for p in PHASES],
+            "phase_set": args.phases,
+            "phases": [p[:2] for p in phases],
             "frames": frames,
         }
-        record["summary"] = summarize(frames)
+        record["summary"] = summarize(frames, phases)
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(record))
         print(json.dumps(record["summary"], indent=1))

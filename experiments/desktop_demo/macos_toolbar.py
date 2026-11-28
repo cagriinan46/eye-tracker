@@ -42,16 +42,18 @@ DIRECTIONS = (
 )
 VECTORS = {"up": (0, -1), "down": (0, 1), "left": (-1, 0), "right": (1, 0)}
 BACK = ("back", "Geri", "chevron.left")
-RAIL_WIDTH = 214
 RAIL_COLLAPSE_SECONDS = 3.0  # the open menu closes after the cursor stays away this long
 RECENTRE = ("recentre", "Kafa ortala", "dot.viewfinder")
 RECENTRE_DELAY_SECONDS = 1.5  # time to turn the head back from the rail before recentring
 REVEAL_KEYBOARD_AFTER_SECONDS = 0.35  # let the clicked app move focus first
 SCROLL_STOP_HINTS = {
-    "long_blink": "gözlerini 1 sn kapat",
+    "long_blink": "gözlerini kapalı tut",
     "smile": "gülümse",
     "wink_right": "sağ gözünü kırp",
     "wink_left": "sol gözünü kırp",
+    "mouth_open": "ağzını aç",
+    "pucker": "dudaklarını büz",
+    "brows": "kaşlarını kaldır",
 }
 WIDTH = 340
 
@@ -177,6 +179,7 @@ class Toolbar:
         self.head_mode = head_mode
         self.commands = COMMANDS + ((RECENTRE,) if recentre is not None else ())
         self.recentre_at = self.reveal_after = self.head_scroll = None
+        self.head_scroll_pending = self.face_holding = False
         self.on_rail = self.rail_expanded = False
         self.rail_left_at = None
         self.recalibrate = recalibrate
@@ -279,7 +282,7 @@ class Toolbar:
         return label
 
     def render_rail(self):
-        """Issue #160: one "Menü" button that expands into a labelled list."""
+        """Issue #160: one "Menü" button that opens the two-column icon tiles."""
         if self.paused:
             items = [("pause", "Devam et", "play.fill")]
         elif self.rail_expanded:
@@ -287,16 +290,16 @@ class Toolbar:
         else:
             items = [("menu", "Menü", "square.grid.2x2.fill")]
         expanded = len(items) > 1
-        gap, pad = 6, 9
+        gap = 7
         if expanded:
-            row = math.floor(min(58, (self.height - 120) / len(items) - gap))
-            width = RAIL_WIDTH
-            height = pad * 2 + len(items) * (row + gap) - gap
+            rows = math.ceil(len(items) / 2)
+            tile = math.floor(min(90, (self.height - 105) / rows))
+            width = 2 * tile + gap + 18
+            height = rows * (tile + gap) + 11
         else:
-            row = width = 96
-            height = row + pad * 2
-            width += pad * 2
-        view = self.surface((width, height), color(0.07, 0.09, 0.13, 0.96), 22)
+            tile = 96
+            width = height = tile + 18
+        view = self.surface((width, height), color(0.07, 0.09, 0.13, 0.96), 23)
         view.layer().setBorderWidth_(1)
         view.layer().setBorderColor_(self.hover_card.CGColor())
         self.rail_origin = (self.width - width - 10, round((self.height - height) / 2))
@@ -307,19 +310,14 @@ class Toolbar:
         self.rail_progress = self.surface((0, 4), self.accent, 2)
         for i, (key, label, icon) in enumerate(items):
             if expanded:
-                rect = ((pad, height - pad - row - i * (row + gap)), (width - 2 * pad, row))
-                button = self.button(key, label, icon, rect)
-                button.setImagePosition_(UI.NSImageLeading)
-                button.setImageHugsTitle_(True)
-                button.setAlignment_(UI.NSTextAlignmentLeft)
-                button.layer().setCornerRadius_(12)
+                y, x = divmod(i, 2)
+                rect = ((9 + x * (tile + gap), height - 9 - tile - y * (tile + gap)), (tile, tile))
+                button = self.button(key, "", icon, rect)
             else:
-                rect = ((pad, pad), (row, row))
+                rect = ((9, 9), (tile, tile))
                 button = self.button(key, label, icon, rect)
                 button.layer().setCornerRadius_(18)
                 button.layer().setBackgroundColor_(self.hover_card.CGColor())
-            if key == "menu" and expanded:
-                button.layer().setBackgroundColor_(self.background.CGColor())
             button.setAccessibilityLabel_(label)
             button.setToolTip_(label)
             view.addSubview_(button)
@@ -352,8 +350,6 @@ class Toolbar:
         if key != self.rail_hover:
             if self.rail_hover in self.rail_items:
                 base = self.card if self.rail_expanded else self.hover_card
-                if self.rail_hover == "menu" and self.rail_expanded:
-                    base = self.background
                 self.rail_items[self.rail_hover][1].layer().setBackgroundColor_(base.CGColor())
             if key in self.rail_items:
                 hover = self.hover_card if self.rail_expanded else self.accent
@@ -574,7 +570,7 @@ class Toolbar:
             Quartz.CGEventPostToPid(target[0], event)
         self.message("Dikte metne eklendi.")
 
-    def click(self, side, point):
+    def click(self, side, point, count=1):
         if point is None or self.paused:
             return
         button, down, up = (
@@ -586,14 +582,18 @@ class Toolbar:
                 Quartz.kCGEventRightMouseUp,
             )
         )
-        events = [
-            Quartz.CGEventCreateMouseEvent(None, event, point, button) for event in (down, up)
-        ]
-        if all(event is not None for event in events):
+        for clicks in range(1, count + 1):
+            events = [
+                Quartz.CGEventCreateMouseEvent(None, event, point, button) for event in (down, up)
+            ]
+            if not all(event is not None for event in events):
+                return
             for event in events:
+                # A double click must carry click state 2 on its second press.
+                Quartz.CGEventSetIntegerValueField(event, Quartz.kCGMouseEventClickState, clicks)
                 Quartz.CGEventPost(Quartz.kCGHIDEventTap, event)
-            # A click into a text field opens the keyboard (Issue #160).
-            self.reveal_after = time.monotonic() + REVEAL_KEYBOARD_AFTER_SECONDS
+        # A click into a text field opens the keyboard (Issue #160).
+        self.reveal_after = time.monotonic() + REVEAL_KEYBOARD_AFTER_SECONDS
 
     def scroll(self, direction, amount):
         if self.anchor is None or self.paused:
@@ -613,6 +613,7 @@ class Toolbar:
 
     def cancel_mode(self):
         self.head_scroll = None
+        self.head_scroll_pending = False
         self.active_mode = self.anchor = self.aim_since = self.front_pid = None
         self.tools_ready = self.center_left = False
         self.confirm.reset()
@@ -794,9 +795,31 @@ class Toolbar:
                     return True, key
         return inside, None
 
+    def start_head_scroll(self, point):
+        """A face gesture starts head scrolling at ``point`` (Issue #160).
+
+        The neutral height is taken once the gesture has ended, because the
+        gesture itself shifts the head-pose reading.
+        """
+        self.cancel_mode()
+        self.active_mode, self.anchor, self.tools_ready = "scroll", point, True
+        self.head_scroll_pending = True
+        Quartz.CGWarpMouseCursorPosition(point)
+        self.mark(point, "armed")
+        self.show_hint(
+            "Kaydırma: kafanı aşağı eğ: aşağı, yukarı kaldır: yukarı.\n"
+            f"Durdurmak için {self.scroll_stop_hint()}."
+        )
+
+    def toggle_keyboard(self):
+        if self.keyboard.target is not None:
+            self.keyboard.stow()
+        elif not self.keyboard.reveal():
+            self.show_hint("Önce yazılabilir bir metin alanına tıkla.")
+
     def stop_head_scroll(self):
-        """Long blink: end head scrolling (Issue #160)."""
-        if self.head_scroll is None:
+        """The stop gesture ends head scrolling (Issue #160)."""
+        if self.head_scroll is None and not self.head_scroll_pending:
             return False
         self.cancel_mode()
         self.show_hint("Kaydırma durdu.")
@@ -808,6 +831,7 @@ class Toolbar:
         return (
             self.confirm.phase != "armed"
             and self.head_scroll is None
+            and not self.head_scroll_pending
             and (self.keyboard_owned or self.on_rail or (self.visible and not self.tools_ready))
         )
 
@@ -908,6 +932,11 @@ class Toolbar:
     def desktop_gaze(
         self, stamp, point, closed, valid, assisted, blink_samples=None, keyboard_point=None
     ):
+        if self.head_scroll_pending:
+            if point is not None and not closed and not self.face_holding:
+                self.head_scroll = point[1]
+                self.head_scroll_pending = False
+            return True
         if self.head_scroll is not None:
             # Blinks and missing frames pause scrolling but keep the anchor.
             if point is not None and not closed and stamp != self.last_action_stamp:

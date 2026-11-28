@@ -1781,3 +1781,21 @@ launched, freeing the camera.
    - compare "Tarayıcı metin alanları" on and off in Brave;
    - optionally run the 12 tasks in head mode, for a measured head-vs-gaze
      comparison.
+
+## 2026-11-28 20:45 +03:00 — correction: PR #161 merged before the last fixes; follow-up PR
+
+Verified while publishing: [PR #161](https://github.com/cagriinan46/eye-tracker/pull/161)
+was **MERGED** at 2026-11-28T16:55:43Z (19:55 +03:00) as squash commit `0f7424d`,
+with branch head `cd89fb0` at that time. The entries above from 21:45 onward
+said the later commits went to "the same PR #161"; that is wrong.
+
+The later commits `f11638b`, `3785a65`, `6875cf3`, `7f0763b` and `7547644`
+were pushed to the merged branch, so they did not reach main. They contain:
+the head-scroll crash fix, the icon-only menu, the cursor-hold levels, the
+optional check, diagnostics, the switches, the scroll-neutral fix and the
+pause notes.
+
+They were cherry-picked unchanged onto `fix/160-desktop-head-followups` from
+main `0f7424d`. `git diff feature/desktop-head-cursor` before this entry was
+empty. A new PR carries them. The merged `feature/desktop-head-cursor` branch
+was not deleted.

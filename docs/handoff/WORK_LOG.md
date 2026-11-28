@@ -1493,3 +1493,9 @@ a filter cannot remove. Details are in
 head-cursor mode in desktop control with the existing magnet, or a
 speed-dependent gain test. Whether integration uses STEADY or BASE is a human
 decision.
+
+## 2026-11-28 17:40 +03:00 — Issue #158 published; review pending
+
+Commits `dffd1cc` (preregistration) and the results commit are on
+`feature/head-pointer-tuning`, pushed. [PR #159](https://github.com/cagriinan46/eye-tracker/pull/159)
+is OPEN and UNMERGED. No merge by the agent.

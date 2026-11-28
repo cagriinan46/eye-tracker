@@ -14,10 +14,14 @@ def _median(values: list[float]) -> float | None:
     return median(values) if values else None
 
 
-def summarize(sessions: list[dict]) -> dict:
-    """Per-candidate descriptive numbers and the frozen pass/winner decision."""
+def summarize(sessions: list[dict], names: tuple[str, ...] = CANDIDATES) -> dict:
+    """Per-candidate descriptive numbers and the frozen pass/winner decision.
+
+    ``names`` lets a follow-up experiment (Issue #158) reuse the same rule on its
+    own conditions, stored under the trial key ``candidate``.
+    """
     candidates: dict[str, dict] = {}
-    for candidate in CANDIDATES:
+    for candidate in names:
         per_session: dict[str, dict] = {}
         times: list[float] = []
         jitters: list[float] = []

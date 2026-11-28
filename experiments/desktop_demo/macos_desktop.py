@@ -20,9 +20,9 @@ from eye_tracker.platform_adapters.macos_outline import _screen_matches
 from .desktop_gaze_filter import DesktopGazeFilter
 from .eye_gestures import EyeGestures
 from .hold_key import R_KEY_CODE, HoldKey
-from .macos_keyboard import FocusKeyboard
+from .macos_keyboard import FocusKeyboard, WebAccessibility
 from .macos_targets import Dock, window_targets
-from .macos_toolbar import Toolbar, nonactivating_panel
+from .macos_toolbar import SCROLL_STOP_HINTS, Toolbar, nonactivating_panel
 from .ring_magnet import RingMagnet
 
 logger = logging.getLogger(__name__)
@@ -48,6 +48,7 @@ class MacOSDesktop:
         self.recentre_key = HoldKey()
         self.gestures = EyeGestures()
         self.wink_point = None
+        self.web_accessibility = WebAccessibility()
         self.magnet = RingMagnet()
         self.fixation = DesktopGazeFilter()
         self.aim = PointerSmoother(fast=0.065, slow=0.16)
@@ -105,6 +106,7 @@ class MacOSDesktop:
             keyboard,
             recentre=(lambda: self.api.command("recentre").get("ok", False)) if head else None,
             head_mode=head,
+            scroll_stop_hint=lambda: SCROLL_STOP_HINTS[self.api.scroll_stop()],
         )
         self.gestures.reset()
         self.wink_point = None
@@ -183,9 +185,14 @@ class MacOSDesktop:
         if self.gestures.pending and self.wink_point is None:
             self.wink_point = self.mouse_location()
         actions = self.api.wink_actions()
+        stop = self.api.scroll_stop()
         for event in events:
-            if event == "long_blink":
-                self.toolbar.stop_head_scroll()
+            if self.toolbar.head_scroll is not None:
+                # While head scrolling only the chosen stop gesture acts; no stray clicks.
+                if event == stop:
+                    self.toolbar.stop_head_scroll()
+            elif event == "long_blink":
+                continue
             elif not self.toolbar.paused:
                 gesture = event.removeprefix("wink_")
                 side = actions[gesture]
@@ -276,6 +283,9 @@ class MacOSDesktop:
                         now = time.monotonic()
                         if now >= self.next_screen_check:
                             self.next_screen_check = now + 0.4
+                            self.web_accessibility.update(
+                                UI.NSWorkspace.sharedWorkspace().frontmostApplication()
+                            )
                             if not _screen_matches(UI, self.size):
                                 raise RuntimeError("Ekran değişti. Kalibrasyonu yenile.")
                         self.update(now, frame)

@@ -13,7 +13,9 @@ DEFAULTS = {
     "wink_left": "left",
     "wink_right": "right",
     "smile": "left",
+    "scroll_stop": "long_blink",
 }
+SCROLL_STOPS = ("long_blink", "smile", "wink_right", "wink_left")
 WINK_ACTIONS = ("left", "right", "off")
 KEYBOARD_SIZES = ("small", "medium", "large")
 DEFAULT_PATH = Path.home() / ".eye-tracker" / "desktop-preferences.json"
@@ -35,6 +37,8 @@ def validated(values):
         raise ValueError("Göz kırpma ayarı sol tık, sağ tık veya kapalı olmalı.")
     if result["smile"] not in WINK_ACTIONS:
         raise ValueError("Gülümseme ayarı sol tık, sağ tık veya kapalı olmalı.")
+    if result["scroll_stop"] not in SCROLL_STOPS:
+        raise ValueError("Geçersiz kaydırma durdurma hareketi.")
     return result
 
 

@@ -447,6 +447,21 @@ are unmeasured. Windows is not supported.
     2024.11.6, installed `--no-deps` for the UniGaze Python. That Python
     already has torch, numba and tqdm.
   - `brew install ffmpeg` (9.0.2).
+- **Browser text fields:** Chromium browsers (Brave, Chrome, Edge, Vivaldi,
+  Opera, Chromium, Arc) hide web-page elements from Accessibility until an
+  assistive tool sets `AXEnhancedUserInterface`, as VoiceOver does.
+  - Before this change, clicking the YouTube search box in Brave did not open
+    the keyboard, and the rail Klavye button reported no text field.
+  - Probe on 2026-11-28: before the setting, only the address bar was a text
+    field; after it, the search box was a settable `AXComboBox`. Brave
+    rejected `AXManualAccessibility` (−25205), and the enhanced call reports
+    −25208 but takes effect.
+  - Desktop control now sets it once per frontmost Chromium process.
+    Safari is not affected.
+- **Head-scroll stop gesture:** Settings → "Kaydırmayı durdur" chooses
+  Gözleri kapat (≥ 1 s, default), Gülümse, Sağ göz or Sol göz
+  (`scroll_stop`). While head scrolling, only that gesture acts and no
+  gesture clicks.
 - **Smoother keyboard and panels:** over the keyboard, the rail and open
   panel pages, the cursor keeps gliding without the magnet. Before this
   change it was hidden there and its smoothing was reset, so it jumped
@@ -459,7 +474,8 @@ are unmeasured. Windows is not supported.
   - Tilting the head down scrolls down and tilting it up scrolls up. Speed
     grows with the cursor's offset from where it started: 40 px dead zone,
     0.25 px per px, at most 60 px per frame.
-  - Closing both eyes for 0.3 s (a long blink) stops scrolling.
+  - The gesture chosen in "Kaydırmayı durdur" stops scrolling; by default,
+    closing both eyes for 1.0 s.
   - In gaze mode, the arrow panel is unchanged.
 
 ## Performance diagnostics (issue #145)

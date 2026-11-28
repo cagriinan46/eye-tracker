@@ -124,6 +124,10 @@ class DesktopAPI:
         else:
             keyboard.dictation_error = error or "Konuşma algılanmadı."
 
+    def scroll_stop(self):
+        """Issue #160: the face gesture that ends head scrolling."""
+        return self._preferences["scroll_stop"]
+
     def wink_actions(self):
         """Issue #160: what each face gesture does ("left", "right" or "off")."""
         return {

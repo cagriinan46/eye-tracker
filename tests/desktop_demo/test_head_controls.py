@@ -235,3 +235,64 @@ def test_runtime_starts_app_dictation_and_inserts_the_result(tmp_path) -> None:
     api._poll_app_dictation(keyboard)
     assert keyboard.dictation_error == "Mikrofon açılamadı."
     api.close()
+
+
+def test_scroll_stop_preference_and_desktop_routing(tmp_path, monkeypatch) -> None:
+    assert preferences.validated({"scroll_stop": "smile"})["scroll_stop"] == "smile"
+    with pytest.raises(ValueError, match="kaydırma"):
+        preferences.validated({"scroll_stop": "nod"})
+    api = DesktopAPI(model_name="head", output=tmp_path, preferences_path=tmp_path / "p.json")
+    assert api.scroll_stop() == "long_blink"
+    assert api.command("preferences", {"scroll_stop": "wink_right"})["ok"]
+    assert api.scroll_stop() == "wink_right"
+    api.close()
+
+    desktop_module = pytest.importorskip("experiments.desktop_demo.macos_desktop")
+    desktop = desktop_module.MacOSDesktop.__new__(desktop_module.MacOSDesktop)
+    clicks, stops = [], []
+    desktop.api = SimpleNamespace(
+        wink_actions=lambda: {"left": "left", "right": "left", "smile": "right"},
+        scroll_stop=lambda: "smile",
+    )
+    desktop.toolbar = SimpleNamespace(
+        head_scroll=500.0,
+        paused=False,
+        stop_head_scroll=lambda: stops.append(1),
+        click=lambda side, point: clicks.append(side),
+        show_hint=lambda text: None,
+    )
+    desktop.wink_point = None
+    desktop.mouse_location = lambda: (10.0, 20.0)
+    events = iter([["wink_right", "long_blink"], ["smile"], ["wink_right"]])
+    desktop.gestures = SimpleNamespace(pending=False, feed=lambda samples: next(events))
+    desktop.eye_gestures([])  # scrolling: no clicks, long blink is not the stop gesture
+    assert clicks == [] and stops == []
+    desktop.eye_gestures([])  # the chosen stop gesture
+    assert stops == [1] and clicks == []
+    desktop.toolbar.head_scroll = None
+    desktop.eye_gestures([])  # not scrolling: the wink clicks again
+    assert clicks == ["left"]
+
+
+def test_chromium_browsers_are_asked_once_per_process(monkeypatch) -> None:
+    keyboard_module = pytest.importorskip("experiments.desktop_demo.macos_keyboard")
+    calls = []
+    monkeypatch.setattr(
+        keyboard_module.AX, "AXUIElementCreateApplication", lambda pid: ("app", pid)
+    )
+    monkeypatch.setattr(
+        keyboard_module.AX,
+        "AXUIElementSetAttributeValue",
+        lambda element, name, value: calls.append((element, name, value)) or -25208,
+    )
+
+    def app(bundle, pid):
+        return SimpleNamespace(bundleIdentifier=lambda: bundle, processIdentifier=lambda: pid)
+
+    web = keyboard_module.WebAccessibility()
+    assert keyboard_module.needs_web_accessibility("com.brave.Browser")
+    assert not keyboard_module.needs_web_accessibility("com.apple.Safari")
+    assert web.update(app("com.brave.Browser", 41))
+    assert not web.update(app("com.brave.Browser", 41))
+    assert not web.update(app("com.apple.Terminal", 7)) and not web.update(None)
+    assert calls == [(("app", 41), "AXEnhancedUserInterface", True)]

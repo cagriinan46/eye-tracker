@@ -45,6 +45,12 @@ BACK = ("back", "Geri", "chevron.left")
 RECENTRE = ("recentre", "Kafa ortala", "dot.viewfinder")
 RECENTRE_DELAY_SECONDS = 1.5  # time to turn the head back from the rail before recentring
 REVEAL_KEYBOARD_AFTER_SECONDS = 0.35  # let the clicked app move focus first
+SCROLL_STOP_HINTS = {
+    "long_blink": "gözlerini 1 sn kapat",
+    "smile": "gülümse",
+    "wink_right": "sağ gözünü kırp",
+    "wink_left": "sol gözünü kırp",
+}
 WIDTH = 340
 
 
@@ -152,7 +158,17 @@ class ScrollRepeat:
 
 
 class Toolbar:
-    def __init__(self, size, recalibrate, open_settings, keyboard, recentre=None, head_mode=False):
+    def __init__(
+        self,
+        size,
+        recalibrate,
+        open_settings,
+        keyboard,
+        recentre=None,
+        head_mode=False,
+        scroll_stop_hint=lambda: SCROLL_STOP_HINTS["long_blink"],
+    ):
+        self.scroll_stop_hint = scroll_stop_hint
         self.width, self.height = size
         # Issue #160: head-cursor extras. ``recentre`` asks the model to recentre.
         self.recentre = recentre
@@ -927,7 +943,7 @@ class Toolbar:
                     self.mark(self.anchor, "armed")
                     self.show_hint(
                         "Kafanı aşağı eğ: aşağı, yukarı kaldır: yukarı.\n"
-                        "Durdurmak için gözlerini kapat (0,3 sn)."
+                        f"Durdurmak için {self.scroll_stop_hint()}."
                     )
                     return True
                 self.mark(self.anchor if self.active_mode == "precise" else None, "armed")

@@ -70,6 +70,45 @@ def panel_rect(element, fallback, size="medium"):
 
 
 KEY_CODES = {"backspace": 51, "delete_word": 51, "enter": 36}
+# Chromium browsers expose web-page elements (e.g. the YouTube search box) to
+# Accessibility only after an assistive tool sets AXEnhancedUserInterface, as
+# VoiceOver does. Verified on Brave 2026-11-28: before, only the address bar was
+# visible; after, the search box appeared as a settable AXComboBox (Issue #160).
+CHROMIUM_BROWSERS = frozenset(
+    {
+        "com.brave.Browser",
+        "com.google.Chrome",
+        "com.microsoft.edgemac",
+        "com.vivaldi.Vivaldi",
+        "com.operasoftware.Opera",
+        "org.chromium.Chromium",
+        "company.thebrowser.Browser",
+    }
+)
+
+
+def needs_web_accessibility(bundle_id):
+    return str(bundle_id) in CHROMIUM_BROWSERS
+
+
+class WebAccessibility:
+    """Ask each frontmost Chromium browser process once to expose its web content."""
+
+    def __init__(self):
+        self.enabled = set()
+
+    def update(self, app):
+        if app is None or not needs_web_accessibility(app.bundleIdentifier()):
+            return False
+        pid = app.processIdentifier()
+        if pid in self.enabled:
+            return False
+        self.enabled.add(pid)
+        # Chromium applies the setting even though the call reports -25208.
+        AX.AXUIElementSetAttributeValue(
+            AX.AXUIElementCreateApplication(pid), "AXEnhancedUserInterface", True
+        )
+        return True
 
 
 class KeyboardPanel(UI.NSPanel):

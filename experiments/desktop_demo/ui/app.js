@@ -55,6 +55,7 @@ function appearance(p){
   for(const el of document.querySelectorAll('[data-kb-size]'))el.setAttribute('aria-pressed',String(el.dataset.kbSize===(p.keyboard_size||'medium')));
   const winks={left:p.wink_left||'left',right:p.wink_right||'right',smile:p.smile||'left'};
   for(const el of document.querySelectorAll('[data-wink-eye]'))el.setAttribute('aria-pressed',String(winks[el.dataset.winkEye]===el.dataset.winkAction));
+  for(const el of document.querySelectorAll('[data-scroll-stop]'))el.setAttribute('aria-pressed',String(el.dataset.scrollStop===(p.scroll_stop||'long_blink')));
 }
 async function saveAppearance(p){
   if(userBusy)return;
@@ -262,6 +263,7 @@ for(const el of document.querySelectorAll('[data-theme-choice]'))el.onclick=()=>
 $('motionToggle').onclick=()=>saveAppearance({reduced_motion:!state?.preferences?.reduced_motion});
 for(const el of document.querySelectorAll('[data-kb-size]'))el.onclick=()=>saveAppearance({keyboard_size:el.dataset.kbSize});
 for(const el of document.querySelectorAll('[data-wink-eye]'))el.onclick=()=>saveAppearance({[el.dataset.winkEye==='smile'?'smile':'wink_'+el.dataset.winkEye]:el.dataset.winkAction});
+for(const el of document.querySelectorAll('[data-scroll-stop]'))el.onclick=()=>saveAppearance({scroll_stop:el.dataset.scrollStop});
 $('suggestToggle').onclick=()=>saveAppearance({word_suggestions:state?.preferences?.word_suggestions===false});
 $('pause').onclick=()=>act(state?.paused?'resume':'pause');
 $('kbPause').onclick=()=>act(state?.paused?'resume':'pause');

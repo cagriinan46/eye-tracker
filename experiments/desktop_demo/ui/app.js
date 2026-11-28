@@ -74,7 +74,7 @@ function results(s){const count=k=>s.trials.filter(t=>t.outcome===k).length;
   $('recordPath').textContent=s.record_path?'Seçimlerin bu cihazda saklandı.':'Bu oturum kaydedilemedi.';
 }
 function render(s){
-  state=s;document.title='Eye Tracker · '+({mgaze:'MGaze',unigaze:'UniGaze',mpiifacegaze:'MPIIFaceGaze ResNet-18'}[s.model_name]);const phase=s.phase;const measurement=['calibration','calibration_retry','check','fitting'].includes(phase);
+  state=s;document.title='Eye Tracker · '+({mgaze:'MGaze',unigaze:'UniGaze',mpiifacegaze:'MPIIFaceGaze ResNet-18',head:'Kafa imleci'}[s.model_name]);if(s.model_name==='head'){const step=document.querySelector('#stepCalibration p');if(step)step.textContent='Beliren noktayı burnunla göster; gözle değil. Süre dolana kadar kafanı orada tut. Sonra imleci kaydırmak için R tuşunu basılı tutarak ortalayabilirsin.';}const phase=s.phase;const measurement=['calibration','calibration_retry','check','fitting'].includes(phase);
   if(lastToken!==s.token){
     lastToken=s.token;acknowledged=null;
     show(measurement?'measurement':['ready','demo','results','keyboard'].includes(phase)?phase:'preparation');
@@ -137,7 +137,7 @@ function render(s){
   if(phase==='ready')$('checkError').textContent=Math.round(s.checks.reduce((v,r)=>v+r.mean_px,0)/s.checks.length)+' px';
   if(phase==='demo'){
     $('instruction').textContent=s.paused?'Mola veriyoruz.':s.instruction||'“'+names[s.expected]+'” öğesini seç.';
-    $('trialInfo').textContent=s.paused?'Hazır olduğunda Devam et düğmesine bas.':`Adım ${s.index+1} / ${s.total_trials} · İstenen öğeye bakışını sabitle.`;
+    $('trialInfo').textContent=s.paused?'Hazır olduğunda Devam et düğmesine bas.':`Adım ${s.index+1} / ${s.total_trials} · `+(s.model_name==='head'?'İmleci burnunla istenen öğeye getir ve tut. Kayarsa R tuşunu basılı tut.':'İstenen öğeye bakışını sabitle.');
     $('pause').textContent=s.paused?'Devam et':'Duraklat';$('targets').classList.toggle('paused',s.paused);
     $('trackingLabel').textContent=s.paused?'Duraklatıldı':s.tracking?'Bakışın izleniyor':s.signal_status==='processing_delayed'?'İşlem gecikiyor. Bakışla seçim bekletiliyor.':'Geçerli bakış verisi bekleniyor.';
     for(const el of targetEls){const on=el.dataset.control===s.dwell_target&&!s.paused;el.classList.toggle('focused',on);fillFor(el).style.width=(on?s.dwell_progress*100:0)+'%';}

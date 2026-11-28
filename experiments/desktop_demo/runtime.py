@@ -61,6 +61,8 @@ class DesktopAPI:
         # Opt-in timing aggregates (issue #145); None keeps normal runs unchanged.
         self._perf = perf.PerfRecorder(self._output, model_name) if perf_diagnostics else None
         self._suggester = None
+        self._recentre_requested = False
+        self._recentre_count = 0
 
     def _keyboard_suggester(self):
         with self._lock:
@@ -93,6 +95,9 @@ class DesktopAPI:
             return active, self._desktop_frame, self._preferences["reduced_motion"]
         finally:
             self._lock.release()
+
+    def supports_recentre(self):
+        return self._model_name == "head"
 
     def desktop_failed(self, message):
         with self._lock:
@@ -196,6 +201,10 @@ class DesktopAPI:
                     self._desktop_active = True
                 elif action == "desktop_stop":
                     self._desktop_active = False
+                elif action == "recentre":
+                    if not self.supports_recentre() or self._camera != "ready" or not s.calibrated:
+                        raise ValueError("Ortalama kafa imleci kalibrasyonundan sonra çalışır.")
+                    self._recentre_requested = True
                 elif action == "native_page_ready":
                     if payload["page"] == self._native_page:
                         self._native_page = None
@@ -384,6 +393,7 @@ class DesktopAPI:
             calibration_variant=s.calibration_variant,
             calibration_seconds=s.calibration_seconds,
             selected_model=self._model_name,
+            head_recentres=self._recentre_count if self._model_name == "head" else None,
             scenario=self._session.scenario,
             appearance=dict(self._preferences),
             latest_raw_point=self._last_raw_point,
@@ -411,7 +421,9 @@ class DesktopAPI:
                 from .unigaze_model import CameraModel
 
                 options = (
-                    {"model_name": self._model_name} if self._model_name == "mpiifacegaze" else {}
+                    {"model_name": self._model_name}
+                    if self._model_name in ("mpiifacegaze", "head")
+                    else {}
                 )
                 model = CameraModel(self._camera_index, stop_event=self._stop, **options)
             with self._lock:
@@ -430,6 +442,8 @@ class DesktopAPI:
                         model.desktop_blink = self._desktop_active
                     reset_filter = self._reset_filter
                     self._reset_filter = False
+                    recentre = self._recentre_requested
+                    self._recentre_requested = False
                     preview = not self._desktop_active and self._session.phase in (
                         "preparation",
                         "error",
@@ -439,6 +453,9 @@ class DesktopAPI:
                 reset_started = time.perf_counter()
                 if reset_filter and hasattr(model, "reset_filter"):
                     model.reset_filter()
+                if recentre and hasattr(model, "recentre") and model.recentre():
+                    with self._lock:
+                        self._recentre_count += 1
                 read_started = time.perf_counter()
                 captured, features, point, jpeg = model.read(preview=preview)
                 read_done = time.perf_counter()

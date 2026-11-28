@@ -361,6 +361,38 @@ size. **No human typing result exists yet**: the keyboard
 has synthetic tests and a browser render only; it has not been run in the native
 window or with real gaze.
 
+## Head cursor mode (issue #160)
+
+`--model head` replaces the gaze model with the head pointer chosen in
+[Issue #156](../head_pointer/RESULTS.md): RAY, the point where the head's
+forward axis meets the camera plane (MediaPipe Face Landmarker transformation
+matrix).
+
+- **Calibration:** the same 13×20 timed calibration and the same standardized
+  Ridge (alpha 0.1). Point the **nose**, not the eyes, at each dot.
+- **Point filter:** One Euro 0.3 Hz / β 0.03, the frozen-rule outcome of
+  [Issue #158](../head_pointer_tuning/RESULTS.md), whose evidence was weak.
+- **Shared with gaze mode:** the 5-point check, the 12 tasks, desktop control,
+  the magnet, the toolbar and the double-blink clicks. They run unchanged.
+- **Blinks:** eye closure comes from MediaPipe eye landmarks. A blink does not
+  remove the head signal, so the cursor holds still during a blink.
+- **Recentring:** hold **R** for at least 0.35 s to make the current head pose
+  the screen centre. It works in the app window and during desktop control,
+  after calibration. A short tap does nothing, so typing "r" does not
+  recentre. Each session record counts the recentres in `head_recentres`.
+- **Environment:** the worker runs in the GazeFollower environment
+  (`EYE_TRACKER_MGAZE_PYTHON`, MediaPipe 0.10.35) and needs only
+  `.venv/models/face_landmarker.task` (or `EYE_TRACKER_BLINK_MODEL`). It does
+  not use UniGaze weights or camera intrinsics.
+
+```sh
+source ~/.eye-tracker/env.sh   # this Mac's local configuration
+PYTHONPATH=src:. "$EYE_TRACKER_MGAZE_PYTHON" -m experiments.desktop_demo --model head --camera-index 0
+```
+
+Limits: one participant has used it. Comfort over long use and other users
+are unmeasured. Windows is not supported.
+
 ## Performance diagnostics (issue #145)
 
 Measurement only, for the reported lag (smooth for 2–3 s after calibration, then

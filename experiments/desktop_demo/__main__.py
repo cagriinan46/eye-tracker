@@ -27,7 +27,7 @@ def main():
     parser.add_argument("--camera-index", type=int, default=None)
     parser.add_argument("--output", type=Path, default=None)
     parser.add_argument(
-        "--model", choices=("mpiifacegaze", "unigaze", "mgaze"), default="mpiifacegaze"
+        "--model", choices=("mpiifacegaze", "unigaze", "mgaze", "head"), default="mpiifacegaze"
     )
     parser.add_argument(
         "--perf-diagnostics",

@@ -18,6 +18,7 @@ from eye_tracker.platform_adapters.macos_accessibility import MacOSAccessibility
 from eye_tracker.platform_adapters.macos_outline import _screen_matches
 
 from .desktop_gaze_filter import DesktopGazeFilter
+from .hold_key import R_KEY_CODE, HoldKey
 from .macos_keyboard import FocusKeyboard
 from .macos_targets import Dock, window_targets
 from .macos_toolbar import Toolbar, nonactivating_panel
@@ -43,6 +44,7 @@ class MacOSDesktop:
         self.toolbar = self.ring = self.feed = None
         self.closed = False
         self.escape_down = False
+        self.recentre_key = HoldKey()
         self.magnet = RingMagnet()
         self.fixation = DesktopGazeFilter()
         self.aim = PointerSmoother(fast=0.065, slow=0.16)
@@ -203,6 +205,12 @@ class MacOSDesktop:
             self.stop()
             return
         try:
+            if getattr(self.api, "supports_recentre", lambda: False)():
+                held = bool(Quartz.CGEventSourceKeyState(HID, R_KEY_CODE))
+                if self.recentre_key.update(time.monotonic(), held):
+                    result = self.api.command("recentre")
+                    if not result.get("ok"):
+                        logger.info("Recentre ignored: %s", result.get("message"))
             reading = self.api.desktop_sample()
             if reading is not None:
                 active, frame, _ = reading

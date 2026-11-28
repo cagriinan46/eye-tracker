@@ -1,5 +1,6 @@
 """Native controls for the local desktop gaze trial."""
 
+import logging
 import math
 import plistlib
 import queue
@@ -22,6 +23,8 @@ from .dictation import Dictation
 from .eye_gestures import scroll_step
 from .macos_keyboard import attribute
 
+logger = logging.getLogger(__name__)
+
 COMMANDS = (
     ("left", "Sol tık", "cursorarrow.click"),
     ("right", "Sağ tık", "contextualmenu.and.cursorarrow"),
@@ -42,7 +45,8 @@ DIRECTIONS = (
 )
 VECTORS = {"up": (0, -1), "down": (0, 1), "left": (-1, 0), "right": (1, 0)}
 BACK = ("back", "Geri", "chevron.left")
-RAIL_COLLAPSE_SECONDS = 3.0  # the open menu closes after the cursor stays away this long
+RAIL_COLLAPSE_SECONDS = 3.0
+RAIL_OPEN_DWELL = 1.2  # the open menu closes after the cursor stays away this long
 RECENTRE = ("recentre", "Kafa ortala", "dot.viewfinder")
 RECENTRE_DELAY_SECONDS = 1.5  # time to turn the head back from the rail before recentring
 REVEAL_KEYBOARD_AFTER_SECONDS = 0.35  # let the clicked app move focus first
@@ -332,7 +336,8 @@ class Toolbar:
         if expanded != self.rail_expanded:
             self.rail_expanded = expanded
             self.rail_left_at = None
-            self.rail_dwell.reset()
+            # Fatih: choosing in the open menu was too fast at 0.72 s.
+            self.rail_dwell = RegionDwell(seconds=RAIL_OPEN_DWELL if expanded else 0.72)
             self.render_rail()
 
     def show_hint(self, text):
@@ -802,6 +807,7 @@ class Toolbar:
         gesture itself shifts the head-pose reading.
         """
         self.cancel_mode()
+        logger.info("head scroll start")
         self.active_mode, self.anchor, self.tools_ready = "scroll", point, True
         # tick() measures how far the cursor left the mode origin; without one it
         # crashed ("'NoneType' object is not iterable", Fatih 2026-11-28).
@@ -824,6 +830,7 @@ class Toolbar:
         """The stop gesture ends head scrolling (Issue #160)."""
         if self.head_scroll is None and not self.head_scroll_pending:
             return False
+        logger.info("head scroll stop")
         self.cancel_mode()
         self.show_hint("Kaydırma durdu.")
         return True
@@ -939,6 +946,7 @@ class Toolbar:
             if point is not None and not closed and not self.face_holding:
                 self.head_scroll = point[1]
                 self.head_scroll_pending = False
+                logger.info("head scroll neutral y=%.0f", self.head_scroll)
             return True
         if self.head_scroll is not None:
             # Blinks and missing frames pause scrolling but keep the anchor.

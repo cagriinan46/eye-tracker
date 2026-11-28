@@ -57,6 +57,47 @@ def desktop_point(point, viewport, size):
     )
 
 
+class DesktopStats:
+    """Every 5 s, log aggregate desktop-loop numbers (no images, no positions)."""
+
+    def __init__(self, period=5.0):
+        self.period = period
+        self.reset(None)
+
+    def reset(self, now):
+        self.since = now
+        self.ticks = self.locked = self.held = self.owned = 0
+        self.update_ms = []
+
+    def tick(self, now, update_ms, desktop):
+        if self.since is None:
+            self.reset(now)
+        self.ticks += 1
+        self.update_ms.append(update_ms)
+        self.locked += desktop.magnet.locked is not None
+        self.held += desktop.smile_point is not None
+        self.owned += desktop.last_cursor is None
+        if now - self.since >= self.period:
+            ordered = sorted(self.update_ms)
+            toolbar = desktop.toolbar
+            logger.info(
+                "stats %.0fs ticks=%d update_ms p50=%.1f p95=%.1f max=%.1f magnet_locked=%.0f%% "
+                "cursor_held=%.0f%% cursor_hidden=%.0f%% head_scroll=%s pending=%s holding=%s",
+                now - self.since,
+                self.ticks,
+                ordered[len(ordered) // 2],
+                ordered[int(0.95 * (len(ordered) - 1))],
+                ordered[-1],
+                100 * self.locked / self.ticks,
+                100 * self.held / self.ticks,
+                100 * self.owned / self.ticks,
+                None if toolbar is None else toolbar.head_scroll,
+                None if toolbar is None else toolbar.head_scroll_pending,
+                None if toolbar is None else toolbar.face_holding,
+            )
+            self.reset(now)
+
+
 class MacOSDesktop:
     def __init__(self, window, api):
         self.window, self.api = window, api
@@ -67,6 +108,7 @@ class MacOSDesktop:
         self.gestures = EyeGestures()
         self.wink_point = self.smile_point = None
         self.web_accessibility = WebAccessibility()
+        self.stats = DesktopStats()
         self.magnet = RingMagnet()
         self.fixation = DesktopGazeFilter()
         self.aim = PointerSmoother(fast=0.065, slow=0.16)
@@ -215,7 +257,9 @@ class MacOSDesktop:
         active = getattr(self.gestures, "active", None)
         if active is None:
             active = {"smile"} if self.gestures.smiling else set()
-        holding = any(actions.get(name, "off") != "off" for name in active)
+        holding = any(actions.get(name, "off") != "off" for name in active) and self.api_pref(
+            "face_hold", True
+        )
         # The face mesh relaxes after the score drops, so keep holding briefly.
         now = time.monotonic()
         if holding:
@@ -228,6 +272,12 @@ class MacOSDesktop:
         self.toolbar.face_holding = holding
         stop = self.api.scroll_stop()
         for event in events:
+            logger.info(
+                "gesture %s scroll=%s pending=%s",
+                event,
+                self.toolbar.head_scroll,
+                self.toolbar.head_scroll_pending,
+            )
             if self.toolbar.head_scroll is not None or self.toolbar.head_scroll_pending:
                 # While head scrolling only the stop gesture (or a scroll toggle) acts.
                 if event == stop or actions.get(event) == "scroll":
@@ -241,6 +291,10 @@ class MacOSDesktop:
             self.wink_point = None
         if events and not holding:
             self.smile_point = None
+
+    def api_pref(self, key, default):
+        values = getattr(self.api, "_preferences", None)
+        return values.get(key, default) if isinstance(values, dict) else default
 
     def perform(self, gesture, action, point):
         label = GESTURE_LABELS[gesture]
@@ -300,7 +354,10 @@ class MacOSDesktop:
             if self.ring.isVisible():
                 self.ring.orderOut_(None)
         elif point is not None:
-            if stamp != self.last_sample or self.assisted is None:
+            if not self.api_pref("magnet", True):
+                self.magnet.reset()
+                self.assisted = aim
+            elif stamp != self.last_sample or self.assisted is None:
                 targets = window_targets(self.feed, self.desktop_rect, now)
                 dock = self.dock_values[:]
                 if dock and now - dock[0][0] <= 0.38:
@@ -346,7 +403,9 @@ class MacOSDesktop:
                             )
                             if not _screen_matches(UI, self.size):
                                 raise RuntimeError("Ekran değişti. Kalibrasyonu yenile.")
+                        started = time.perf_counter()
                         self.update(now, frame)
+                        self.stats.tick(now, (time.perf_counter() - started) * 1000, self)
                     self.escape_down = escape
                 elif self.toolbar is not None:
                     self.stop()

@@ -1799,3 +1799,4 @@ They were cherry-picked unchanged onto `fix/160-desktop-head-followups` from
 main `0f7424d`. `git diff feature/desktop-head-cursor` before this entry was
 empty. A new PR carries them. The merged `feature/desktop-head-cursor` branch
 was not deleted.
+Published as [PR #162](https://github.com/cagriinan46/eye-tracker/pull/162) (OPEN, UNMERGED).

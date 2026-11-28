@@ -476,8 +476,9 @@ def test_protocol_skips_the_check_when_asked() -> None:
     other.fitted()
     assert other.phase == "check" and not other.calibrated
     assert preferences.DEFAULTS["calibration_check"] is False
-    with pytest.raises(ValueError, match="Kontrol"):
-        preferences.validated({"calibration_check": "yes"})
+    for key in ("calibration_check", "magnet", "face_hold"):
+        with pytest.raises(ValueError, match="açık veya kapalı"):
+            preferences.validated({key: "yes"})
 
 
 def test_gesture_started_head_scroll_sets_a_mode_origin() -> None:
@@ -493,3 +494,20 @@ def test_gesture_started_head_scroll_sets_a_mode_origin() -> None:
         module_quartz.CGWarpMouseCursorPosition = original
     # Toolbar.tick computes math.dist(point, mode_origin); this crashed before.
     assert t.mode_origin == (300.0, 400.0) and t.center_left
+
+
+def test_desktop_stats_log_aggregates_every_period(caplog) -> None:
+    desktop_module = pytest.importorskip("experiments.desktop_demo.macos_desktop")
+    stats = desktop_module.DesktopStats(period=1.0)
+    desktop = SimpleNamespace(
+        magnet=SimpleNamespace(locked=None),
+        smile_point=None,
+        last_cursor=(1, 2),
+        toolbar=SimpleNamespace(head_scroll=None, head_scroll_pending=False, face_holding=False),
+    )
+    caplog.set_level("INFO", logger="experiments.desktop_demo")
+    for i in range(30):
+        desktop.magnet.locked = "rect" if i % 3 == 0 else None
+        stats.tick(i / 20, 2.0, desktop)
+    lines = [r.getMessage() for r in caplog.records if r.getMessage().startswith("stats")]
+    assert lines and "magnet_locked=33%" in lines[0] and "update_ms p50=2.0" in lines[0]

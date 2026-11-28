@@ -1439,3 +1439,57 @@ Commits `071d9f0` (preregistration) and `6cd27ba` (results) are on
 `feature/head-pointer`, pushed. [PR #157](https://github.com/cagriinan46/eye-tracker/pull/157)
 is OPEN, non-draft and UNMERGED; the CI result was not yet known when this was
 written. No merge by the agent.
+
+## 2026-11-28 17:35 +03:00 — correction: PR #157 merged
+
+Verified at task start: [PR #157](https://github.com/cagriinan46/eye-tracker/pull/157)
+is **MERGED** (2026-11-28T14:12:18Z, squash commit `7fb4fe492f86f2a28d573829abb322c858dddad1`).
+`git diff main feature/head-pointer` is empty after syncing main. The entry
+above recorded it as pending. The branch was not deleted.
+
+## 2026-11-28 17:35 +03:00 — Issue #158: RAY head-pointer tuning, STEADY adopted on weak evidence
+
+**Request:** after #156, Fatih approved ("devam") a tuning step on RAY for
+steadiness and comfort. The issue is
+[#158](https://github.com/cagriinan46/eye-tracker/issues/158); the branch
+`feature/head-pointer-tuning` starts from main `7fb4fe4`.
+
+**Change:** a new `experiments/head_pointer_tuning/` reuses the #156
+calibration, filter, dwell and rule. `experiments/head_pointer/analysis.summarize`
+gained an optional `names` argument; its default behaviour is unchanged and
+tested. The conditions were:
+- **BASE:** the #156 settings.
+- **STEADY:** One Euro 0.3 Hz, β 0.03.
+- **STEADY_GAIN:** STEADY with gain 1.5 around the centre.
+
+An `r` recentre key and a 1–5 comfort rating per block were added. 9
+synthetic tests were added. The preregistration commit `dffd1cc` was pushed
+before the sessions.
+
+**Result:** sessions A (17:15) and B (17:23, after reseating), both complete,
+with no failed reads and no no-face frames.
+
+| Condition | Selected / timeouts | Pooled median time | Pooled median jitter |
+| --- | --- | --- | --- |
+| BASE | 30/32, 2 (both in session A) | 3.58 s | 6.69 px |
+| STEADY | 31/32, 1 | 3.89 s | 6.43 px |
+| STEADY_GAIN | 28/32, 4 | 4.04 s | 6.21 px |
+
+Comfort ratings: BASE 4 and 5, STEADY 4 and 4, STEADY_GAIN 3 and 4. Recentre
+was used 0 times.
+
+**Frozen rule: STEADY wins and is adopted** as the only condition that passed.
+This is recorded as weak evidence:
+- BASE was faster, and its two timeouts were at one position.
+- The same settings had 0 timeouts in #156.
+- Jitter was almost unchanged.
+
+**Exploratory:** the unfiltered and filtered spread in the final 0.8 s of a
+dwell are about equal (roughly 5–6 px), so the spread is slow head motion that
+a filter cannot remove. Details are in
+`experiments/head_pointer_tuning/RESULTS.md`; the data are local in `.venv/`.
+
+**Pending:** human review of the PR. The next task needs approval: either a
+head-cursor mode in desktop control with the existing magnet, or a
+speed-dependent gain test. Whether integration uses STEADY or BASE is a human
+decision.

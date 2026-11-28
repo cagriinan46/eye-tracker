@@ -297,7 +297,7 @@ class Toolbar:
             width = 2 * tile + gap + 18
             height = rows * (tile + gap) + 11
         else:
-            tile = 96
+            tile = 72
             width = height = tile + 18
         view = self.surface((width, height), color(0.07, 0.09, 0.13, 0.96), 23)
         view.layer().setBorderWidth_(1)
@@ -315,7 +315,7 @@ class Toolbar:
                 button = self.button(key, "", icon, rect)
             else:
                 rect = ((9, 9), (tile, tile))
-                button = self.button(key, label, icon, rect)
+                button = self.button(key, "", icon, rect)
                 button.layer().setCornerRadius_(18)
                 button.layer().setBackgroundColor_(self.hover_card.CGColor())
             button.setAccessibilityLabel_(label)
@@ -803,6 +803,9 @@ class Toolbar:
         """
         self.cancel_mode()
         self.active_mode, self.anchor, self.tools_ready = "scroll", point, True
+        # tick() measures how far the cursor left the mode origin; without one it
+        # crashed ("'NoneType' object is not iterable", Fatih 2026-11-28).
+        self.mode_origin, self.center_left = point, True
         self.head_scroll_pending = True
         Quartz.CGWarpMouseCursorPosition(point)
         self.mark(point, "armed")

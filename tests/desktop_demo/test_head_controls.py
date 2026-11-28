@@ -276,6 +276,7 @@ def test_scroll_stop_preference_and_desktop_routing(tmp_path, monkeypatch) -> No
         show_hint=lambda text: None,
     )
     desktop.wink_point = desktop.smile_point = None
+    desktop.hold_release = 0.0
     desktop.mouse_location = lambda: (10.0, 20.0)
     events = iter([["wink_right", "long_blink"], ["smile"], ["wink_right"]])
     desktop.gestures = SimpleNamespace(
@@ -412,10 +413,14 @@ def test_active_set_drives_the_cursor_hold() -> None:
     g = EyeGestures()
     g.update(0.0, *REST)
     assert g.active == set()
-    g.update(0.033, 0.1, 0.12, 0.0, 0.35, 0.05, 0.2)  # mouth starting to open
+    g.update(0.033, 0.1, 0.12, 0.0, 0.35, 0.05, 0.2)  # slightly open: still free
+    assert g.active == set()
+    g.update(0.066, 0.1, 0.12, 0.0, 0.45, 0.05, 0.2)  # clearly opening
     assert g.active == {"mouth_open"}
-    g.update(0.066, 0.1, 0.12, 0.2, 0.03, 0.05, 0.55)
+    g.update(0.1, 0.1, 0.12, 0.2, 0.03, 0.05, 0.6)
     assert g.active == {"smile", "brows"}
+    g.update(0.133, 0.1, 0.12, 0.0, 0.03, 0.05, 0.5)  # looking up (<= 0.38 recorded)
+    assert g.active == set()
 
 
 def test_open_mouth_or_raised_brows_veto_a_wink() -> None:
@@ -458,3 +463,33 @@ def test_head_scroll_from_a_gesture_waits_for_the_gesture_to_end() -> None:
     t.cancel_mode = module.Toolbar.cancel_mode.__get__(t)
     t.mark = lambda *a: None
     assert t.stop_head_scroll() and t.head_scroll is None
+
+
+def test_protocol_skips_the_check_when_asked() -> None:
+    from experiments.desktop_demo.protocol import Session
+
+    session = Session("head")
+    session.skip_check = True
+    session.fitted()
+    assert session.phase == "ready" and session.calibrated
+    other = Session("head")
+    other.fitted()
+    assert other.phase == "check" and not other.calibrated
+    assert preferences.DEFAULTS["calibration_check"] is False
+    with pytest.raises(ValueError, match="Kontrol"):
+        preferences.validated({"calibration_check": "yes"})
+
+
+def test_gesture_started_head_scroll_sets_a_mode_origin() -> None:
+    module, t = _toolbar()
+    module_quartz = module.Quartz
+    original = module_quartz.CGWarpMouseCursorPosition
+    module_quartz.CGWarpMouseCursorPosition = lambda point: None
+    try:
+        t.cancel_mode = lambda: None
+        t.scroll_stop_hint = lambda: "ağzını aç"
+        t.start_head_scroll((300.0, 400.0))
+    finally:
+        module_quartz.CGWarpMouseCursorPosition = original
+    # Toolbar.tick computes math.dist(point, mode_origin); this crashed before.
+    assert t.mode_origin == (300.0, 400.0) and t.center_left

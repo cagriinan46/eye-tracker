@@ -17,6 +17,7 @@ DEFAULTS = {
     "pucker": "off",
     "brows": "double",
     "scroll_stop": "long_blink",
+    "calibration_check": False,
     "wink_sensitivity": "medium",
     "wink_right_min_ms": 250,
     "wink_left_min_ms": 550,
@@ -61,6 +62,8 @@ def validated(values):
         raise ValueError("Geçersiz klavye boyutu.")
     if any(result[key] not in ACTIONS for key in GESTURE_KEYS):
         raise ValueError("Geçersiz yüz hareketi eylemi.")
+    if type(result["calibration_check"]) is not bool:
+        raise ValueError("Kontrol ayarı açık veya kapalı olmalı.")
     if result["scroll_stop"] not in SCROLL_STOPS:
         raise ValueError("Geçersiz kaydırma durdurma hareketi.")
     if result["wink_sensitivity"] not in SENSITIVITIES:

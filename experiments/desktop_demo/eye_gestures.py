@@ -32,12 +32,14 @@ WINK_MAX_SECONDS = 1.0
 LONG_BLINK_SECONDS = 1.0  # both eyes closed this long: "long_blink" (stops head scroll)
 SMILE_ON = 0.5
 SMILE_OFF = 0.3
-SMILING = 0.15  # above rest (max 0.06): smiling has begun, so the cursor is held
+SMILING = 0.12  # above rest (max 0.06): smiling has begun, so the cursor is held
 # Held face gestures: blendshape, fire level, re-arm level, cursor-hold level, hold (s).
+# Hold levels sit above the recorded rest/talk/look-around ranges (jawOpen <= 0.27,
+# browInnerUp <= 0.38), so ordinary use never freezes the cursor.
 HELD = {
-    "mouth_open": ("jawOpen", 0.5, 0.3, 0.3, 0.5),
-    "pucker": ("mouthPucker", 0.7, 0.4, 0.5, 0.8),
-    "brows": ("browInnerUp", 0.6, 0.4, 0.5, 0.4),
+    "mouth_open": ("jawOpen", 0.5, 0.3, 0.4, 0.5),
+    "pucker": ("mouthPucker", 0.7, 0.4, 0.6, 0.8),
+    "brows": ("browInnerUp", 0.6, 0.4, 0.55, 0.4),
 }
 # Scores at or above these during an eye closure mean it is part of another
 # expression, not a wink (none of them occurred during recorded winks).

@@ -137,6 +137,7 @@ class Session:
         self.check_gaze = DesktopGazeFilter()
         self.phase = "preparation"
         self.calibrated = False
+        self.skip_check = False  # set from the "calibration_check" preference
         self.message = ""
         self.token = 0
         self.onset = None
@@ -257,6 +258,11 @@ class Session:
     def fitted(self):
         self.index = 0
         self.samples = []
+        if self.skip_check:
+            # Issue #160: Fatih asked to drop the 5-point check after calibration.
+            self.calibrated = True
+            self.transition("ready")
+            return
         self.transition("check")
 
     def set_regions(self, regions):

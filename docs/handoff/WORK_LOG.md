@@ -1432,3 +1432,10 @@ hashes recorded there.
 **Not established:** comfort, fatigue, other users, integration with the OS
 cursor. **Next, pending Fatih's approval:** a preregistered RAY tuning step
 (filter, gain, recentring).
+
+## 2026-11-28 13:58 +03:00 — Issue #156 published; review pending
+
+Commits `071d9f0` (preregistration) and `6cd27ba` (results) are on
+`feature/head-pointer`, pushed. [PR #157](https://github.com/cagriinan46/eye-tracker/pull/157)
+is OPEN, non-draft and UNMERGED; the CI result was not yet known when this was
+written. No merge by the agent.

@@ -6,6 +6,7 @@ import queue
 import sys
 import threading
 import time
+from collections import deque
 from pathlib import Path
 from uuid import uuid4
 
@@ -68,6 +69,8 @@ class DesktopAPI:
         self._dictation = None
         self._dictation_results = queue.Queue()
         self._dictation_seen = 0
+        # Every face-gesture sample reaches the desktop loop, even when it lags a frame.
+        self._eye_samples = deque(maxlen=240)
 
     def _keyboard_suggester(self):
         with self._lock:
@@ -123,6 +126,21 @@ class DesktopAPI:
             keyboard.insert_text(text, time.monotonic())
         else:
             keyboard.dictation_error = error or "Konuşma algılanmadı."
+
+    def drain_eye_samples(self):
+        if not self._lock.acquire(blocking=False):
+            return []
+        try:
+            samples = list(self._eye_samples)
+            self._eye_samples.clear()
+            return samples
+        finally:
+            self._lock.release()
+
+    def gesture_settings(self):
+        return {
+            key: self._preferences[key] for key in ("wink_sensitivity", *preferences.GESTURE_TIMES)
+        }
 
     def scroll_stop(self):
         """Issue #160: the face gesture that ends head scrolling."""
@@ -567,6 +585,7 @@ class DesktopAPI:
                             getattr(model, "blink_samples", None),
                             getattr(model, "eye_samples", None),
                         )
+                        self._eye_samples.extend(getattr(model, "eye_samples", None) or ())
                     if s.phase == "fitting":
                         x, y = s.calibration_arrays()
                         self._meta["training_fit_normalized"] = model.fit(x, y)

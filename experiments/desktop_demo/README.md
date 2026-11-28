@@ -462,6 +462,33 @@ are unmeasured. Windows is not supported.
   Gözleri kapat (≥ 1 s, default), Gülümse, Sağ göz or Sol göz
   (`scroll_stop`). While head scrolling, only that gesture acts and no
   gesture clicks.
+- **Rail menu:** the right-hand rail is one "Menü" button.
+  - Selecting it opens a single labelled column (icon and Turkish name):
+    Kapat, the commands, and Kafa ortala in head mode.
+  - The menu closes after any rail command, or once the cursor has stayed
+    off it for 3 s.
+  - While paused, the rail shows only "Devam et".
+- **Smile holds the cursor:** smiling reshapes the face mesh and reads as a
+  downward head tilt. In Fatih's recording the median pitch was 17.5° while
+  smiling, against 11.4° neutral and 10.4° talking, so the cursor slid down.
+  - While the smile score is ≥ 0.15 (rest ≤ 0.06) and the smile gesture is
+    not "Kapalı", the cursor is held.
+  - The smile click goes to the point where the smile began.
+- **Per-user detection:** Settings → "Algılama ayarları" sets:
+  - one-eye sensitivity: Düşük, Orta or Yüksek, giving asymmetry thresholds
+    of ±0.10/0.09, 0.07/0.06 or 0.05/0.04
+  - right-wink minimum: 100–800 ms
+  - left-wink minimum: 200–1000 ms
+  - wink maximum: 500–2000 ms
+  - eye-closing time: 500–3000 ms
+  - smile hold: 200–1500 ms
+
+  Steps are 50 ms, and the defaults are the recorded values above.
+- **No lost gesture samples:** gesture scores used to reach the desktop loop
+  only with the latest frame. A busy main thread could therefore drop samples
+  mid-closure, and the 0.25 s gap rule then discarded the wink. They are now
+  buffered (240 samples) and drained by the desktop loop. This is a
+  plausible cause of "sometimes it does not click"; it is not proven.
 - **Smoother keyboard and panels:** over the keyboard, the rail and open
   panel pages, the cursor keeps gliding without the magnet. Before this
   change it was hidden there and its smoothing was reset, so it jumped

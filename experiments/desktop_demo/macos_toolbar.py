@@ -42,6 +42,8 @@ DIRECTIONS = (
 )
 VECTORS = {"up": (0, -1), "down": (0, 1), "left": (-1, 0), "right": (1, 0)}
 BACK = ("back", "Geri", "chevron.left")
+RAIL_WIDTH = 214
+RAIL_COLLAPSE_SECONDS = 3.0  # the open menu closes after the cursor stays away this long
 RECENTRE = ("recentre", "Kafa ortala", "dot.viewfinder")
 RECENTRE_DELAY_SECONDS = 1.5  # time to turn the head back from the rail before recentring
 REVEAL_KEYBOARD_AFTER_SECONDS = 0.35  # let the clicked app move focus first
@@ -175,7 +177,8 @@ class Toolbar:
         self.head_mode = head_mode
         self.commands = COMMANDS + ((RECENTRE,) if recentre is not None else ())
         self.recentre_at = self.reveal_after = self.head_scroll = None
-        self.on_rail = False
+        self.on_rail = self.rail_expanded = False
+        self.rail_left_at = None
         self.recalibrate = recalibrate
         self.open_settings = open_settings
         self.scroll_multiplier = 1
@@ -276,12 +279,24 @@ class Toolbar:
         return label
 
     def render_rail(self):
-        rows = math.ceil(len(self.commands) / 2)
-        tile = math.floor(min(90, (self.height - 105) / rows))
-        gap = 7
-        width = 2 * tile + gap + 18
-        height = rows * (tile + gap) + 11
-        view = self.surface((width, height), color(0.07, 0.09, 0.13, 0.96), 23)
+        """Issue #160: one "Menü" button that expands into a labelled list."""
+        if self.paused:
+            items = [("pause", "Devam et", "play.fill")]
+        elif self.rail_expanded:
+            items = [("menu", "Kapat", "xmark"), *self.commands]
+        else:
+            items = [("menu", "Menü", "square.grid.2x2.fill")]
+        expanded = len(items) > 1
+        gap, pad = 6, 9
+        if expanded:
+            row = math.floor(min(58, (self.height - 120) / len(items) - gap))
+            width = RAIL_WIDTH
+            height = pad * 2 + len(items) * (row + gap) - gap
+        else:
+            row = width = 96
+            height = row + pad * 2
+            width += pad * 2
+        view = self.surface((width, height), color(0.07, 0.09, 0.13, 0.96), 22)
         view.layer().setBorderWidth_(1)
         view.layer().setBorderColor_(self.hover_card.CGColor())
         self.rail_origin = (self.width - width - 10, round((self.height - height) / 2))
@@ -290,17 +305,23 @@ class Toolbar:
         self.rail_rects = {}
         self.rail_hover = None
         self.rail_progress = self.surface((0, 4), self.accent, 2)
-        for i, (key, label, icon) in enumerate(self.commands):
-            y, x = divmod(i, 2)
-            rect = ((9 + x * (tile + gap), height - 9 - tile - y * (tile + gap)), (tile, tile))
-            if self.paused and key == "pause":
-                label, icon = "Devam et", "play.fill"
-            button = self.button(key, "", icon, rect)
+        for i, (key, label, icon) in enumerate(items):
+            if expanded:
+                rect = ((pad, height - pad - row - i * (row + gap)), (width - 2 * pad, row))
+                button = self.button(key, label, icon, rect)
+                button.setImagePosition_(UI.NSImageLeading)
+                button.setImageHugsTitle_(True)
+                button.setAlignment_(UI.NSTextAlignmentLeft)
+                button.layer().setCornerRadius_(12)
+            else:
+                rect = ((pad, pad), (row, row))
+                button = self.button(key, label, icon, rect)
+                button.layer().setCornerRadius_(18)
+                button.layer().setBackgroundColor_(self.hover_card.CGColor())
+            if key == "menu" and expanded:
+                button.layer().setBackgroundColor_(self.background.CGColor())
             button.setAccessibilityLabel_(label)
             button.setToolTip_(label)
-            button.setEnabled_(not self.paused or key == "pause")
-            if not button.isEnabled():
-                button.setAlphaValue_(0.38)
             view.addSubview_(button)
             self.rail_items[key] = (rect, button)
             self.rail_rects[key] = rect
@@ -308,6 +329,13 @@ class Toolbar:
         self.rail.setContentView_(view)
         self.rail.setFrame_display_((self.rail_origin, self.rail_size), False)
         self.rail.orderFrontRegardless()
+
+    def set_rail_expanded(self, expanded):
+        if expanded != self.rail_expanded:
+            self.rail_expanded = expanded
+            self.rail_left_at = None
+            self.rail_dwell.reset()
+            self.render_rail()
 
     def show_hint(self, text):
         size = (260, 56)
@@ -323,9 +351,13 @@ class Toolbar:
     def rail_feedback(self, key):
         if key != self.rail_hover:
             if self.rail_hover in self.rail_items:
-                self.rail_items[self.rail_hover][1].layer().setBackgroundColor_(self.card.CGColor())
+                base = self.card if self.rail_expanded else self.hover_card
+                if self.rail_hover == "menu" and self.rail_expanded:
+                    base = self.background
+                self.rail_items[self.rail_hover][1].layer().setBackgroundColor_(base.CGColor())
             if key in self.rail_items:
-                self.rail_items[key][1].layer().setBackgroundColor_(self.hover_card.CGColor())
+                hover = self.hover_card if self.rail_expanded else self.accent
+                self.rail_items[key][1].layer().setBackgroundColor_(hover.CGColor())
             self.rail_hover = key
         if key:
             (x, y), (width, _) = self.rail_items[key][0]
@@ -671,6 +703,11 @@ class Toolbar:
         self.render_rail()
 
     def command(self, key):
+        if key == "menu":
+            self.set_rail_expanded(not self.rail_expanded)
+            return
+        if self.rail_expanded and key in self.rail_rects:
+            self.set_rail_expanded(False)
         if self.visible and key in self.rects and not key.startswith("precise-"):
             (left, bottom), (width, height) = self.rects[key]
             origin, _ = self.last_frame
@@ -798,6 +835,13 @@ class Toolbar:
             point, (self.rail_origin, self.rail_size), self.rail_rects
         )
         self.on_rail = on_rail
+        if self.rail_expanded:
+            if on_rail:
+                self.rail_left_at = None
+            elif self.rail_left_at is None:
+                self.rail_left_at = now
+            elif now - self.rail_left_at >= RAIL_COLLAPSE_SECONDS:
+                self.set_rail_expanded(False)
         if self.paused and rail_key != "pause":
             rail_key = None
         if point is None:

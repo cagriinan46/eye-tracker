@@ -143,6 +143,8 @@ def _toolbar():
     t.last_action_stamp = None
     t.keyboard_owned = t.on_rail = t.visible = t.tools_ready = t.paused = False
     t.center_left = False
+    t.rail_expanded, t.rail_rects, t.rail_left_at = False, {}, None
+    t.rail_dwell = SimpleNamespace(reset=lambda: None)
     t.confirm = SimpleNamespace(phase="idle", reset=lambda: None)
     t.scrolling = t.direction = SimpleNamespace(reset=lambda: None)
     t.mark = lambda *a: None
@@ -261,10 +263,12 @@ def test_scroll_stop_preference_and_desktop_routing(tmp_path, monkeypatch) -> No
         click=lambda side, point: clicks.append(side),
         show_hint=lambda text: None,
     )
-    desktop.wink_point = None
+    desktop.wink_point = desktop.smile_point = None
     desktop.mouse_location = lambda: (10.0, 20.0)
     events = iter([["wink_right", "long_blink"], ["smile"], ["wink_right"]])
-    desktop.gestures = SimpleNamespace(pending=False, feed=lambda samples: next(events))
+    desktop.gestures = SimpleNamespace(
+        pending=False, smiling=False, feed=lambda samples: next(events)
+    )
     desktop.eye_gestures([])  # scrolling: no clicks, long blink is not the stop gesture
     assert clicks == [] and stops == []
     desktop.eye_gestures([])  # the chosen stop gesture
@@ -296,3 +300,74 @@ def test_chromium_browsers_are_asked_once_per_process(monkeypatch) -> None:
     assert not web.update(app("com.brave.Browser", 41))
     assert not web.update(app("com.apple.Terminal", 7)) and not web.update(None)
     assert calls == [(("app", 41), "AXEnhancedUserInterface", True)]
+
+
+def test_rail_menu_expands_collapses_after_commands_and_when_left() -> None:
+    module, t = _toolbar()
+    renders = []
+    t.render_rail = lambda: renders.append(t.rail_expanded)
+    t.cancel_mode = lambda: None
+    t.recentre = lambda: True
+    t.command("menu")
+    assert t.rail_expanded and renders == [True]
+    t.rail_rects = {"recentre": None, "menu": None}
+    t.command("recentre")  # a rail command closes the menu first
+    assert not t.rail_expanded and renders == [True, False]
+    t.command("menu")
+    assert t.rail_expanded
+    for now, on_rail in ((10.0, False), (12.0, False), (12.5, True), (13.0, False)):
+        t.on_rail = on_rail
+        if t.rail_expanded:  # same rule as Toolbar.tick
+            if on_rail:
+                t.rail_left_at = None
+            elif t.rail_left_at is None:
+                t.rail_left_at = now
+            elif now - t.rail_left_at >= module.RAIL_COLLAPSE_SECONDS:
+                t.set_rail_expanded(False)
+    assert t.rail_expanded  # returned to the rail before 3 s passed
+    t.rail_left_at = 13.0
+    t.on_rail = False
+    if 16.1 - t.rail_left_at >= module.RAIL_COLLAPSE_SECONDS:
+        t.set_rail_expanded(False)
+    assert not t.rail_expanded and t.rail_left_at is None
+
+
+def test_gesture_times_are_per_user_preferences(tmp_path) -> None:
+    from experiments.desktop_demo.eye_gestures import SENSITIVITY
+
+    values = preferences.validated({"wink_left_min_ms": 700, "wink_sensitivity": "high"})
+    assert values["wink_left_min_ms"] == 700
+    for bad in (
+        {"wink_left_min_ms": 725},
+        {"wink_left_min_ms": 150},
+        {"long_blink_ms": "1000"},
+        {"wink_sensitivity": "max"},
+    ):
+        with pytest.raises(ValueError):
+            preferences.validated(bad)
+    api = DesktopAPI(model_name="head", output=tmp_path, preferences_path=tmp_path / "p.json")
+    assert api.command("preferences", {"wink_left_min_ms": 400, "wink_sensitivity": "high"})["ok"]
+    g = EyeGestures()
+    g.configure(api.gesture_settings())
+    assert (g.left_min, g.right_asymmetry) == (0.4, SENSITIVITY["high"][0])
+    # The shorter left-wink time now accepts a 0.43 s left closure.
+    assert run(g, frames(LEFT, 13)) == ["wink_left"]
+    api.close()
+
+
+def test_smiling_state_starts_below_the_click_threshold() -> None:
+    g = EyeGestures()
+    g.update(0.0, 0.1, 0.1, 0.05)
+    assert not g.smiling
+    g.update(0.033, 0.1, 0.1, 0.2)
+    assert g.smiling
+    g.update(0.066, 0.1, 0.1, 0.1)
+    assert not g.smiling
+
+
+def test_runtime_buffers_eye_samples_until_drained(tmp_path) -> None:
+    api = DesktopAPI(model_name="head", output=tmp_path)
+    api._eye_samples.extend([(1.0, 0.1, 0.1, 0.0), (1.03, 0.2, 0.1, 0.0)])
+    assert api.drain_eye_samples() == [(1.0, 0.1, 0.1, 0.0), (1.03, 0.2, 0.1, 0.0)]
+    assert api.drain_eye_samples() == []
+    api.close()

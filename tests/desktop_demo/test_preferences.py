@@ -15,6 +15,12 @@ def test_appearance_survives_restart_without_camera_or_calibration(tmp_path):
         "wink_right": "right",
         "smile": "left",
         "scroll_stop": "long_blink",
+        "wink_sensitivity": "medium",
+        "wink_right_min_ms": 250,
+        "wink_left_min_ms": 550,
+        "wink_max_ms": 1000,
+        "long_blink_ms": 1000,
+        "smile_hold_ms": 400,
     }
     assert api.command("preferences", {"theme": "sunflower", "reduced_motion": True})["ok"]
     other = DesktopAPI(preferences_path=path)
@@ -27,6 +33,12 @@ def test_appearance_survives_restart_without_camera_or_calibration(tmp_path):
         "wink_right": "right",
         "smile": "left",
         "scroll_stop": "long_blink",
+        "wink_sensitivity": "medium",
+        "wink_right_min_ms": 250,
+        "wink_left_min_ms": 550,
+        "wink_max_ms": 1000,
+        "long_blink_ms": 1000,
+        "smile_hold_ms": 400,
     }
     assert other.snapshot()["camera"] == "off"
     assert not other.snapshot()["can_demo"]

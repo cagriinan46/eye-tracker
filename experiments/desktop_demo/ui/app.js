@@ -56,6 +56,8 @@ function appearance(p){
   const winks={left:p.wink_left||'left',right:p.wink_right||'right',smile:p.smile||'left'};
   for(const el of document.querySelectorAll('[data-wink-eye]'))el.setAttribute('aria-pressed',String(winks[el.dataset.winkEye]===el.dataset.winkAction));
   for(const el of document.querySelectorAll('[data-scroll-stop]'))el.setAttribute('aria-pressed',String(el.dataset.scrollStop===(p.scroll_stop||'long_blink')));
+  for(const el of document.querySelectorAll('[data-sensitivity]'))el.setAttribute('aria-pressed',String(el.dataset.sensitivity===(p.wink_sensitivity||'medium')));
+  for(const el of document.querySelectorAll('[data-time]')){const v=p[el.dataset.time]??gestureTimes[el.dataset.time][2];el.querySelector('output').textContent=(v/1000).toFixed(2).replace('.',',')+' sn';const [lo,hi]=gestureTimes[el.dataset.time];el.querySelector('[data-dir="-1"]').disabled=v<=lo;el.querySelector('[data-dir="1"]').disabled=v>=hi;}
 }
 async function saveAppearance(p){
   if(userBusy)return;
@@ -191,6 +193,8 @@ const kbLayout=[
 ];
 const kbNames={backspace:'Sil',page:'Sayfa değiştir',shift:'Büyük harf',space:'Boşluk',period:'Nokta',delete_word:'Kelimeyi sil',enter:'Yeni satır',dictation:'Türkçe dikte'};
 const kbEls={};let kbSent=null,kbSending=false,kbDictationError=null;
+// Issue #160: per-user gesture times [min, max, default] in ms (preferences.GESTURE_TIMES).
+const gestureTimes={wink_right_min_ms:[100,800,250],wink_left_min_ms:[200,1000,550],wink_max_ms:[500,2000,1000],long_blink_ms:[500,3000,1000],smile_hold_ms:[200,1500,400]};
 for(const row of kbLayout)for(const [id,span,start] of row){
   const el=document.createElement('button');el.className='kb-key'+(id.startsWith('sug')?' kb-sug':/^r\d/.test(id)?'':' kb-ctl');
   el.dataset.key=id;el.style.gridColumn=(start?start+' / ':'')+'span '+span;
@@ -264,6 +268,9 @@ $('motionToggle').onclick=()=>saveAppearance({reduced_motion:!state?.preferences
 for(const el of document.querySelectorAll('[data-kb-size]'))el.onclick=()=>saveAppearance({keyboard_size:el.dataset.kbSize});
 for(const el of document.querySelectorAll('[data-wink-eye]'))el.onclick=()=>saveAppearance({[el.dataset.winkEye==='smile'?'smile':'wink_'+el.dataset.winkEye]:el.dataset.winkAction});
 for(const el of document.querySelectorAll('[data-scroll-stop]'))el.onclick=()=>saveAppearance({scroll_stop:el.dataset.scrollStop});
+for(const el of document.querySelectorAll('[data-sensitivity]'))el.onclick=()=>saveAppearance({wink_sensitivity:el.dataset.sensitivity});
+for(const el of document.querySelectorAll('[data-time]'))for(const b of el.querySelectorAll('button'))b.onclick=()=>{const key=el.dataset.time,[lo,hi,def]=gestureTimes[key],v=state?.preferences?.[key]??def;saveAppearance({[key]:Math.min(hi,Math.max(lo,v+50*Number(b.dataset.dir)))});};
+$('gestureDefaults').onclick=()=>saveAppearance({wink_sensitivity:'medium',...Object.fromEntries(Object.entries(gestureTimes).map(([k,v])=>[k,v[2]]))});
 $('suggestToggle').onclick=()=>saveAppearance({word_suggestions:state?.preferences?.word_suggestions===false});
 $('pause').onclick=()=>act(state?.paused?'resume':'pause');
 $('kbPause').onclick=()=>act(state?.paused?'resume':'pause');

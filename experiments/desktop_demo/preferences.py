@@ -14,7 +14,22 @@ DEFAULTS = {
     "wink_right": "right",
     "smile": "left",
     "scroll_stop": "long_blink",
+    "wink_sensitivity": "medium",
+    "wink_right_min_ms": 250,
+    "wink_left_min_ms": 550,
+    "wink_max_ms": 1000,
+    "long_blink_ms": 1000,
+    "smile_hold_ms": 400,
 }
+# Per-user detection times (Issue #160): (minimum, maximum) in ms, 50 ms steps.
+GESTURE_TIMES = {
+    "wink_right_min_ms": (100, 800),
+    "wink_left_min_ms": (200, 1000),
+    "wink_max_ms": (500, 2000),
+    "long_blink_ms": (500, 3000),
+    "smile_hold_ms": (200, 1500),
+}
+SENSITIVITIES = ("low", "medium", "high")
 SCROLL_STOPS = ("long_blink", "smile", "wink_right", "wink_left")
 WINK_ACTIONS = ("left", "right", "off")
 KEYBOARD_SIZES = ("small", "medium", "large")
@@ -39,6 +54,12 @@ def validated(values):
         raise ValueError("Gülümseme ayarı sol tık, sağ tık veya kapalı olmalı.")
     if result["scroll_stop"] not in SCROLL_STOPS:
         raise ValueError("Geçersiz kaydırma durdurma hareketi.")
+    if result["wink_sensitivity"] not in SENSITIVITIES:
+        raise ValueError("Geçersiz göz kırpma hassasiyeti.")
+    for key, (low, high) in GESTURE_TIMES.items():
+        value = result[key]
+        if type(value) is not int or not low <= value <= high or value % 50:
+            raise ValueError("Algılama süresi geçersiz.")
     return result
 
 

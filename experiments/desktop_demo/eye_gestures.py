@@ -22,6 +22,7 @@ WINK_MAX_SECONDS = 1.0
 LONG_BLINK_SECONDS = 1.0  # both eyes closed this long: "long_blink" (stops head scroll)
 SMILE_ON = 0.5
 SMILE_OFF = 0.3
+SMILING = 0.15  # above rest (max 0.06): smiling has begun, so the cursor is held
 SMILE_HOLD_SECONDS = 0.4
 REFRACTORY_SECONDS = 0.35
 MAX_GAP_SECONDS = 0.25
@@ -40,10 +41,31 @@ def user_scores(sample):
     return stamp, second, first, smile
 
 
+SENSITIVITY = {  # (right, left) mean-asymmetry thresholds
+    "high": (0.05, -0.04),
+    "medium": (RIGHT_ASYMMETRY, LEFT_ASYMMETRY),
+    "low": (0.10, -0.09),
+}
+
+
 class EyeGestures:
     def __init__(self):
         self.last_event = None
+        self.smiling = False
+        self.right_asymmetry, self.left_asymmetry = RIGHT_ASYMMETRY, LEFT_ASYMMETRY
+        self.right_min, self.left_min = RIGHT_WINK_MIN_SECONDS, LEFT_WINK_MIN_SECONDS
+        self.wink_max, self.long_blink = WINK_MAX_SECONDS, LONG_BLINK_SECONDS
+        self.smile_hold = SMILE_HOLD_SECONDS
         self.reset()
+
+    def configure(self, settings):
+        """Per-user values from the preferences (milliseconds and a sensitivity)."""
+        self.right_asymmetry, self.left_asymmetry = SENSITIVITY[settings["wink_sensitivity"]]
+        self.right_min = settings["wink_right_min_ms"] / 1000
+        self.left_min = settings["wink_left_min_ms"] / 1000
+        self.wink_max = settings["wink_max_ms"] / 1000
+        self.long_blink = settings["long_blink_ms"] / 1000
+        self.smile_hold = settings["smile_hold_ms"] / 1000
 
     def reset(self):
         self.start = None
@@ -51,6 +73,7 @@ class EyeGestures:
         self.long_fired = False
         self.smile_since = None
         self.smile_fired = False
+        self.smiling = False
         self.last = None
 
     @property
@@ -79,19 +102,20 @@ class EyeGestures:
                 self.start, self.asymmetry, self.long_fired = stamp, [], False
             self.asymmetry.append(right - left)
             both = min(left, right) >= CLOSE_START
-            if both and not self.long_fired and stamp - self.start >= LONG_BLINK_SECONDS:
+            if both and not self.long_fired and stamp - self.start >= self.long_blink:
                 self.long_fired = True
                 events.append("long_blink")
         elif self.start is not None:
             duration = stamp - self.start
             mean = sum(self.asymmetry) / len(self.asymmetry)
-            if not self.long_fired and duration <= WINK_MAX_SECONDS:
-                if mean >= RIGHT_ASYMMETRY and duration >= RIGHT_WINK_MIN_SECONDS:
+            if not self.long_fired and duration <= self.wink_max:
+                if mean >= self.right_asymmetry and duration >= self.right_min:
                     self._emit(events, "wink_right", stamp)
-                elif mean <= LEFT_ASYMMETRY and duration >= LEFT_WINK_MIN_SECONDS:
+                elif mean <= self.left_asymmetry and duration >= self.left_min:
                     self._emit(events, "wink_left", stamp)
             self.start = None
         if smile is not None:
+            self.smiling = smile >= SMILING
             if self.start is not None or smile < SMILE_OFF:
                 # A squint during a wink raises the smile score; never count it.
                 self.smile_since = None
@@ -100,7 +124,7 @@ class EyeGestures:
             elif smile >= SMILE_ON and not self.smile_fired:
                 if self.smile_since is None:
                     self.smile_since = stamp
-                if stamp - self.smile_since >= SMILE_HOLD_SECONDS:
+                if stamp - self.smile_since >= self.smile_hold:
                     self.smile_fired = True
                     self._emit(events, "smile", stamp)
         return events

@@ -47,7 +47,7 @@ class MacOSDesktop:
         self.escape_down = False
         self.recentre_key = HoldKey()
         self.gestures = EyeGestures()
-        self.wink_point = None
+        self.wink_point = self.smile_point = None
         self.web_accessibility = WebAccessibility()
         self.magnet = RingMagnet()
         self.fixation = DesktopGazeFilter()
@@ -181,10 +181,24 @@ class MacOSDesktop:
 
     def eye_gestures(self, eye_samples):
         """Issue #160: winks click where the cursor was when the wink began."""
+        drain = getattr(self.api, "drain_eye_samples", None)
+        if drain is not None:
+            eye_samples = drain()
+        settings = getattr(self.api, "gesture_settings", None)
+        if settings is not None:
+            self.gestures.configure(settings())
         events = self.gestures.feed(eye_samples)
         if self.gestures.pending and self.wink_point is None:
             self.wink_point = self.mouse_location()
         actions = self.api.wink_actions()
+        # Smiling reshapes the face mesh and reads as a ~6° downward head tilt
+        # (Fatih's recording: median pitch 17.5° smiling vs 11.4° neutral), so the
+        # cursor is held while a smile gesture may be in progress.
+        holding = self.gestures.smiling and actions["smile"] != "off"
+        if holding and self.smile_point is None:
+            self.smile_point = self.mouse_location()
+        elif not holding and not any(e == "smile" for e in events):
+            self.smile_point = None
         stop = self.api.scroll_stop()
         for event in events:
             if self.toolbar.head_scroll is not None:
@@ -199,7 +213,7 @@ class MacOSDesktop:
                 label = {"right": "Sağ göz kırpma", "left": "Sol göz kırpma"}.get(
                     gesture, "Gülümseme"
                 )
-                point = self.mouse_location() if gesture == "smile" else self.wink_point
+                point = self.smile_point if gesture == "smile" else self.wink_point
                 if side in ("left", "right"):
                     self.toolbar.click(side, point or self.mouse_location())
                     self.toolbar.show_hint(f"{label} → {'sol' if side == 'left' else 'sağ'} tık")
@@ -207,6 +221,8 @@ class MacOSDesktop:
                     self.toolbar.show_hint(f"{label} (kapalı)")
         if not self.gestures.pending:
             self.wink_point = None
+        if events and not self.gestures.smiling:
+            self.smile_point = None
 
     def update(self, now, frame):
         stamp, normalized, closed, blink_samples, *rest = frame
@@ -233,7 +249,7 @@ class MacOSDesktop:
             self.magnet.reset()
             self.assisted = None
             self.last_sample = None
-            if aim is not None:
+            if aim is not None and self.smile_point is None:
                 self.display(now, aim, aim)
         elif owned or pressed:
             self.cursor.reset()
@@ -250,7 +266,8 @@ class MacOSDesktop:
                     targets.extend(dock[0][1])
                 self.assisted = self.magnet.update(stamp, point, targets)
                 self.last_sample = stamp
-            self.display(now, aim, self.assisted if self.magnet.locked else aim)
+            if self.smile_point is None:
+                self.display(now, aim, self.assisted if self.magnet.locked else aim)
         elif not valid:
             self.magnet.reset()
             self.last_sample = None

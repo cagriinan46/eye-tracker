@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import queue
 import sys
 import threading
 import time
@@ -63,6 +64,10 @@ class DesktopAPI:
         self._suggester = None
         self._recentre_requested = False
         self._recentre_count = 0
+        # Issue #160: Turkish dictation for the in-app keyboard.
+        self._dictation = None
+        self._dictation_results = queue.Queue()
+        self._dictation_seen = 0
 
     def _keyboard_suggester(self):
         with self._lock:
@@ -99,9 +104,33 @@ class DesktopAPI:
     def supports_recentre(self):
         return self._model_name == "head"
 
+    def _poll_app_dictation(self, keyboard):
+        if keyboard.dictation_requests != self._dictation_seen:
+            self._dictation_seen = keyboard.dictation_requests
+            if self._dictation is None:
+                from .dictation import Dictation
+
+                self._dictation = Dictation(self._dictation_results)
+            keyboard.dictation_error = None
+            started = self._dictation.start("app")
+            keyboard.dictation_status = "listening" if started else "processing"
+        try:
+            _, text, error = self._dictation_results.get_nowait()
+        except queue.Empty:
+            return
+        keyboard.dictation_status = None
+        if text:
+            keyboard.insert_text(text, time.monotonic())
+        else:
+            keyboard.dictation_error = error or "Konuşma algılanmadı."
+
     def wink_actions(self):
-        """Issue #160: what a left/right wink does ("left", "right" or "off")."""
-        return {"left": self._preferences["wink_left"], "right": self._preferences["wink_right"]}
+        """Issue #160: what each face gesture does ("left", "right" or "off")."""
+        return {
+            "left": self._preferences["wink_left"],
+            "right": self._preferences["wink_right"],
+            "smile": self._preferences["smile"],
+        }
 
     def desktop_failed(self, message):
         with self._lock:
@@ -164,6 +193,8 @@ class DesktopAPI:
                 self._session.pause(self._last_ui)
                 self._reset_filter = True
                 self._pointer_pause.clear()
+            if self._session.keyboard is not None:
+                self._poll_app_dictation(self._session.keyboard)
             state = self._session.snapshot()
             state.update(
                 camera=self._camera,
@@ -596,6 +627,8 @@ class DesktopAPI:
             if not self._closed:
                 self._closed = True
                 self._stop.set()
+                if self._dictation is not None:
+                    self._dictation.close()
                 try:
                     self._save("completed" if self._session.phase == "results" else "aborted")
                 except OSError:

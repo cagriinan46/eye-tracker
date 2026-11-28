@@ -53,7 +53,7 @@ function appearance(p){
   $('suggestToggle').setAttribute('aria-checked',String(p.word_suggestions!==false));
   document.documentElement.dataset.kbSize=p.keyboard_size||'medium';
   for(const el of document.querySelectorAll('[data-kb-size]'))el.setAttribute('aria-pressed',String(el.dataset.kbSize===(p.keyboard_size||'medium')));
-  const winks={left:p.wink_left||'left',right:p.wink_right||'right'};
+  const winks={left:p.wink_left||'left',right:p.wink_right||'right',smile:p.smile||'left'};
   for(const el of document.querySelectorAll('[data-wink-eye]'))el.setAttribute('aria-pressed',String(winks[el.dataset.winkEye]===el.dataset.winkAction));
 }
 async function saveAppearance(p){
@@ -186,10 +186,10 @@ const kbLayout=[
   Array.from({length:12},(_,c)=>['r0c'+c,2]),
   Array.from({length:11},(_,c)=>['r1c'+c,2,c?0:2]),
   [...Array.from({length:9},(_,c)=>['r2c'+c,2,c?0:3]),['backspace',4]],
-  [['page',4],['shift',4],['space',9],['period',3],['delete_word',4]],
+  [['page',3],['shift',2],['dictation',3],['space',7],['period',2],['delete_word',3],['enter',4]],
 ];
-const kbNames={backspace:'Sil',page:'Sayfa değiştir',shift:'Büyük harf',space:'Boşluk',period:'Nokta',delete_word:'Kelimeyi sil'};
-const kbEls={};let kbSent=null,kbSending=false;
+const kbNames={backspace:'Sil',page:'Sayfa değiştir',shift:'Büyük harf',space:'Boşluk',period:'Nokta',delete_word:'Kelimeyi sil',enter:'Yeni satır',dictation:'Türkçe dikte'};
+const kbEls={};let kbSent=null,kbSending=false,kbDictationError=null;
 for(const row of kbLayout)for(const [id,span,start] of row){
   const el=document.createElement('button');el.className='kb-key'+(id.startsWith('sug')?' kb-sug':/^r\d/.test(id)?'':' kb-ctl');
   el.dataset.key=id;el.style.gridColumn=(start?start+' / ':'')+'span '+span;
@@ -208,7 +208,7 @@ function renderKeyboard(s){
   $('kbKeys').classList.toggle('nosug',!k.suggestions_on);
   k.rows.forEach((row,r)=>row.forEach((c,i)=>label('r'+r+'c'+i,c)));
   k.suggestions.forEach((word,i)=>{const el=kbEls['sug'+i];label('sug'+i,word);el.classList.toggle('gone',!k.suggestions_on);el.classList.toggle('empty',!word);el.disabled=!word;});
-  label('backspace','⌫');label('page',k.page==='letters'?'?123':'ABC');label('shift','⇧');label('space','boşluk');label('period','.');label('delete_word','kelime sil');
+  label('backspace','⌫');label('page',k.page==='letters'?'?123':'ABC');label('shift','⇧');label('space','boşluk');label('period','.');label('delete_word','kelime sil');label('enter','↵ enter');label('dictation',({listening:'dinleniyor…',processing:'yazılıyor…'})[k.dictation]||'dikte');kbEls.dictation.classList.toggle('on',!!k.dictation);if(k.dictation_error&&k.dictation_error!==kbDictationError)notice('Dikte: '+k.dictation_error);kbDictationError=k.dictation_error;
   kbEls.shift.classList.toggle('on',k.shift&&k.page==='letters');
   for(const [id,el] of Object.entries(kbEls)){const on=id===s.dwell_target&&!s.paused;el.classList.toggle('focused',on);el.lastChild.style.width=(on?s.dwell_progress*100:0)+'%';}
   const st=k.stats,parts=[st.characters+' karakter'];
@@ -261,7 +261,7 @@ $('practiceSetup').onclick=()=>navigate('calibration');
 for(const el of document.querySelectorAll('[data-theme-choice]'))el.onclick=()=>saveAppearance({theme:el.dataset.themeChoice});
 $('motionToggle').onclick=()=>saveAppearance({reduced_motion:!state?.preferences?.reduced_motion});
 for(const el of document.querySelectorAll('[data-kb-size]'))el.onclick=()=>saveAppearance({keyboard_size:el.dataset.kbSize});
-for(const el of document.querySelectorAll('[data-wink-eye]'))el.onclick=()=>saveAppearance({['wink_'+el.dataset.winkEye]:el.dataset.winkAction});
+for(const el of document.querySelectorAll('[data-wink-eye]'))el.onclick=()=>saveAppearance({[el.dataset.winkEye==='smile'?'smile':'wink_'+el.dataset.winkEye]:el.dataset.winkAction});
 $('suggestToggle').onclick=()=>saveAppearance({word_suggestions:state?.preferences?.word_suggestions===false});
 $('pause').onclick=()=>act(state?.paused?'resume':'pause');
 $('kbPause').onclick=()=>act(state?.paused?'resume':'pause');

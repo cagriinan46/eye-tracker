@@ -395,18 +395,58 @@ are unmeasured. Windows is not supported.
 
 ### Wink clicks, head scroll and smoother panels (Fatih's feedback, same issue)
 
-- **Wink clicks (both modes):** a short one-eye closure (0.12–0.9 s, other eye
-  open) clicks where the cursor was when the wink began. Default: right eye →
-  right click, left eye → left click. Settings → "Sağ/Sol göz kırpma" choose
-  Sol tık / Sağ tık / Kapalı for each eye (`wink_right`, `wink_left`).
-  - A natural blink closes both eyes and never clicks.
-  - A hint names the detected eye and action.
-  - The scores are MediaPipe `eyeBlinkLeft`/`eyeBlinkRight` from the
-    existing blink stream. Their mapping to the user's own eyes is the
-    `BLENDSHAPE_LEFT_IS_USER_LEFT` constant.
-  - Double-blink clicks and the rail buttons still work.
+- **Winks and smile (both modes):** Settings choose Sol tık / Sağ tık /
+  Kapalı for "Sağ göz kırpma", "Sol göz kırpma" and "Gülümseme" (`wink_right`,
+  `wink_left`, `smile`). Defaults: right → right click, left → left click,
+  smile → left click.
+  - A wink clicks where the cursor was when the closure began. A smile clicks
+    at the current cursor.
+  - A hint names the detected gesture. Double-blink clicks and the rail
+    buttons still work.
+  - Scores are MediaPipe blendshapes from the existing blink stream:
+    `eyeBlinkLeft`/`eyeBlinkRight` and the mean of `mouthSmileLeft`/`Right`.
+  - **Thresholds come from one recording of Fatih**
+    (`experiments/head_pointer/face_gestures_check.py`, 2026-11-28,
+    `.venv/face-gestures-fatih-1.json`, 105 s, 2,370 frames).
+  - His winks also half-close the other eye (other-eye score 0.56–0.62). A
+    "one eye open" rule therefore rejected them.
+  - A closure (either eye ≥ 0.45, ends when both < 0.40) is classified when
+    it ends:
+    - right wink: mean(right − left) ≥ 0.07, lasting 0.25–1.0 s
+    - left wink: mean ≤ −0.06, lasting 0.55–1.0 s; his left winks lasted
+      0.63–0.90 s, his natural blinks 0.30–0.50 s
+    - long closure: both eyes closed for ≥ 1.0 s; his deliberate ones lasted
+      1.2–1.7 s. A long closure stops head scrolling. The earlier 0.3 s
+      threshold fired on his natural blinks, which is why scrolling never
+      worked.
+    - smile: mean smile ≥ 0.5 held for 0.4 s, with no eye closure in
+      progress (a left-wink squint raised it to 0.86)
+  - Replayed on the same recording (in-sample, not a validation), the
+    detector found:
+    - right winks: 7
+    - left winks: 9
+    - long closures: 3 of 3
+    - smiles: 5
+    - false events in the neutral, down, up, natural-blink and talking
+      phases: 0
+  - Left winks are close to this user's natural blinks and rely on duration;
+    expect them to be the least reliable.
 - **Keyboard after a click:** about 0.35 s after any click, if a text field
   has focus, the floating keyboard opens.
+- **Keyboards:** the floating desktop keyboard now has the in-app
+  keyboard's controls: `⌫`, `123/ABC`, `⇧`, Dikte, Boşluk, `.`, "Kelime sil"
+  (Option+Backspace) and "↵ Enter" (Return), plus Kapat. The in-app keyboard
+  gained Enter (a new line) and Dikte. Dikte starts or stops a recording of up
+  to 10 s; the local Whisper text is appended to the in-app text.
+- **Dictation setup on Fatih's Mac (2026-11-28, outside the repository):**
+  - `~/.eye-tracker/dictation/tiny.pt`, downloaded from OpenAI's public URL;
+    SHA-256 `65147644…ce22b9` matches `WEIGHT_SHA`.
+  - `speech-runtime/`: the `whisper/` package files from
+    openai-whisper 20250625 (its sdist could not build without
+    `pkg_resources`), plus tiktoken 0.9.0, more-itertools 10.5.0 and regex
+    2024.11.6, installed `--no-deps` for the UniGaze Python. That Python
+    already has torch, numba and tqdm.
+  - `brew install ffmpeg` (9.0.2).
 - **Smoother keyboard and panels:** over the keyboard, the rail and open
   panel pages, the cursor keeps gliding without the magnet. Before this
   change it was hidden there and its smoothing was reset, so it jumped

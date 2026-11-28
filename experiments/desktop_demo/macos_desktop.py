@@ -187,16 +187,17 @@ class MacOSDesktop:
             if event == "long_blink":
                 self.toolbar.stop_head_scroll()
             elif not self.toolbar.paused:
-                eye = event.removeprefix("wink_")
-                side = actions[eye]
-                label = "Sağ" if eye == "right" else "Sol"
+                gesture = event.removeprefix("wink_")
+                side = actions[gesture]
+                label = {"right": "Sağ göz kırpma", "left": "Sol göz kırpma"}.get(
+                    gesture, "Gülümseme"
+                )
+                point = self.mouse_location() if gesture == "smile" else self.wink_point
                 if side in ("left", "right"):
-                    self.toolbar.click(side, self.wink_point or self.mouse_location())
-                    self.toolbar.show_hint(
-                        f"{label} göz kırpma → {'sol' if side == 'left' else 'sağ'} tık"
-                    )
+                    self.toolbar.click(side, point or self.mouse_location())
+                    self.toolbar.show_hint(f"{label} → {'sol' if side == 'left' else 'sağ'} tık")
                 else:
-                    self.toolbar.show_hint(f"{label} göz kırpma (kapalı)")
+                    self.toolbar.show_hint(f"{label} (kapalı)")
         if not self.gestures.pending:
             self.wink_point = None
 

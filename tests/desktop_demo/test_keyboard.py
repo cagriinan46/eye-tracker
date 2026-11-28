@@ -56,7 +56,7 @@ def test_layout_is_turkish_q_with_q_w_x_on_the_first_page():
     assert [len(row) for row in LETTER_ROWS] == [12, 11, 9]
     assert [len(row) for row in SYMBOL_ROWS] == [12, 11, 9]
     assert set("0123456789") <= set("".join(SYMBOL_ROWS))
-    assert len(KEY_IDS) == 32 + 4 + 6
+    assert len(KEY_IDS) == 32 + 4 + 8
 
 
 def test_turkish_case_mapping_keeps_dotted_and_dotless_i_apart():
@@ -191,7 +191,7 @@ def test_uncalibrated_keyboard_ignores_gaze_but_accepts_manual_keys():
     assert session.keyboard.text == ""
     assert session.press_key("r0c0", 4.0, "manual")
     assert session.keyboard.text == "Q" and session.keyboard.counts == dict(
-        gaze=0, manual=1, backspace=0, delete_word=0, suggestion=0
+        gaze=0, manual=1, backspace=0, delete_word=0, suggestion=0, enter=0, dictation=0
     )
 
 
@@ -277,3 +277,24 @@ def test_disabled_suggestions_and_unfinished_words_do_not_enter_dictionary(tmp_p
     keyboard.suggestions_on = True
     type_text(keyboard, "Yarım")
     assert not path.exists()
+
+
+def test_enter_inserts_a_newline_and_dictation_is_requested_not_typed():
+    from experiments.desktop_demo.keyboard import Keyboard
+
+    keyboard = Keyboard()
+    assert keyboard.press("r0c0", 1.0, "manual")
+    assert keyboard.press("enter", 1.1, "manual")
+    assert keyboard.text == "Q\n" and keyboard.counts["enter"] == 1
+    shift = keyboard.shift
+    assert keyboard.press("dictation", 1.2, "manual")
+    assert keyboard.text == "Q\n" and keyboard.dictation_requests == 1
+    assert keyboard.shift == shift
+    keyboard.insert_text("  merhaba dünya ", 2.0)
+    assert keyboard.text == "Q\nmerhaba dünya"
+    keyboard.insert_text("nasılsın?", 3.0)
+    assert keyboard.text == "Q\nmerhaba dünya nasılsın?" and keyboard.shift
+    keyboard.insert_text("   ", 4.0)
+    assert keyboard.text.endswith("?")
+    snap = keyboard.snapshot()
+    assert snap["dictation"] is None and snap["dictation_error"] is None

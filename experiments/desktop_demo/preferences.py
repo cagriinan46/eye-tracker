@@ -12,6 +12,7 @@ DEFAULTS = {
     "keyboard_size": "medium",
     "wink_left": "left",
     "wink_right": "right",
+    "smile": "left",
 }
 WINK_ACTIONS = ("left", "right", "off")
 KEYBOARD_SIZES = ("small", "medium", "large")
@@ -32,6 +33,8 @@ def validated(values):
         raise ValueError("Geçersiz klavye boyutu.")
     if result["wink_left"] not in WINK_ACTIONS or result["wink_right"] not in WINK_ACTIONS:
         raise ValueError("Göz kırpma ayarı sol tık, sağ tık veya kapalı olmalı.")
+    if result["smile"] not in WINK_ACTIONS:
+        raise ValueError("Gülümseme ayarı sol tık, sağ tık veya kapalı olmalı.")
     return result
 
 

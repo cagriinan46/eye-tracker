@@ -11,75 +11,98 @@ from experiments.desktop_demo.runtime import DesktopAPI
 
 def run(gestures, frames, start=0.0, step=1 / 30):
     events = []
-    for i, (left, right) in enumerate(frames):
-        events += gestures.update(start + i * step, left, right)
+    for i, frame in enumerate(frames):
+        events += gestures.update(start + i * step, *frame)
     return events
 
 
-OPEN, SHUT, SQUINT = 0.05, 0.8, 0.45
+OPEN = (0.10, 0.12)  # user (left, right) at rest
+BLINK = (0.70, 0.66)  # natural blink: both closed, slight left bias
+RIGHT = (0.58, 0.72)  # this user's right wink also half-closes the left eye
+LEFT = (0.68, 0.57)
 
 
-def test_right_and_left_winks_fire_on_release() -> None:
+def frames(closed, n, rest=3):
+    return [OPEN] * rest + [closed] * n + [OPEN] * rest
+
+
+def test_right_wink_is_classified_by_asymmetry_even_with_other_eye_half_closed() -> None:
+    assert run(EyeGestures(), frames(RIGHT, 14)) == ["wink_right"]  # ~0.47 s
+    assert run(EyeGestures(), frames(RIGHT, 5)) == []  # 0.17 s: too short
+
+
+def test_left_wink_needs_to_be_longer_than_a_natural_blink() -> None:
+    assert run(EyeGestures(), frames(LEFT, 22)) == ["wink_left"]  # ~0.73 s
+    assert run(EyeGestures(), frames(LEFT, 13)) == []  # ~0.43 s: like a blink
+
+
+def test_natural_blinks_never_click_and_long_closure_fires_once() -> None:
+    assert run(EyeGestures(), frames(BLINK, 12)) == []  # 0.40 s
+    assert run(EyeGestures(), frames(BLINK, 45)) == ["long_blink"]  # 1.5 s, no wink after
+    # A 1.33 s right-dominant closure is a long closure, never a click.
+    assert run(EyeGestures(), frames(RIGHT, 40)) == ["long_blink"]
+
+
+def test_pending_tracks_an_ongoing_closure() -> None:
     g = EyeGestures()
-    frames = [(OPEN, OPEN)] * 3 + [(OPEN, SHUT)] * 6 + [(OPEN, OPEN)] * 2
-    assert run(g, frames) == ["wink_right"]
-    g = EyeGestures()
-    frames = [(OPEN, OPEN)] * 3 + [(SHUT, OPEN)] * 6 + [(OPEN, OPEN)] * 2
-    assert run(g, frames) == ["wink_left"]
-
-
-def test_pending_is_true_while_one_eye_closes() -> None:
-    g = EyeGestures()
-    g.update(0.0, OPEN, OPEN)
+    g.update(0.0, *OPEN)
     assert not g.pending
-    g.update(0.033, OPEN, SHUT)
+    g.update(0.033, *RIGHT)
     assert g.pending
-    g.update(0.3, OPEN, OPEN)
+    g.update(0.066, 0.42, 0.41)  # hysteresis keeps the episode open
+    assert g.pending
+    g.update(0.1, *OPEN)
     assert not g.pending
 
 
-def test_natural_blink_is_never_a_wink_and_long_blink_fires_once() -> None:
+def test_smile_fires_once_per_smile_but_not_during_a_wink() -> None:
     g = EyeGestures()
-    # Brief bilateral blink, with one eye closing a frame earlier.
-    frames = [(OPEN, OPEN), (OPEN, SHUT), (SHUT, SHUT), (SHUT, SHUT), (OPEN, OPEN)]
-    assert run(g, frames) == []
+    smile = [(0.1, 0.1, 0.8)] * 20
+    neutral = [(0.1, 0.1, 0.02)] * 5
+    assert run(g, neutral + smile + neutral + smile) == ["smile", "smile"]
     g = EyeGestures()
-    frames = [(OPEN, OPEN)] + [(SHUT, SHUT)] * 15 + [(OPEN, OPEN)]
-    assert run(g, frames) == ["long_blink"]
-
-
-def test_too_short_too_long_or_squinting_winks_are_ignored() -> None:
-    g = EyeGestures()
-    assert run(g, [(OPEN, OPEN), (OPEN, SHUT), (OPEN, SHUT), (OPEN, OPEN)]) == []
-    g = EyeGestures()
-    assert run(g, [(OPEN, OPEN)] + [(OPEN, SHUT)] * 32 + [(OPEN, OPEN)]) == []
-    g = EyeGestures()
-    frames = [(OPEN, OPEN)] + [(OPEN, SHUT)] * 3 + [(SQUINT, SHUT)] * 3 + [(OPEN, OPEN)]
-    assert run(g, frames) == []
+    grimace = [(0.68, 0.57, 0.8)] * 22  # left wink with a squint
+    assert run(g, [(0.1, 0.1, 0.0)] * 3 + grimace + [(0.1, 0.1, 0.0)] * 3) == ["wink_left"]
+    assert run(EyeGestures(), [(0.1, 0.1, 0.8)] * 10) == []  # 0.3 s: too short
 
 
 def test_refractory_duplicates_and_gaps() -> None:
     g = EyeGestures()
-    wink = [(OPEN, SHUT)] * 6 + [(OPEN, OPEN)]
-    assert run(g, wink, start=0.0) == ["wink_right"]
-    assert run(g, wink, start=0.24) == []  # next release too soon after the first
-    assert run(g, wink, start=1.0) == ["wink_right"]
+    assert run(g, frames(RIGHT, 14), start=0.0) == ["wink_right"]
+    assert run(g, frames(RIGHT, 14), start=3.0) == ["wink_right"]
+    events = []
+    g._emit(events, "smile", g.last_event + 0.2)  # inside the refractory period
+    assert events == []
     g = EyeGestures()
-    g.update(0.0, OPEN, OPEN)
-    g.update(0.033, OPEN, SHUT)
-    assert g.update(0.033, OPEN, SHUT) == [] and g.pending  # repeated sample ignored
-    g.update(0.6, OPEN, OPEN)  # long gap: reset, no event
+    g.update(0.0, *OPEN)
+    g.update(0.033, *RIGHT)
+    assert g.update(0.033, *RIGHT) == [] and g.pending  # repeated sample ignored
+    g.update(0.6, *OPEN)  # long gap: reset, no event
     assert not g.pending
-    assert g.update(0.65, None, OPEN) == []
+    assert g.update(0.65, None, 0.1) == []
 
 
 def test_feed_maps_blendshapes_to_user_eyes(monkeypatch) -> None:
-    samples = [(0.0, OPEN, OPEN)] + [(0.033 * i, OPEN, SHUT) for i in range(1, 7)]
-    samples.append((0.3, OPEN, OPEN))
+    samples = [(i / 30, *pair) for i, pair in enumerate(frames(RIGHT, 14))]
     assert EyeGestures().feed(samples) == ["wink_right"]
     monkeypatch.setattr(eye_gestures, "BLENDSHAPE_LEFT_IS_USER_LEFT", False)
-    assert EyeGestures().feed(samples) == ["wink_left"]
+    assert EyeGestures().feed(samples) == []  # swapped: a weak "left" closure
     assert EyeGestures().feed(None) == []
+
+
+def test_thresholds_are_the_recorded_values() -> None:
+    g = eye_gestures
+    assert (g.LONG_BLINK_SECONDS, g.LEFT_WINK_MIN_SECONDS, g.RIGHT_WINK_MIN_SECONDS) == (
+        1.0,
+        0.55,
+        0.25,
+    )
+    assert (g.RIGHT_ASYMMETRY, g.LEFT_ASYMMETRY, g.SMILE_ON, g.SMILE_HOLD_SECONDS) == (
+        0.07,
+        -0.06,
+        0.5,
+        0.4,
+    )
 
 
 def test_scroll_step_dead_zone_direction_and_limit() -> None:
@@ -92,6 +115,9 @@ def test_wink_preferences_default_validate_and_migrate(tmp_path) -> None:
     assert preferences.DEFAULTS["wink_left"] == "left"
     assert preferences.DEFAULTS["wink_right"] == "right"
     assert preferences.validated({"wink_right": "off"})["wink_right"] == "off"
+    assert preferences.DEFAULTS["smile"] == "left"
+    with pytest.raises(ValueError, match="Gülümseme"):
+        preferences.validated({"smile": "both"})
     with pytest.raises(ValueError, match="Göz kırpma"):
         preferences.validated({"wink_left": "double"})
     old = tmp_path / "prefs.json"
@@ -102,9 +128,9 @@ def test_wink_preferences_default_validate_and_migrate(tmp_path) -> None:
 
 def test_runtime_wink_actions_follow_saved_preferences(tmp_path) -> None:
     api = DesktopAPI(model_name="head", output=tmp_path, preferences_path=tmp_path / "p.json")
-    assert api.wink_actions() == {"left": "left", "right": "right"}
+    assert api.wink_actions() == {"left": "left", "right": "right", "smile": "left"}
     assert api.command("preferences", {"wink_right": "left", "wink_left": "off"})["ok"]
-    assert api.wink_actions() == {"left": "off", "right": "left"}
+    assert api.wink_actions() == {"left": "off", "right": "left", "smile": "left"}
     assert api.command("preferences", {"wink_left": "middle"})["ok"] is False
     api.close()
 
@@ -176,3 +202,36 @@ def test_pointer_free_over_keyboard_rail_and_pages_but_not_when_armed() -> None:
     assert t.pointer_free
     t.tools_ready = True
     assert not t.pointer_free
+
+
+def test_runtime_starts_app_dictation_and_inserts_the_result(tmp_path) -> None:
+    from experiments.desktop_demo.keyboard import Keyboard
+
+    api = DesktopAPI(model_name="head", output=tmp_path, preferences_path=tmp_path / "p.json")
+    started = []
+
+    class FakeDictation:
+        def start(self, target):
+            started.append(target)
+            return len(started) == 1
+
+        def close(self):
+            pass
+
+    api._dictation = FakeDictation()
+    keyboard = Keyboard()
+    api._poll_app_dictation(keyboard)
+    assert started == [] and keyboard.dictation_status is None
+    keyboard.press("dictation", 1.0, "manual")
+    api._poll_app_dictation(keyboard)
+    assert started == ["app"] and keyboard.dictation_status == "listening"
+    keyboard.press("dictation", 2.0, "manual")  # second press stops recording
+    api._poll_app_dictation(keyboard)
+    assert keyboard.dictation_status == "processing"
+    api._dictation_results.put(("app", "merhaba", None))
+    api._poll_app_dictation(keyboard)
+    assert keyboard.text == "merhaba" and keyboard.dictation_status is None
+    api._dictation_results.put(("app", None, "Mikrofon açılamadı."))
+    api._poll_app_dictation(keyboard)
+    assert keyboard.dictation_error == "Mikrofon açılamadı."
+    api.close()

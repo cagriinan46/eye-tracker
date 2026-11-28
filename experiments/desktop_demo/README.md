@@ -462,7 +462,8 @@ are unmeasured. Windows is not supported.
   Gözleri kapat (≥ 1 s, default), Gülümse, Sağ göz or Sol göz
   (`scroll_stop`). While head scrolling, only that gesture acts and no
   gesture clicks.
-- **Rail menu:** the rail starts as one "Menü" button. Selecting it opens
+- **Rail menu:** the rail starts as one icon-only menu button (72 px).
+  Selecting it opens
   the earlier two-column icon tiles, with Kapat first; Fatih preferred the
   tiles to a labelled list. The menu closes after a rail command or after
   3 s off it. While paused, the rail shows only "Devam et".
@@ -514,6 +515,17 @@ are unmeasured. Windows is not supported.
     blinking. Mouth 3/3, pucker 4, brows 8. Remaining false events: 3 winks
     while sliding the mouth sideways (not used as a gesture) and 1 long
     closure while moving the head.
+- **Post-calibration check off by default:** at Fatih's request, calibration
+  goes straight to "ready". Settings → "Kalibrasyon sonrası kontrol"
+  (`calibration_check`) turns the 5-point check back on. Without it the
+  ready page shows "kontrol atlandı", and session records have no `checks`.
+- **Cursor-hold levels (after "not smooth" feedback):** the cursor is held at
+  jawOpen ≥ 0.4, browInnerUp ≥ 0.55, mouthPucker ≥ 0.6 and smile ≥ 0.12 (all
+  above the recorded rest, talk and look-around values). It stays held
+  0.3 s after the expression relaxes, so it does not snap while the face mesh
+  settles. The first version held at 0.3 / 0.5 / 0.5, which could freeze
+  the cursor during ordinary use. That is suspected, not measured, as the
+  cause of the jerkiness Fatih felt.
 - **Smoother keyboard and panels:** over the keyboard, the rail and open
   panel pages, the cursor keeps gliding without the magnet. Before this
   change it was hidden there and its smoothing was reset, so it jumped

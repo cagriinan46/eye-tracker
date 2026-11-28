@@ -1672,3 +1672,34 @@ showed:
 - A headless AppKit render of the rail passed: collapsed 114×114, expanded
   205×593 with 12 tiles.
 - **No live test of this round yet.**
+
+## 2026-11-28 21:45 +03:00 — Issue #160 fixes after Fatih's trial (same PR #161)
+
+**Reported by Fatih:**
+- A "NoneType object" error.
+- He asked for the menu button without text.
+- Smiling seemed to behave as before (the cursor slid).
+- Control felt odd and not smooth.
+- He asked to remove the post-calibration check.
+
+**Cause of the error (traceback read from the app's Terminal window):**
+`Toolbar.tick` computed `math.dist(point, self.mode_origin)` after a mouth
+gesture had started head scrolling through `start_head_scroll`. That method
+never set `mode_origin`, so desktop control stopped with
+`TypeError: 'NoneType' object is not iterable`. This was my bug from the
+previous round, not covered by its tests.
+
+**Changes:**
+- `start_head_scroll` sets `mode_origin` and `center_left`. A regression
+  test was added.
+- The menu button is icon-only, 72 px.
+- Cursor-hold levels were raised to jawOpen 0.4, browInnerUp 0.55,
+  mouthPucker 0.6 and smile 0.12. The hold also lasts 0.3 s after release.
+- The 5-point check is skipped by default; the new `calibration_check`
+  preference and its Settings switch turn it back on.
+
+**Not established:** whether the raised hold levels fix the jerkiness, and
+whether the smile hold now works for Fatih. Both await his next trial.
+
+**Checks:** pytest 1031 passed, 16 failed (the 16 are the SVR tests that
+need scikit-learn); ruff and format pass.

@@ -18,6 +18,7 @@ from eye_tracker.platform_adapters.macos_accessibility import MacOSAccessibility
 from eye_tracker.platform_adapters.macos_outline import _screen_matches
 
 from .desktop_gaze_filter import DesktopGazeFilter
+from .eye_gestures import EyeGestures
 from .hold_key import R_KEY_CODE, HoldKey
 from .macos_keyboard import FocusKeyboard
 from .macos_targets import Dock, window_targets
@@ -45,6 +46,8 @@ class MacOSDesktop:
         self.closed = False
         self.escape_down = False
         self.recentre_key = HoldKey()
+        self.gestures = EyeGestures()
+        self.wink_point = None
         self.magnet = RingMagnet()
         self.fixation = DesktopGazeFilter()
         self.aim = PointerSmoother(fast=0.065, slow=0.16)
@@ -94,12 +97,17 @@ class MacOSDesktop:
             self.api._word_suggestions_enabled,
             self.api.keyboard_size,
         )
+        head = getattr(self.api, "supports_recentre", lambda: False)()
         self.toolbar = Toolbar(
             self.size,
             lambda: self.native_page("calibration"),
             lambda: self.native_page("settings"),
             keyboard,
+            recentre=(lambda: self.api.command("recentre").get("ok", False)) if head else None,
+            head_mode=head,
         )
+        self.gestures.reset()
+        self.wink_point = None
         self.feed = PreviewFeed(MacOSAccessibility())
         self.dock_stop = threading.Event()
         self.dock_values = []
@@ -165,18 +173,61 @@ class MacOSDesktop:
         if not self.ring.isVisible():
             self.ring.orderFrontRegardless()
 
+    def mouse_location(self):
+        position = Quartz.CGEventGetLocation(Quartz.CGEventCreate(None))
+        return (position.x, position.y)
+
+    def eye_gestures(self, eye_samples):
+        """Issue #160: winks click where the cursor was when the wink began."""
+        events = self.gestures.feed(eye_samples)
+        if self.gestures.pending and self.wink_point is None:
+            self.wink_point = self.mouse_location()
+        actions = self.api.wink_actions()
+        for event in events:
+            if event == "long_blink":
+                self.toolbar.stop_head_scroll()
+            elif not self.toolbar.paused:
+                eye = event.removeprefix("wink_")
+                side = actions[eye]
+                label = "Sağ" if eye == "right" else "Sol"
+                if side in ("left", "right"):
+                    self.toolbar.click(side, self.wink_point or self.mouse_location())
+                    self.toolbar.show_hint(
+                        f"{label} göz kırpma → {'sol' if side == 'left' else 'sağ'} tık"
+                    )
+                else:
+                    self.toolbar.show_hint(f"{label} göz kırpma (kapalı)")
+        if not self.gestures.pending:
+            self.wink_point = None
+
     def update(self, now, frame):
-        stamp, normalized, closed, blink_samples = frame
+        stamp, normalized, closed, blink_samples, *rest = frame
+        self.eye_gestures(rest[0] if rest else None)
         valid = 0 <= now - stamp <= 0.3 and closed is not None
         raw = desktop_point(normalized, self.viewport, self.size) if valid and not closed else None
         point = self.fixation.update(stamp, raw)
+        aim = self.aim.update(now, point) if point is not None else None
         owned = self.toolbar.tick(stamp, now, point, closed is True, self.last_cursor)
         pressed = any(Quartz.CGEventSourceButtonState(HID, button) for button in (0, 1, 2))
         if not owned and not pressed:
             owned = self.toolbar.desktop_gaze(
-                stamp, point, closed, valid, self.last_cursor, blink_samples=blink_samples
+                stamp,
+                point,
+                closed,
+                valid,
+                self.last_cursor,
+                blink_samples=blink_samples,
+                keyboard_point=aim,
             )
-        if owned or pressed:
+        if owned and not pressed and self.toolbar.pointer_free:
+            # Issue #160: over the keyboard and our panels the cursor keeps gliding
+            # (no magnet) instead of vanishing and jumping back afterwards.
+            self.magnet.reset()
+            self.assisted = None
+            self.last_sample = None
+            if aim is not None:
+                self.display(now, aim, aim)
+        elif owned or pressed:
             self.cursor.reset()
             self.magnet.reset()
             self.last_sample = None
@@ -184,7 +235,6 @@ class MacOSDesktop:
             if self.ring.isVisible():
                 self.ring.orderOut_(None)
         elif point is not None:
-            aim = self.aim.update(now, point)
             if stamp != self.last_sample or self.assisted is None:
                 targets = window_targets(self.feed, self.desktop_rect, now)
                 dock = self.dock_values[:]

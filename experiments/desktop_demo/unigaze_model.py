@@ -31,6 +31,7 @@ class CameraModel:
         self.raw_point = None
         self.desktop_blink = False
         self.blink_samples = None
+        self.eye_samples = None
         self.filter_history_ms = None
         self.collect_timing = False  # Set by --perf-diagnostics (issue #145).
         self.last_timing = None
@@ -134,6 +135,7 @@ class CameraModel:
         self.raw_point = r["raw_point"]
         self.eyes_closed = r.get("eyes_closed")
         self.blink_samples = r.get("blink_samples")
+        self.eye_samples = r.get("eye_samples")
         self.filter_history_ms = r["filter_history_ms"]
         return r["captured"], r["features"], r["point"], r["preview"]
 

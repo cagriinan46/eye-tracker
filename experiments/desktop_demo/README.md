@@ -393,6 +393,35 @@ PYTHONPATH=src:. "$EYE_TRACKER_MGAZE_PYTHON" -m experiments.desktop_demo --model
 Limits: one participant has used it. Comfort over long use and other users
 are unmeasured. Windows is not supported.
 
+### Wink clicks, head scroll and smoother panels (Fatih's feedback, same issue)
+
+- **Wink clicks (both modes):** a short one-eye closure (0.12–0.9 s, other eye
+  open) clicks where the cursor was when the wink began. Default: right eye →
+  right click, left eye → left click. Settings → "Sağ/Sol göz kırpma" choose
+  Sol tık / Sağ tık / Kapalı for each eye (`wink_right`, `wink_left`).
+  - A natural blink closes both eyes and never clicks.
+  - A hint names the detected eye and action.
+  - The scores are MediaPipe `eyeBlinkLeft`/`eyeBlinkRight` from the
+    existing blink stream. Their mapping to the user's own eyes is the
+    `BLENDSHAPE_LEFT_IS_USER_LEFT` constant.
+  - Double-blink clicks and the rail buttons still work.
+- **Keyboard after a click:** about 0.35 s after any click, if a text field
+  has focus, the floating keyboard opens.
+- **Smoother keyboard and panels:** over the keyboard, the rail and open
+  panel pages, the cursor keeps gliding without the magnet. Before this
+  change it was hidden there and its smoothing was reset, so it jumped
+  ("teleported") when it reappeared. Keys are hit-tested with the smoothed
+  point.
+- **"Kafa ortala" rail button (head mode):** after selecting it, there are
+  1.5 s to turn the head back to a comfortable centre, then the recentre runs.
+- **Head scroll (head mode):** choose Kaydır and rest the cursor on the
+  content for 0.55 s.
+  - Tilting the head down scrolls down and tilting it up scrolls up. Speed
+    grows with the cursor's offset from where it started: 40 px dead zone,
+    0.25 px per px, at most 60 px per frame.
+  - Closing both eyes for 0.3 s (a long blink) stops scrolling.
+  - In gaze mode, the arrow panel is unchanged.
+
 ## Performance diagnostics (issue #145)
 
 Measurement only, for the reported lag (smooth for 2–3 s after calibration, then

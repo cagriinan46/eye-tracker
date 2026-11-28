@@ -19,6 +19,7 @@ from eye_tracker.intent.region_dwell import RegionDwell
 from .confirmation import Confirmation
 from .desktop_gaze_filter import HeldDirection
 from .dictation import Dictation
+from .eye_gestures import scroll_step
 from .macos_keyboard import attribute
 
 COMMANDS = (
@@ -41,6 +42,9 @@ DIRECTIONS = (
 )
 VECTORS = {"up": (0, -1), "down": (0, 1), "left": (-1, 0), "right": (1, 0)}
 BACK = ("back", "Geri", "chevron.left")
+RECENTRE = ("recentre", "Kafa ortala", "dot.viewfinder")
+RECENTRE_DELAY_SECONDS = 1.5  # time to turn the head back from the rail before recentring
+REVEAL_KEYBOARD_AFTER_SECONDS = 0.35  # let the clicked app move focus first
 WIDTH = 340
 
 
@@ -148,8 +152,14 @@ class ScrollRepeat:
 
 
 class Toolbar:
-    def __init__(self, size, recalibrate, open_settings, keyboard):
+    def __init__(self, size, recalibrate, open_settings, keyboard, recentre=None, head_mode=False):
         self.width, self.height = size
+        # Issue #160: head-cursor extras. ``recentre`` asks the model to recentre.
+        self.recentre = recentre
+        self.head_mode = head_mode
+        self.commands = COMMANDS + ((RECENTRE,) if recentre is not None else ())
+        self.recentre_at = self.reveal_after = self.head_scroll = None
+        self.on_rail = False
         self.recalibrate = recalibrate
         self.open_settings = open_settings
         self.scroll_multiplier = 1
@@ -250,10 +260,11 @@ class Toolbar:
         return label
 
     def render_rail(self):
-        tile = math.floor(min(90, (self.height - 105) / 5))
+        rows = math.ceil(len(self.commands) / 2)
+        tile = math.floor(min(90, (self.height - 105) / rows))
         gap = 7
         width = 2 * tile + gap + 18
-        height = 5 * (tile + gap) + 11
+        height = rows * (tile + gap) + 11
         view = self.surface((width, height), color(0.07, 0.09, 0.13, 0.96), 23)
         view.layer().setBorderWidth_(1)
         view.layer().setBorderColor_(self.hover_card.CGColor())
@@ -263,7 +274,7 @@ class Toolbar:
         self.rail_rects = {}
         self.rail_hover = None
         self.rail_progress = self.surface((0, 4), self.accent, 2)
-        for i, (key, label, icon) in enumerate(COMMANDS):
+        for i, (key, label, icon) in enumerate(self.commands):
             y, x = divmod(i, 2)
             rect = ((9 + x * (tile + gap), height - 9 - tile - y * (tile + gap)), (tile, tile))
             if self.paused and key == "pause":
@@ -533,6 +544,8 @@ class Toolbar:
         if all(event is not None for event in events):
             for event in events:
                 Quartz.CGEventPost(Quartz.kCGHIDEventTap, event)
+            # A click into a text field opens the keyboard (Issue #160).
+            self.reveal_after = time.monotonic() + REVEAL_KEYBOARD_AFTER_SECONDS
 
     def scroll(self, direction, amount):
         if self.anchor is None or self.paused:
@@ -551,6 +564,7 @@ class Toolbar:
             Quartz.CGEventPost(Quartz.kCGHIDEventTap, event)
 
     def cancel_mode(self):
+        self.head_scroll = None
         self.active_mode = self.anchor = self.aim_since = self.front_pid = None
         self.tools_ready = self.center_left = False
         self.confirm.reset()
@@ -569,7 +583,9 @@ class Toolbar:
             "left": "Sol tık\nHedefe bak. Ses gelince iki kez kırp.",
             "right": "Sağ tık\nHedefe bak. Ses gelince iki kez kırp.",
             "precise": "Hassas imleç\nİmleci koymak istediğin yere bak.",
-            "scroll": "Kaydır\nKaydırmak istediğin alana bak.",
+            "scroll": "Kaydır\nKaydırmak istediğin alana imleci getir."
+            if self.head_mode
+            else "Kaydır\nKaydırmak istediğin alana bak.",
         }[key]
         self.hide(caption)
 
@@ -705,6 +721,10 @@ class Toolbar:
             self.render_settings()
         elif key == "back":
             self.home()
+        elif key == "recentre" and self.recentre is not None:
+            self.cancel_mode()
+            self.recentre_at = time.monotonic() + RECENTRE_DELAY_SECONDS
+            self.show_hint("Kafanı rahat, orta bir duruşa getir.\n1,5 sn sonra ortalanacak.")
         elif key == "cancel":
             self.cancel_mode()
             self.hide()
@@ -721,8 +741,35 @@ class Toolbar:
                     return True, key
         return inside, None
 
+    def stop_head_scroll(self):
+        """Long blink: end head scrolling (Issue #160)."""
+        if self.head_scroll is None:
+            return False
+        self.cancel_mode()
+        self.show_hint("Kaydırma durdu.")
+        return True
+
+    @property
+    def pointer_free(self):
+        """The cursor may follow the head/gaze smoothly over our own panels."""
+        return (
+            self.confirm.phase != "armed"
+            and self.head_scroll is None
+            and (self.keyboard_owned or self.on_rail or (self.visible and not self.tools_ready))
+        )
+
+    def pending_actions(self, now):
+        if self.recentre_at is not None and now >= self.recentre_at:
+            self.recentre_at = None
+            self.show_hint("Kafa ortalandı." if self.recentre() else "Ortalanamadı.")
+        if self.reveal_after is not None and now >= self.reveal_after:
+            self.reveal_after = None
+            if not self.paused and self.keyboard.target is None and self.keyboard.reveal():
+                self.hide()
+
     def tick(self, stamp, now, point, closed, assisted=None):
         self.process_results()
+        self.pending_actions(now)
         self.latest_point = point
         if self.hint_until and now >= self.hint_until:
             self.hint.orderOut_(None)
@@ -734,6 +781,7 @@ class Toolbar:
         on_rail, rail_key = self.hit_test(
             point, (self.rail_origin, self.rail_size), self.rail_rects
         )
+        self.on_rail = on_rail
         if self.paused and rail_key != "pause":
             rail_key = None
         if point is None:
@@ -797,7 +845,17 @@ class Toolbar:
                     self.command(key)
         return inside or self.tools_ready
 
-    def desktop_gaze(self, stamp, point, closed, valid, assisted, blink_samples=None):
+    def desktop_gaze(
+        self, stamp, point, closed, valid, assisted, blink_samples=None, keyboard_point=None
+    ):
+        if self.head_scroll is not None:
+            # Blinks and missing frames pause scrolling but keep the anchor.
+            if point is not None and not closed and stamp != self.last_action_stamp:
+                self.last_action_stamp = stamp
+                amount = scroll_step(point[1] - self.head_scroll)
+                if amount:
+                    self.scroll("down" if amount > 0 else "up", abs(amount))
+            return True
         fast_armed = self.confirm.phase == "armed" and blink_samples is not None
         if fast_armed and time.monotonic() - self.confirm.last > 0.40:
             fast_armed = False
@@ -822,7 +880,7 @@ class Toolbar:
             if point is None:
                 self.key_dwell.missing(stamp)
                 return False
-            key = self.keyboard.key_at(*point, self.height)
+            key = self.keyboard.key_at(*(keyboard_point or point), self.height)
             if self.key_dwell.update(stamp, key):
                 self.keyboard.press(key)
             self.keyboard_owned = key is not None
@@ -863,6 +921,15 @@ class Toolbar:
                 )
                 self.tools_ready = True
                 Quartz.CGWarpMouseCursorPosition(self.anchor)
+                if self.active_mode == "scroll" and self.head_mode:
+                    # Issue #160: head tilt scrolls; a long blink stops.
+                    self.head_scroll = point[1]
+                    self.mark(self.anchor, "armed")
+                    self.show_hint(
+                        "Kafanı aşağı eğ: aşağı, yukarı kaldır: yukarı.\n"
+                        "Durdurmak için gözlerini kapat (0,3 sn)."
+                    )
+                    return True
                 self.mark(self.anchor if self.active_mode == "precise" else None, "armed")
                 self.render_tools()
                 self.open()

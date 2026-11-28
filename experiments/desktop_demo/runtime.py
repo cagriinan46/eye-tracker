@@ -37,7 +37,7 @@ class DesktopAPI:
         self._active_model = None
         self._pointer_captured = 0
         self._desktop_active = False
-        self._desktop_frame = (0, None, None, None)
+        self._desktop_frame = (0, None, None, None, None)
         self._native_page = None
         self._desktop_error = None
         self._pointer_pause = threading.Event()
@@ -98,6 +98,10 @@ class DesktopAPI:
 
     def supports_recentre(self):
         return self._model_name == "head"
+
+    def wink_actions(self):
+        """Issue #160: what a left/right wink does ("left", "right" or "off")."""
+        return {"left": self._preferences["wink_left"], "right": self._preferences["wink_right"]}
 
     def desktop_failed(self, message):
         with self._lock:
@@ -196,7 +200,7 @@ class DesktopAPI:
                         raise ValueError("Önce mevcut denemeden çık.")
                     if not self._focused or s.geometry is None:
                         raise ValueError("Eye Tracker penceresine dön.")
-                    self._desktop_frame = (0, None, None, None)
+                    self._desktop_frame = (0, None, None, None, None)
                     self._desktop_error = None
                     self._desktop_active = True
                 elif action == "desktop_stop":
@@ -526,6 +530,7 @@ class DesktopAPI:
                             raw_point,
                             closed,
                             getattr(model, "blink_samples", None),
+                            getattr(model, "eye_samples", None),
                         )
                     if s.phase == "fitting":
                         x, y = s.calibration_arrays()

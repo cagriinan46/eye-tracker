@@ -178,6 +178,7 @@ class Engine:
         # Both estimators still see exactly this capture; old captures never queue.
         response = self.process_frame(frame, captured, preview)
         response["blink_samples"] = self.blinks.drain() if blink else None
+        response["eye_samples"] = self.blinks.drain_eyes() if blink else None
         if timing:
             response["timing"] = self.timing(
                 requested, received, received_ns, captured, sequence, skipped

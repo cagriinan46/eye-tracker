@@ -10,7 +10,10 @@ DEFAULTS = {
     "reduced_motion": False,
     "word_suggestions": True,
     "keyboard_size": "medium",
+    "wink_left": "left",
+    "wink_right": "right",
 }
+WINK_ACTIONS = ("left", "right", "off")
 KEYBOARD_SIZES = ("small", "medium", "large")
 DEFAULT_PATH = Path.home() / ".eye-tracker" / "desktop-preferences.json"
 
@@ -27,6 +30,8 @@ def validated(values):
         raise ValueError("Kelime önerisi ayarı açık veya kapalı olmalı.")
     if result["keyboard_size"] not in KEYBOARD_SIZES:
         raise ValueError("Geçersiz klavye boyutu.")
+    if result["wink_left"] not in WINK_ACTIONS or result["wink_right"] not in WINK_ACTIONS:
+        raise ValueError("Göz kırpma ayarı sol tık, sağ tık veya kapalı olmalı.")
     return result
 
 

@@ -11,6 +11,8 @@ def test_appearance_survives_restart_without_camera_or_calibration(tmp_path):
         "reduced_motion": False,
         "word_suggestions": True,
         "keyboard_size": "medium",
+        "wink_left": "left",
+        "wink_right": "right",
     }
     assert api.command("preferences", {"theme": "sunflower", "reduced_motion": True})["ok"]
     other = DesktopAPI(preferences_path=path)
@@ -19,6 +21,8 @@ def test_appearance_survives_restart_without_camera_or_calibration(tmp_path):
         "reduced_motion": True,
         "word_suggestions": True,
         "keyboard_size": "medium",
+        "wink_left": "left",
+        "wink_right": "right",
     }
     assert other.snapshot()["camera"] == "off"
     assert not other.snapshot()["can_demo"]

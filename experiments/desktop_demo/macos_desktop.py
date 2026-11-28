@@ -68,12 +68,16 @@ class DesktopStats:
         self.since = now
         self.ticks = self.locked = self.held = self.owned = 0
         self.update_ms = []
+        self.frames = set()
+        self.valid = 0
 
     def tick(self, now, update_ms, desktop):
         if self.since is None:
             self.reset(now)
         self.ticks += 1
         self.update_ms.append(update_ms)
+        self.frames.add(getattr(desktop, "last_stamp", None))
+        self.valid += getattr(desktop, "last_valid", False)
         self.locked += desktop.magnet.locked is not None
         self.held += desktop.smile_point is not None
         self.owned += desktop.last_cursor is None
@@ -81,9 +85,12 @@ class DesktopStats:
             ordered = sorted(self.update_ms)
             toolbar = desktop.toolbar
             logger.info(
-                "stats %.0fs ticks=%d update_ms p50=%.1f p95=%.1f max=%.1f magnet_locked=%.0f%% "
+                "stats %.0fs frames=%d (%.1f fps) valid=%.0f%% ticks=%d update_ms p50=%.1f p95=%.1f max=%.1f magnet_locked=%.0f%% "
                 "cursor_held=%.0f%% cursor_hidden=%.0f%% head_scroll=%s pending=%s holding=%s",
                 now - self.since,
+                len(self.frames),
+                len(self.frames) / max(1e-6, now - self.since),
+                100 * self.valid / self.ticks,
                 self.ticks,
                 ordered[len(ordered) // 2],
                 ordered[int(0.95 * (len(ordered) - 1))],
@@ -199,6 +206,7 @@ class MacOSDesktop:
             stop.wait(0.22)
 
     def stop(self):
+        self.web_accessibility.disable_all()
         if self.feed:
             self.dock_stop.set()
             if self.dock_thread.ident is not None:
@@ -323,6 +331,7 @@ class MacOSDesktop:
         stamp, normalized, closed, blink_samples, *rest = frame
         self.eye_gestures(rest[0] if rest else None)
         valid = 0 <= now - stamp <= 0.3 and closed is not None
+        self.last_stamp, self.last_valid = stamp, valid
         raw = desktop_point(normalized, self.viewport, self.size) if valid and not closed else None
         point = self.fixation.update(stamp, raw)
         aim = self.aim.update(now, point) if point is not None else None
@@ -398,9 +407,12 @@ class MacOSDesktop:
                         now = time.monotonic()
                         if now >= self.next_screen_check:
                             self.next_screen_check = now + 0.4
-                            self.web_accessibility.update(
-                                UI.NSWorkspace.sharedWorkspace().frontmostApplication()
-                            )
+                            if self.api_pref("browser_fields", True):
+                                self.web_accessibility.update(
+                                    UI.NSWorkspace.sharedWorkspace().frontmostApplication()
+                                )
+                            else:
+                                self.web_accessibility.disable_all()
                             if not _screen_matches(UI, self.size):
                                 raise RuntimeError("Ekran değişti. Kalibrasyonu yenile.")
                         started = time.perf_counter()

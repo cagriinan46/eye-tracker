@@ -54,6 +54,7 @@ function appearance(p){
   $('checkToggle').setAttribute('aria-checked',String(p.calibration_check===true));
   $('magnetToggle').setAttribute('aria-checked',String(p.magnet!==false));
   $('faceHoldToggle').setAttribute('aria-checked',String(p.face_hold!==false));
+  $('browserToggle').setAttribute('aria-checked',String(p.browser_fields!==false));
   document.documentElement.dataset.kbSize=p.keyboard_size||'medium';
   for(const el of document.querySelectorAll('[data-kb-size]'))el.setAttribute('aria-pressed',String(el.dataset.kbSize===(p.keyboard_size||'medium')));
   for(const el of document.querySelectorAll('[data-gesture]'))el.value=p[el.dataset.gesture]||gestureDefaults[el.dataset.gesture];
@@ -271,6 +272,7 @@ $('motionToggle').onclick=()=>saveAppearance({reduced_motion:!state?.preferences
 $('checkToggle').onclick=()=>saveAppearance({calibration_check:!state?.preferences?.calibration_check});
 $('magnetToggle').onclick=()=>saveAppearance({magnet:state?.preferences?.magnet===false});
 $('faceHoldToggle').onclick=()=>saveAppearance({face_hold:state?.preferences?.face_hold===false});
+$('browserToggle').onclick=()=>saveAppearance({browser_fields:state?.preferences?.browser_fields===false});
 for(const el of document.querySelectorAll('[data-kb-size]'))el.onclick=()=>saveAppearance({keyboard_size:el.dataset.kbSize});
 for(const el of document.querySelectorAll('[data-gesture]'))el.onchange=()=>saveAppearance({[el.dataset.gesture]:el.value});
 for(const el of document.querySelectorAll('[data-scroll-stop-select]'))el.onchange=()=>saveAppearance({scroll_stop:el.value});

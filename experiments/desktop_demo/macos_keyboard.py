@@ -110,6 +110,14 @@ class WebAccessibility:
         )
         return True
 
+    def disable_all(self):
+        """Hand web accessibility back (Settings switch off, or desktop control ends)."""
+        for pid in self.enabled:
+            AX.AXUIElementSetAttributeValue(
+                AX.AXUIElementCreateApplication(pid), "AXEnhancedUserInterface", False
+            )
+        self.enabled.clear()
+
 
 class KeyboardPanel(UI.NSPanel):
     def canBecomeKeyWindow(self):

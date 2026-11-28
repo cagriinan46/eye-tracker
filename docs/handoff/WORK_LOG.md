@@ -1611,3 +1611,9 @@ method stays Fatih's decision; Çağrı may revise it.
 - Other users.
 - `AXEnhancedUserInterface` can affect some apps' window animations; it is
   limited to Chromium browsers.
+
+## 2026-11-28 20:35 +03:00 — Issue #160 published; review pending
+
+Commits `11311a8`, `efd53cd`, `4a35030`, `bdb4376` and `34e7a93` are on
+`feature/desktop-head-cursor`, pushed. The PR is OPEN and UNMERGED; the CI
+result was not yet known when this was written. No merge by the agent.

@@ -1381,3 +1381,61 @@ Panel placement now uses AX caret/field bounds and follows visible focus changes
 Native tests with lower and upper text fields placed the panel above and below
 respectively. A combined test missed focus on launching its second test app;
 the separate upper-field test passed. Desktop demo tests: 123 passed.
+
+## 2026-11-28 13:55 +03:00 — Issue #156: head pointer signal comparison, winner RAY
+
+**Request:** Fatih asked for cursor control by head movement, to be made
+flawless before any eye-based clicking, and asked whether the nose should be the
+point. He approved a bounded comparison and asked for an issue
+([#156](https://github.com/cagriinan46/eye-tracker/issues/156)). Making the head
+the primary pointer was Issue #84's open decision; Fatih decided to pursue it,
+and Çağrı may revise it.
+
+**Change (branch `feature/head-pointer` from main `df30ec9`):** a new
+`experiments/head_pointer/` with three candidates fitted on one shared 9-dot
+"point your nose" calibration:
+- **NOSE:** the nose-tip image position.
+- **ANGLES:** yaw/pitch, as in #84.
+- **RAY:** where the head's forward axis meets the camera plane.
+
+The same One Euro filter (1.0 Hz, β 0.01) was used for all three. The test was
+16 scored targets of 30 and 60 px per candidate, with a 0.8 s dwell and an 8 s
+timeout. The winner rule was frozen in tests; the preregistration commit
+`071d9f0` was pushed before any session. 16 synthetic tests were added. The
+desktop demo, gaze code and OS cursor were not changed.
+
+**Environment:** `.venv-fatih` numpy is broken on this Mac
+(`numpy._core._multiarray_umath` missing). The sessions and checks ran in
+`~/.virtualenvs/eye-tracker-gazefollower-20261019`.
+
+**Camera check:** index 0 was identified as the built-in camera with 3-second
+signal printouts; nothing was saved. The first check had the face off-centre;
+the recheck had the nose at x 0.52 and yaw −2.8°. Index 1 found no face.
+
+**Result:** sessions A (13:40) and B (13:46, after reseating), MacBook display
+1512×982, both complete, with no failed reads and no no-face frames.
+
+| Candidate | Selected / timeouts | Pooled median time | Pooled median hold jitter |
+| --- | --- | --- | --- |
+| NOSE | 31/32, 1 | 4.11 s | 7.26 px |
+| ANGLES | 30/32, 2 | 3.91 s | 7.11 px |
+| **RAY** | **32/32, 0** | **3.79 s** | **7.05 px** |
+
+All three passed. **RAY won**: ANGLES was within the 5 % tie band and the
+tie-break went to RAY on jitter. The margin over ANGLES is not robust.
+Exploratory: first entry took about 1.9 s for every candidate; the rest was
+re-entries at 30 px targets, so steadiness is the bottleneck. The full screen
+needs about 36° of yaw and 28° of pitch. Details are in
+`experiments/head_pointer/RESULTS.md`; the data are local in `.venv/`, with
+hashes recorded there.
+
+**Not established:** comfort, fatigue, other users, integration with the OS
+cursor. **Next, pending Fatih's approval:** a preregistered RAY tuning step
+(filter, gain, recentring).
+
+## 2026-11-28 13:58 +03:00 — Issue #156 published; review pending
+
+Commits `071d9f0` (preregistration) and `6cd27ba` (results) are on
+`feature/head-pointer`, pushed. [PR #157](https://github.com/cagriinan46/eye-tracker/pull/157)
+is OPEN, non-draft and UNMERGED; the CI result was not yet known when this was
+written. No merge by the agent.
